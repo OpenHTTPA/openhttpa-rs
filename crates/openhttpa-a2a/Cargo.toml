@@ -1,0 +1,41 @@
+[package]
+name = "openhttpa-a2a"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+documentation.workspace = true
+categories.workspace = true
+keywords.workspace = true
+authors.workspace = true
+description = "High-level Agent-to-Agent secure messaging over OpenHTTPA"
+
+[dependencies]
+openhttpa-core = { workspace = true }
+openhttpa-client = { workspace = true }
+openhttpa-server = { workspace = true }
+openhttpa-proto = { workspace = true }
+openhttpa-tee = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+
+[dev-dependencies]
+openhttpa-tee = { workspace = true }
+openhttpa-mcp = { workspace = true }
+openhttpa-attestation = { workspace = true }
+bytes = { workspace = true }
+http = { workspace = true }
+uuid = { workspace = true }
+openhttpa-headers = { workspace = true }
+openhttpa-transport = { workspace = true }
+openhttpa-crypto = { workspace = true }
+hex = { workspace = true }
+dashmap = { workspace = true }

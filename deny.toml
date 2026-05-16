@@ -1,0 +1,72 @@
+[graph]
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+]
+
+[advisories]
+# RUSTSEC-TRACK-01: all four ignored advisories are risc0-transitive and not
+# reachable from production code paths. Tracked for resolution in:
+#   https://github.com/OPENHTTPA/openhttpa-rs/issues — label: rustsec-advisory
+# Remove each skip entry once risc0 updates its dependency tree.
+ignore = [
+    "RUSTSEC-2024-0388", # derivative: unmaintained, from ark-relations (risc0) — tracked above
+    "RUSTSEC-2024-0436", # paste: unmaintained, from ark-ff (risc0) — tracked above
+    # CI-02: RUSTSEC-2025-0055 — tracing-subscriber 0.2 vulnerability (stack
+    # overflow in fmt::Layer).  The affected version is pulled in transitively
+    # via risc0 / ark-relations and is NOT reachable from production code.
+    # RESOLUTION: Remove this ignore once risc0 updates to tracing-subscriber
+    # >=0.3.19 (track: https://github.com/risc0/risc0/issues — filter
+    # 'tracing-subscriber').  Until then, the bans.skip entry for
+    # 'tracing-subscriber 0.2' below scopes the risk to the risc0 feature flag.
+    "RUSTSEC-2025-0055", # tracing-subscriber 0.2: vuln — risc0 transitive only — tracked above
+    "RUSTSEC-2025-0141", # bincode: unmaintained (risc0) — tracked above
+]
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "CDLA-Permissive-2.0",
+    "OpenSSL",        # aws-lc / liboqs
+    "LGPL-3.0-or-later", # downloader (build-tool for risc0)
+    "Zlib",           # konst_macro_rules (regorus dependency)
+    "MIT-0",          # borrow-or-share (regorus dependency)
+]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn"
+skip = [
+    { name = "winnow", version = "0.7" },
+    { name = "untrusted", version = "0.7" },
+    { name = "rand_core", version = "0.6" },
+    { name = "rand_chacha", version = "0.3" },
+    { name = "rand", version = "0.8" },
+    { name = "libloading", version = "0.8" },
+    { name = "bindgen", version = "0.71" },
+    { name = "bindgen", version = "0.72" },
+    { name = "getrandom", version = "0.2" },
+    { name = "getrandom", version = "0.3" },
+    { name = "getrandom", version = "0.4" },
+    { name = "itertools", version = "0.13" },
+    { name = "tracing-subscriber", version = "0.2" }, # risc0 transitive
+]
+wildcards = "allow"
+deny = [
+    # vulnerable / unmaintained alternatives
+    { name = "openssl" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git      = "deny"
+allow-registry   = ["https://github.com/rust-lang/crates.io-index"]

@@ -1,0 +1,33 @@
+[build-system]
+requires      = ["maturin>=1.7"]
+build-backend = "maturin"
+
+[project]
+name            = "openhttpa"
+version         = "0.1.1"
+description     = "OpenHTTPA Python bindings"
+readme          = "README.md"
+requires-python = ">=3.9"
+license         = { text = "Apache-2.0 OR MIT" }
+authors         = [{ name = "The OpenHTTPA Foundation (AIQL.org)", email = "info@aiql.org" }]
+
+keywords        = ["attestation", "tee", "http", "security"]
+classifiers     = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Security :: Cryptography",
+]
+
+[project.urls]
+Homepage = "https://aiql.org"
+Repository = "https://github.com/openhttpa/openhttpa-rs"
+
+[tool.maturin]
+module-name    = "openhttpa"
+features       = ["pyo3/extension-module"]
+strip          = true
+profile        = "release"
+
+[dependency-groups]
+dev = [
+    "maturin>=1.7",
+]

@@ -1,0 +1,28 @@
+# Enforce LF line endings for all text files
+* text=auto eol=lf
+
+# Explicitly mark certain files as text
+*.rs text
+*.go text
+*.js text
+*.ts text
+*.py text
+*.md text
+*.toml text
+*.yaml text
+*.yml text
+*.json text
+*.css text
+*.html text
+Makefile* text
+
+# Mark binaries as binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.wasm binary
+*.so binary
+*.dylib binary
+*.exe binary

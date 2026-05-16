@@ -1,0 +1,31 @@
+[package]
+name        = "openhttpa-proto"
+description = "OpenHTTPA protocol — shared type definitions and error hierarchy"
+version.workspace    = true
+edition.workspace    = true
+rust-version.workspace = true
+license.workspace    = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+documentation.workspace = true
+categories.workspace = true
+keywords.workspace = true
+
+[features]
+default  = []
+sgx      = []
+tdx      = []
+sev_snp  = []
+trustzone = []
+
+[dependencies]
+serde     = { workspace = true }
+thiserror = { workspace = true }
+zeroize   = { workspace = true }
+uuid      = { workspace = true }
+bytes     = { workspace = true }
+base64ct  = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

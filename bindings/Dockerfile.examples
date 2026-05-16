@@ -1,0 +1,62 @@
+# Dockerfile for OpenHTTPA Bindings Examples
+# Provides Rust, Go, Node.js, and Python in a single environment.
+
+FROM rust:1.88-slim AS chef
+RUN cargo install --locked cargo-chef
+ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
+# Build Environment Hardening
+ENV RUSTUP_TOOLCHAIN=stable
+ENV CARGO_NET_RETRY=10
+ENV RUSTUP_MAX_RETRIES=10
+WORKDIR /src
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    clang \
+    libclang-dev \
+    cmake \
+    make \
+    ninja-build \
+    nasm \
+    golang \
+    curl \
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-dev \
+    libpcre3-dev \
+    zlib1g-dev \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for Python dependency management (Rule #16)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# Install maturin for Python bindings
+RUN pip3 install --break-system-packages maturin
+
+# Install Node.js
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g pnpm
+
+# Pre-build dependencies
+COPY --from=planner /src/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# Copy the rest of the source
+COPY . .
+RUN cargo build --release --workspace --features mock,nvidia_gpu
+
+# Default command: run all examples
+# Note: assumes a backend is reachable at http://127.0.0.1:8080 or specified via env
+CMD ["make", "-C", "bindings", "all"]
+

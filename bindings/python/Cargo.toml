@@ -1,0 +1,35 @@
+[package]
+name        = "openhttpa-python"
+description = "OpenHTTPA Python bindings via PyO3 + maturin"
+version.workspace    = true
+edition.workspace    = true
+rust-version.workspace = true
+license.workspace    = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+documentation.workspace = true
+categories.workspace = true
+keywords.workspace = true
+
+[lib]
+name = "openhttpa"
+crate-type = ["cdylib"]
+
+[dependencies]
+openhttpa-client  = { workspace = true }
+openhttpa-core    = { workspace = true }
+openhttpa-proto   = { workspace = true }
+openhttpa-tee     = { workspace = true }
+openhttpa-attestation = { workspace = true }
+openhttpa-llm     = { workspace = true }
+openhttpa-mcp     = { workspace = true }
+openhttpa-a2a       = { workspace = true }
+http           = { workspace = true }
+pyo3           = { workspace = true, features = ["macros"] }
+tokio          = { workspace = true, features = ["rt-multi-thread"] }
+serde_json     = { workspace = true }
+thiserror      = { workspace = true }
+
+[features]
+extension-module = ["pyo3/extension-module"]

@@ -1,0 +1,43 @@
+{
+    order openhttpa before reverse_proxy
+}
+
+:8082 {
+    log {
+        output stdout
+    }
+    openhttpa {
+        strict_attestation false
+    }
+
+    header Attest-Versions "openhttpa"
+
+    # Handshake endpoint
+    handle /api/attest {
+        openhttpa {
+            mode handshake
+        }
+    }
+
+    # Opportunistic upgrade probing
+    @options {
+        method OPTIONS
+    }
+    handle @options {
+        header Attest-Versions "openhttpa"
+        respond "" 204
+    }
+
+    # Serve index.html for GET /
+    @get_root {
+        method GET
+        path /
+    }
+    handle @get_root {
+        root * /usr/share/caddy
+        file_server
+    }
+
+    # Everything else (including upgraded POST) goes to backend
+    reverse_proxy * backend:5678
+}

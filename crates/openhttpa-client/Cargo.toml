@@ -1,0 +1,50 @@
+[package]
+name        = "openhttpa-client"
+description = "OpenHTTPA — async client SDK (AtHS + TrR)"
+version.workspace    = true
+edition.workspace    = true
+rust-version.workspace = true
+license.workspace    = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+documentation.workspace = true
+categories.workspace = true
+keywords.workspace = true
+
+[dependencies]
+openhttpa-proto        = { workspace = true }
+openhttpa-crypto       = { workspace = true }
+openhttpa-headers      = { workspace = true }
+openhttpa-core         = { workspace = true }
+openhttpa-attestation  = { workspace = true }
+openhttpa-tee          = { workspace = true }
+openhttpa-transport    = { workspace = true }
+bytes               = { workspace = true }
+http                = { workspace = true }
+serde               = { workspace = true }
+serde_json          = { workspace = true }
+thiserror           = { workspace = true }
+tracing             = { workspace = true }
+tokio               = { workspace = true }
+async-trait         = { workspace = true }
+rand                = { workspace = true }
+hex                 = { workspace = true }
+hmac                = { workspace = true }
+sha2                = { workspace = true }
+chrono              = { workspace = true }
+axum                = { workspace = true }
+futures             = { workspace = true }
+
+[features]
+mock = ["openhttpa-tee/mock"]
+nvidia_gpu = ["openhttpa-tee/nvidia_gpu"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+openhttpa-tee = { workspace = true, features = ["nvidia_gpu"] }
+tracing-subscriber = { workspace = true }
+
+[[example]]
+name = "nvidia_gpu_attestation"
+required-features = ["nvidia_gpu"]

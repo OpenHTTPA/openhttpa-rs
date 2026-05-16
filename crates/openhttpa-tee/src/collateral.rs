@@ -1,0 +1,60 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright 2026 The `OpenHTTPA` Foundation (AIQL.org)
+
+//! Infrastructure for fetching and caching TEE attestation collateral.
+
+use std::collections::HashMap;
+use std::sync::RwLock;
+
+/// Cache for attestation collateral (certificates, CRLs).
+pub struct CollateralCache {
+    // Maps URI to raw bytes.
+    cache: RwLock<HashMap<String, Vec<u8>>>,
+}
+
+impl CollateralCache {
+    /// Create a new evidence cache with an empty internal state.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cache: RwLock::new(HashMap::new()),
+        }
+    }
+
+    /// Retrieve collateral from cache or fetch it from the URI.
+    /// Fetch collateral from a URI, using the cache if available.
+    ///
+    /// # Errors
+    /// Returns an error string if fetching fails or the cache is poisoned.
+    pub fn get(&self, uri: &str) -> Result<Vec<u8>, String> {
+        {
+            let read = self.cache.read().map_err(|e| e.to_string())?;
+            if let Some(data) = read.get(uri) {
+                return Ok(data.clone());
+            }
+        }
+
+        // Simulating a remote fetch
+        let data = Self::fetch_simulated(uri)?;
+
+        self.cache
+            .write()
+            .map_err(|e| e.to_string())?
+            .insert(uri.to_owned(), data.clone());
+        Ok(data)
+    }
+
+    fn fetch_simulated(uri: &str) -> Result<Vec<u8>, String> {
+        if uri.contains("mock") {
+            Ok(vec![0xaa; 1024])
+        } else {
+            Err(format!("URI not supported in simulation: {uri}"))
+        }
+    }
+}
+
+impl Default for CollateralCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}

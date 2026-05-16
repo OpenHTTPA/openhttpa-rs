@@ -1,0 +1,240 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright 2026 The `OpenHTTPA` Foundation (AIQL.org)
+
+//! The [`QuoteVerifier`] trait and result types.
+
+use async_trait::async_trait;
+
+pub use openhttpa_proto::{AttestQuote, EatClaims, VerificationResult};
+
+pub use openhttpa_proto::AttestError as VerificationError;
+
+/// Pluggable provider for revocation status.
+#[async_trait]
+pub trait RevocationProvider: Send + Sync + std::fmt::Debug {
+    /// Check if a specific TEE platform or enclave has been revoked.
+    ///
+    /// # Errors
+    /// Returns [`Err`] with `VerificationError::Revoked` if the identity is revoked.
+    async fn check_revocation(&self, result: &VerificationResult) -> Result<(), VerificationError>;
+}
+
+/// A policy for deciding whether to accept a [`VerificationResult`].
+#[async_trait]
+pub trait PolicyEngine: Send + Sync + std::fmt::Debug {
+    /// Evaluate the verification result against the policy.
+    async fn evaluate(&self, result: &VerificationResult) -> Result<(), VerificationError>;
+}
+
+/// An async pluggable quote verifier.
+#[async_trait]
+pub trait QuoteVerifier: Send + Sync {
+    /// Verify a single `quote` and return the verification result.
+    ///
+    /// # Arguments
+    /// * `quote` - The raw attestation quote.
+    /// * `report_data` - The 64-byte data buffer expected to be embedded in the quote.
+    async fn verify(
+        &self,
+        quote: &AttestQuote,
+        report_data: &[u8; 64],
+    ) -> Result<VerificationResult, VerificationError>;
+
+    /// Verify multiple quotes (a composite bundle).
+    ///
+    /// # Arguments
+    /// * `quotes` - A list of quotes to verify.
+    /// * `report_data` - The 64-byte data buffer expected to be embedded in all quotes.
+    ///
+    /// The default implementation verifies each quote individually and returns
+    /// a failure if any single verification fails (Fail-fast).
+    async fn verify_bundle(
+        &self,
+        quotes: &[AttestQuote],
+        report_data: &[u8; 64],
+    ) -> Result<VerificationResult, VerificationError> {
+        if quotes.is_empty() {
+            return Err(VerificationError::MalformedQuote(
+                "empty quote bundle".to_owned(),
+            ));
+        }
+
+        let mut primary_res = self.verify(&quotes[0], report_data).await?;
+
+        for quote in &quotes[1..] {
+            let secondary_res = self.verify(quote, report_data).await?;
+            primary_res.secondary.push(secondary_res);
+        }
+
+        Ok(primary_res)
+    }
+}
+
+/// A basic in-memory revocation provider.
+///
+/// # Warning
+///
+/// M-01: This provider is **test-only**. It stores revocations in an in-process
+/// `DashSet` that does not persist across restarts, is not loaded from a CRL or
+/// OCSP endpoint, and is not shared across server replicas. Use
+/// [`ItaVerifier`](crate::ita_verifier::ItaVerifier) or a production-grade
+/// CRL-backed implementation in any deployed environment.
+#[deprecated(
+    note = "M-01: test-only — does not persist or load revocations from a CRL/OCSP \
+            endpoint. Use a production-grade RevocationProvider in deployments."
+)]
+#[derive(Debug, Default)]
+pub struct SimpleRevocationProvider {
+    /// Set of revoked identity strings (e.g. MRENCLAVE or specific claims).
+    pub revoked_identities: dashmap::DashSet<String>,
+}
+
+#[async_trait]
+#[allow(deprecated)] // M-01: internal impl of the deprecated test-only type
+impl RevocationProvider for SimpleRevocationProvider {
+    /// Check revocation against all available identity fields.
+    ///
+    /// SEC-06: Checks `boot_progress`, `measurement`, and `signer_id` to
+    /// prevent a revoked enclave from bypassing the check by omitting
+    /// `boot_progress` while supplying the same identity via another field.
+    async fn check_revocation(&self, result: &VerificationResult) -> Result<(), VerificationError> {
+        let candidates: [Option<&String>; 3] = [
+            result.claims.boot_progress.as_ref(),
+            result.measurement.as_ref(),
+            result.signer_id.as_ref(),
+        ];
+        for identity in candidates.into_iter().flatten() {
+            if self.revoked_identities.contains(identity) {
+                return Err(VerificationError::Revoked(format!(
+                    "identity '{identity}' is on the revocation list"
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn result(debug: bool) -> VerificationResult {
+        VerificationResult {
+            claims: EatClaims {
+                hwmodel: Some("mock".to_owned()),
+                hwversion: Some("ok".to_owned()),
+                dbgstat: Some(u8::from(debug)),
+                ..Default::default()
+            },
+            tcb_status: "UpToDate".to_owned(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn verification_result_rejection() {
+        let res = VerificationResult {
+            claims: EatClaims {
+                hwmodel: Some("sgx".to_owned()),
+                hwversion: Some("up-to-date".to_owned()),
+                boot_progress: Some("f1a7e2b8d9c0".to_owned()),
+                dbgstat: Some(0),
+                ..Default::default()
+            },
+            tcb_status: "UpToDate".to_owned(),
+            measurement: Some("f1a7e2b8d9c0".to_owned()),
+            signer_id: Some("e0f2a1b3c4d5".to_owned()),
+            ..Default::default()
+        };
+        assert!(res.reject_debug_builds(false).is_ok());
+    }
+
+    #[test]
+    fn production_rejects_debug_build() {
+        let r = result(true);
+        assert!(r.reject_debug_builds(false).is_err());
+    }
+
+    #[test]
+    fn production_accepts_non_debug_build() {
+        let r = result(false);
+        assert!(r.reject_debug_builds(false).is_ok());
+    }
+
+    #[test]
+    fn allow_debug_flag_accepts_debug_build() {
+        let r = result(true);
+        assert!(r.reject_debug_builds(true).is_ok());
+    }
+
+    #[tokio::test]
+    #[allow(deprecated)] // M-01: internal test exercises the deprecated test-only provider
+    async fn revocation_provider_rejects_listed_identity() {
+        let provider = SimpleRevocationProvider::default();
+        let identity = "revoked-enclave-id".to_string();
+        provider.revoked_identities.insert(identity.clone());
+
+        let res = VerificationResult {
+            claims: EatClaims {
+                boot_progress: Some(identity),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert!(provider.check_revocation(&res).await.is_err());
+    }
+
+    #[tokio::test]
+    #[allow(deprecated)] // M-01: internal test exercises the deprecated test-only provider
+    async fn revocation_provider_accepts_non_listed_identity() {
+        let provider = SimpleRevocationProvider::default();
+        provider.revoked_identities.insert("revoked-id".to_string());
+
+        let res = VerificationResult {
+            claims: EatClaims {
+                boot_progress: Some("valid-id".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert!(provider.check_revocation(&res).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn policy_engine_rejects_low_svn() {
+        let policy = crate::policy::SimplePolicy {
+            min_security_version: Some(10),
+            ..Default::default()
+        };
+
+        let res = VerificationResult {
+            claims: EatClaims {
+                security_version: Some(5),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert!(policy.evaluate(&res).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn policy_engine_accepts_high_svn() {
+        let policy = crate::policy::SimplePolicy {
+            min_security_version: Some(10),
+            ..Default::default()
+        };
+
+        let res = VerificationResult {
+            claims: EatClaims {
+                security_version: Some(15),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert!(policy.evaluate(&res).await.is_ok());
+    }
+}

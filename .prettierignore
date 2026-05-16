@@ -1,0 +1,22 @@
+# Auto-generated NAPI-RS bindings
+bindings/nodejs/index.js
+bindings/nodejs/index.d.ts
+
+# Build artifacts
+target/
+node_modules/
+dist/
+
+# Submodules (rely on upstream formatting)
+crates/openhttpa-contract/lib/
+demo/multiparty-webapp/frontend/wasm/
+
+# Test artifacts
+test-results/
+playwright-report/
+tests/web/test-results/
+
+# Virtual environments
+.venv/
+env/
+venv/

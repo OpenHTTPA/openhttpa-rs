@@ -1,0 +1,40 @@
+[package]
+name = "openhttpa-zk"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[package.metadata.risc0]
+methods = ["methods/guest"]
+
+[features]
+default = []
+# Full ZK capabilities (requires risc0-zkvm)
+zk = ["dep:risc0-zkvm", "dep:risc0-build"]
+# Mock prover for testing
+mock = []
+# Hardware acceleration (requires zk)
+cuda = ["zk", "risc0-zkvm/cuda"]
+metal = ["zk", "risc0-zkvm/metal"]
+
+[dependencies]
+openhttpa-proto = { path = "../openhttpa-proto" }
+openhttpa-crypto = { path = "../openhttpa-crypto" }
+risc0-zkvm = { version = "1.2", default-features = false, features = ["prove"], optional = true }
+serde = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+bytes = { workspace = true }
+async-trait = { workspace = true }
+serde-big-array = "0.5"
+serde_json = { workspace = true }
+
+[build-dependencies]
+risc0-build = { version = "1.2", default-features = false, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+sha2 = "0.10"
+tracing-subscriber = "0.3"
+risc0-zkvm = { version = "1.2", default-features = false, features = ["std", "prove", "client"] }

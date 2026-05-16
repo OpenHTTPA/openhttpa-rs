@@ -1,0 +1,41 @@
+[package]
+name        = "openhttpa-c"
+description = "OpenHTTPA C FFI bindings via cbindgen"
+version.workspace    = true
+edition.workspace    = true
+rust-version.workspace = true
+license.workspace    = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+documentation.workspace = true
+categories.workspace = true
+keywords.workspace = true
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+openhttpa-client  = { workspace = true }
+openhttpa-proto   = { workspace = true }
+openhttpa-tee     = { workspace = true }
+openhttpa-attestation = { workspace = true }
+openhttpa-llm     = { workspace = true }
+openhttpa-crypto  = { workspace = true }
+openhttpa-core    = { workspace = true }
+openhttpa-server  = { workspace = true }
+http           = { workspace = true }
+uuid           = { workspace = true }
+tokio          = { workspace = true, features = ["rt-multi-thread"] }
+serde_json     = { workspace = true }
+serde          = { workspace = true, features = ["derive"] }
+hex            = { workspace = true }
+
+[build-dependencies]
+cbindgen = "0.29"
+
+[dev-dependencies]
+openhttpa-wasm = { path = "../wasm" }
+
+[features]
+mock = ["openhttpa-tee/mock", "openhttpa-client/mock", "openhttpa-core/mock"]

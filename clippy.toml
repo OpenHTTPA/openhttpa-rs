@@ -1,0 +1,7 @@
+# Clippy configuration for the OpenHTTPA workspace.
+# Only numeric / threshold settings belong here; lint level overrides
+# go in Cargo.toml [workspace.lints.clippy] or as #![allow(...)] attributes.
+
+msrv = "1.88.0"
+too-many-arguments-threshold = 8
+cognitive-complexity-threshold = 30

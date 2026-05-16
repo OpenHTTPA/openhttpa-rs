@@ -1,0 +1,105 @@
+# Rust build output
+/target/
+**/*.d
+.history/
+
+# Cargo.lock — not committed for libraries (committed for binaries/apps)
+# Uncomment the line below for application crates if desired:
+# Cargo.lock
+
+# Generated C header
+include/openhttpa.h
+
+# Node.js dependencies
+node_modules/
+
+# Node.js native addon
+bindings/nodejs/*.node
+bindings/nodejs/build/
+
+# Demo frontend build output
+demo/multiparty-webapp/frontend/dist/
+demo/multiparty-webapp/frontend/wasm/
+
+# Formal verification outputs
+formal/handshake.summary
+formal/results.spthy
+formal/*.log
+formal/tamarin_proof_results.txt
+
+# Wasm-pack build output
+pkg/
+wasm-pack.log
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Test artifacts
+*.profraw
+lcov.info
+coverage/
+
+# Compiled Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Shared/dynamic libraries (compiled outputs)
+*.so
+*.dylib
+*.dll
+
+# Playwright
+playwright-report/
+test-results/
+
+# General Hygiene
+*.log
+*.bak
+*.tmp
+*~
+.DS_Store
+Thumbs.db
+.pnpm-debug.log
+.eslintcache
+
+# Project Specific
+modules/caddy/openhttpa-caddy
+debug_crypto.png
+metadata.json
+
+# --- Extended Hygiene ---
+# Ignore the scratchpad
+scratch/
+
+# Ignore binary static libraries in bindings (use build scripts instead)
+bindings/**/*.a
+.agents/
+actions-runners/
+runners/
+*.tar.gz
+*.pdf
+*.txt

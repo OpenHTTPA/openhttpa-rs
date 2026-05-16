@@ -1,0 +1,41 @@
+# High-Precision Docker Ignore for OpenHTTPA Monorepo
+# Excludes heavyweight directories to ensure instantaneous build context transfer
+
+# Rust build artifacts
+target/
+**/*.rsbk
+**/*.pdb
+
+# Node.js dependencies and artifacts
+node_modules/
+**/dist/
+**/build/
+.pnpm-store/
+.playwright-browsers/
+
+# Python artifacts
+**/__pycache__/
+**/*.pyc
+.venv/
+.uv-cache/
+
+# Version Control
+.git/
+.gitignore
+.github/
+
+# CI/CD and Runner artifacts
+runners/
+scripts/
+.cargo/
+.go/
+.go-cache/
+.path
+.env
+
+# Local development and logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store

@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>OpenHTTPA Shield</title>
+    <style>
+      :root {
+        --primary: #00f2fe;
+        --secondary: #4facfe;
+        --bg: #0f172a;
+        --text: #f8fafc;
+      }
+      body {
+        width: 320px;
+        margin: 0;
+        padding: 20px;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          'Inter',
+          -apple-system,
+          sans-serif;
+      }
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+      .shield-icon {
+        width: 32px;
+        height: 32px;
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 15px rgba(79, 172, 254, 0.4);
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0;
+        font-weight: 600;
+      }
+      .session-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .session-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 12px;
+        transition: all 0.2s;
+      }
+      .session-card:hover {
+        border-color: var(--primary);
+      }
+      .origin {
+        font-weight: 500;
+        font-size: 14px;
+        margin-bottom: 4px;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #94a3b8;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #22c55e;
+        box-shadow: 0 0 8px #22c55e;
+      }
+      .empty {
+        text-align: center;
+        padding: 40px 20px;
+        color: #64748b;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="shield-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+          <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
+        </svg>
+      </div>
+      <h1>OpenHTTPA Shield</h1>
+    </div>
+
+    <div id="session-list" class="session-list">
+      <!-- Sessions will be injected here -->
+      <div class="empty">No active OpenHTTPA sessions. Visit a capable site to upgrade.</div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

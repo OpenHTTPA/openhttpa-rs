@@ -1,0 +1,37 @@
+[package]
+name = "openhttpa-mesh"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Attested Agent Mesh for secure AI agent communication"
+
+[dependencies]
+openhttpa-proto = { workspace = true }
+openhttpa-tee   = { workspace = true }
+openhttpa-crypto = { workspace = true }
+openhttpa-attestation = { path = "../openhttpa-attestation" }
+openhttpa-headers = { path = "../openhttpa-headers" }
+openhttpa-mcp = { path = "../openhttpa-mcp" }
+openhttpa-transport = { path = "../openhttpa-transport" }
+openhttpa-client = { path = "../openhttpa-client" }
+openhttpa-core = { path = "../openhttpa-core" }
+http         = { workspace = true }
+axum         = { workspace = true }
+bytes        = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+thiserror    = { workspace = true }
+tracing      = { workspace = true }
+async-trait  = { workspace = true }
+dashmap      = { workspace = true }
+uuid         = { workspace = true, features = ["v4", "serde"] }
+tokio        = { workspace = true }
+regorus      = "0.2"
+hex          = { workspace = true }
+postcard     = { workspace = true }
+
+[dev-dependencies]
+openhttpa-tee = { workspace = true }
+tracing-subscriber = "0.3"
+rand = "0.8"

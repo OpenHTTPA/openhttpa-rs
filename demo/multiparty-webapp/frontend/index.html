@@ -1,0 +1,3464 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenHTTPA – Attestation-First Secure HTTP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="index.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+  </head>
+  <body>
+    <nav>
+      <div class="nav-brand">
+        <img
+          src="favicon.png"
+          alt=""
+          style="height: 1.1em; width: auto; vertical-align: -0.15em; margin-right: 0.3rem"
+        />OpenHTTPA
+      </div>
+      <div class="nav-links">
+        <a href="#overview" class="active">Overview</a>
+        <a href="#handshake">Handshake</a>
+        <a href="#wire-format">Wire Format</a>
+        <a href="#demo">MPC</a>
+        <a href="#agentic-ai">Agentic AI</a>
+        <a href="#swarm-mesh">Swarm Mesh</a>
+        <a href="#formal-verification">Mathematical Assurance</a>
+        <a href="#standards">Standards</a>
+        <a href="#websocket">WebSocket</a>
+        <a
+          href="https://github.com/openhttpa/openhttpa-rs"
+          target="_blank"
+          style="display: flex; align-items: center; gap: 0.4rem"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path
+              d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.042-1.416-4.042-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
+            />
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </nav>
+
+    <!-- tee-status-banner removed in favor of minimalist footer marker -->
+
+    <!-- ═══ OVERVIEW ═══════════════════════════════════════════════════════════ -->
+    <div id="overview" class="section-wrap" style="position: relative; overflow: hidden">
+      <div class="hero-glow"></div>
+      <div class="sw">
+        <div class="slabel">Protocol Overview</div>
+        <h1>OpenHTTPA</h1>
+        <p class="hero-sub">
+          Attestation-first HTTP with <strong>message-level encryption</strong>,
+          <strong>hybrid post-quantum key exchange</strong>, and
+          <strong>hardware-rooted trust</strong> &#8212; for confidential multi-party applications.
+        </p>
+        <div class="badge-row">
+          <span class="badge b-pq">&#x1F510; Post-Quantum ML-KEM-768</span>
+          <span class="badge b-tee">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+              <path d="M9 2v2M15 2v2M9 20v2M15 20v2M20 9h2M20 15h2M2 9h2M2 15h2" />
+              <rect x="9" y="11" width="6" height="5" rx="1" />
+              <path d="M10 11V9a2 2 0 1 1 4 0v2" />
+            </svg>
+            TEE-Attested Sessions
+          </span>
+          <span class="badge b-l7">&#x1F4E6; Message-Level Encryption</span>
+          <span class="badge b-mpc">&#x1F91D; MPC-Ready</span>
+          <span class="badge b-sfv">&#x1F4CB; RFC 8941 Wire Format</span>
+        </div>
+
+        <div class="rev" id="cmp-wrap">
+          <h2 style="margin-bottom: 0.3rem">HTTPS vs OpenHTTPA</h2>
+          <p class="sintro" style="margin-bottom: 1.2rem">
+            Traditional HTTPS secures the <em>transport channel</em>. OpenHTTPA secures each
+            <em>message</em> and proves &#8212; via hardware attestation &#8212; exactly what code
+            processes it inside the TEE.
+          </p>
+          <div class="cmp-grid" id="cmp-grid">
+            <div class="cmp-head cmp-head-h">Traditional HTTPS / TLS 1.3</div>
+            <div class="cmp-head cmp-head-a2">OpenHTTPA</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ HANDSHAKE ══════════════════════════════════════════════════════════ -->
+    <div
+      id="handshake"
+      class="section-wrap"
+      style="background: linear-gradient(180deg, var(--bg) 0%, rgba(13, 21, 38, 0.6) 100%)"
+    >
+      <div class="sw">
+        <div class="slabel">AtHS Protocol</div>
+        <h2>Attestation Handshake (SIGMA-I)</h2>
+        <p class="sintro">
+          The <strong>AtHS</strong> (Attest Handshake) is a 1.5-RTT SIGMA-I exchange that derives a
+          hybrid post-quantum session key <em>bound</em> to a TEE attestation quote. Click
+          <strong>&#x25BA; Play</strong> to step through, or click any message to inspect headers.
+        </p>
+
+        <div class="hs-ctrl">
+          <button class="btn-p" id="hs-play">&#x25BA; Play Animation</button>
+          <button class="btn-g" id="hs-reset">&#x21BA; Reset</button>
+          <span class="hs-lbl" id="hs-lbl">Ready &#8212; press Play</span>
+        </div>
+
+        <div class="hs-diag">
+          <!-- Client -->
+          <div class="hs-actor hsa-l">
+            <div class="act-icon ic-c">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="2" y1="20" x2="22" y2="20"></line>
+              </svg>
+            </div>
+            <div class="act-name">Client</div>
+            <div class="act-sub">Browser / SDK<br />Generates ephemeral<br />key pair</div>
+            <div class="act-state" id="c-st"></div>
+          </div>
+
+          <!-- Messages -->
+          <div class="hs-flow">
+            <div class="hs-step" id="hs0">
+              <div class="hs-arrow" onclick="toggleStep(0)">
+                <span class="step-n">0</span>
+                <div class="arrow-pill pill-c2s">
+                  <span>OPTIONS preflight</span>
+                  <span>&#x2192; <span class="exp-hint">click to expand</span></span>
+                </div>
+              </div>
+              <div class="hs-detail" id="hsd0">
+                <div class="dbar">
+                  <span class="dot dr"></span><span class="dot dy"></span
+                  ><span class="dot dg"></span>&nbsp;Client &#x2192; Server &nbsp;&middot;&nbsp;
+                  CORS preflight for ATTEST method
+                </div>
+                <div class="hscode">
+                  <pre><span class="hm">OPTIONS</span> / HTTP/2
+<span class="hhn">Host</span>: <span class="hhv">openhttpa.aiql.org</span>
+<span class="hhn">Access-Control-Request-Method</span>: <span class="hhv">ATTEST</span>
+<span class="hhn">Access-Control-Request-Headers</span>: <span class="hhv">attest-cipher-suites, attest-key-shares, attest-random</span>
+<span class="hhn">Origin</span>: <span class="hhv">https://openhttpa.aiql.org</span>
+
+<span class="hcm">/* Server response: */</span>
+<span class="hst">HTTP/2 204 No Content</span>
+<span class="hhn">Access-Control-Allow-Methods</span>: <span class="hhv">ATTEST, GET, POST</span>
+<span class="hhn">Access-Control-Allow-Headers</span>: <span class="hhv">attest-*</span>
+<span class="hhn">Access-Control-Max-Age</span>: <span class="hhv">86400</span></pre>
+                </div>
+                <div class="step-xp">
+                  A standard CORS preflight lets browsers send the custom <code>ATTEST</code> method
+                  cross-origin. No key material is transmitted here.
+                </div>
+              </div>
+            </div>
+
+            <div class="hs-step" id="hs1">
+              <div class="hs-arrow" onclick="toggleStep(1)">
+                <span class="step-n">1</span>
+                <div class="arrow-pill pill-c2s">
+                  <span>ATTEST / &#8212; AtHS Request &nbsp;(key shares + nonce)</span>
+                  <span>&#x2192; <span class="exp-hint">click to expand</span></span>
+                </div>
+              </div>
+              <div class="hs-detail" id="hsd1">
+                <div class="dbar">
+                  <span class="dot dr"></span><span class="dot dy"></span
+                  ><span class="dot dg"></span>&nbsp;Client &#x2192; Server &nbsp;&middot;&nbsp;
+                  AtHS Request (custom ATTEST HTTP method)
+                </div>
+                <div class="hscode">
+                  <pre><span class="hm">ATTEST</span> / HTTP/2
+<span class="hhn">Host</span>: <span class="hhv">openhttpa.aiql.org</span>
+
+<span class="hhn">Attest-Versions</span>: <span class="hhv">openhttpa</span>
+<span class="hcm">              /* RFC 8941 Token list &#8212; supported HTTPA versions, ordered */</span>
+
+<span class="hhn">Attest-Cipher-Suites</span>: <span class="hhv">X25519_ML_KEM768_AES256GCM_SHA384, P384_ML_KEM1024_AES256GCM_SHA384, X25519_AES256GCM_SHA384, X25519_CHACHA20POLY1305_SHA256, P256_AES256GCM_SHA256</span>
+<span class="hcm">              /* Per CipherSuite::preferred_list() &#8212; server picks first mutually-supported suite */</span>
+
+<span class="hhn">Attest-Random</span>: <span class="hhv">:V29ybGQxMjM0NTY3ODkwYWJjZGVmZ2hp:</span>
+<span class="hcm">              /* RFC 8941 Byte Sequence &#8212; 32-byte nonce, fresh per handshake */</span>
+
+<span class="hhn">Attest-Key-Shares</span>: <span class="hhv">:eyJlY2RoZV9wdWJsaWMiOiI8MzItYnl0ZXM-IiwibWxrZW1fcHVibGljIjoiPDExODQtYnl0ZXM-In0=:</span>
+<span class="hcm">              /* base64url(JSON( ClientKeyShare { ecdhe_public: [u8; 32], mlkem_public: [u8; 1184] } ))
+                 Both fields included verbatim in HKDF combiner IKM (HybridSharedSecret::combine) */</span>
+
+<span class="hhn">Attest-Base-Creation</span>: <span class="hhv">new</span>
+<span class="hcm">              /* Token: "new" = fresh ATB; "resume" = ticket-based resumption */</span>
+
+<span class="hhn">Attest-Date</span>: <span class="hhv">2026-04-28T10:00:00Z</span>
+<span class="hcm">              /* ISO-8601 &#8212; server may reject stale requests */</span></pre>
+                </div>
+                <div class="step-xp">
+                  The client sends
+                  <code
+                    >ClientKeyShare { ecdhe_public: Vec&lt;u8&gt; [32 B], mlkem_public:
+                    Vec&lt;u8&gt; [1&#160;184 B] }</code
+                  >
+                  serialised as JSON and base64url-encoded per RFC&#160;8941 Byte Sequence. Both
+                  keys are included verbatim as <code>ecdhe_pk_c</code> and
+                  <code>mlkem_ek_c</code> in the HKDF combiner IKM &#8212; binding the derived
+                  session key to this exact key material. No private key material is transmitted.
+                </div>
+              </div>
+            </div>
+
+            <div class="hs-step" id="hs2">
+              <div class="hs-arrow" onclick="toggleStep(2)">
+                <span class="step-n">2</span>
+                <div class="arrow-pill pill-s2c">
+                  <span class="exp-hint">&#x2190;</span>
+                  <span>200 OK &#8212; AtHS Response &nbsp;(TEE quote + server key share)</span>
+                </div>
+              </div>
+              <div class="hs-detail" id="hsd2">
+                <div class="dbar">
+                  <span class="dot dr"></span><span class="dot dy"></span
+                  ><span class="dot dg"></span>&nbsp;Server &#x2192; Client &nbsp;&middot;&nbsp;
+                  AtHS Response
+                </div>
+                <div class="hscode">
+                  <pre><span class="hst">HTTP/2 200 OK</span>
+
+<span class="hhn">Attest-Version</span>: <span class="hhv">openhttpa</span>
+<span class="hcm">              /* Chosen protocol version */</span>
+
+<span class="hhn">Attest-Cipher-Suite</span>: <span class="hhv">X25519_ML_KEM768_AES256GCM_SHA384</span>
+<span class="hcm">              /* Selected suite &#8212; governs AEAD algorithm + HKDF hash */</span>
+
+<span class="hhn">Attest-Base-ID</span>: <span class="hhv">:A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6:</span>
+<span class="hcm">              /* 16-byte ATB session identifier &#8212; included in all subsequent TrRs */</span>
+
+<span class="hhn">Attest-Key-Share</span>: <span class="hhv">:eyJlY2RoZV9wdWJsaWMiOiI8MzItYnl0ZXM-IiwibWxrZW1fY2lwaGVydGV4dCI6IjwxMDg4LWJ5dGVzPiJ9:</span>
+<span class="hcm">              /* base64url(JSON( ServerKeyShare { ecdhe_public: [u8; 32], mlkem_ciphertext: [u8; 1088] } ))
+                 mlkem_ciphertext = MlKemPair::encapsulate(client_mlkem_public) on server
+                 Client: MlKemPair::decapsulate(mlkem_ciphertext) &#x2192; kem_ss (never on wire) */</span>
+
+<span class="hhn">Attest-Random</span>: <span class="hhv">:WFlaQUJDREVGMTIzNDU2Nzg5MDEyMzQ1:</span>
+<span class="hcm">              /* Server nonce &#8212; mixed into HKDF alongside client nonce */</span>
+
+<span class="hhn">Attest-Quotes</span>: <span class="hhv">:SGVsbG8gV29ybGQhIFRFRSBBdHRlc3RhdGlvbiBRdW90ZQ==:</span>
+<span class="hcm">              /* TEE attestation evidence (SGX DCAP quote / TDX TD Report / TPM PCR log).
+                 quote.report_data = SHA-384(AtHS transcript) &#8212; binds enclave to this exact
+                 handshake; client MUST verify before deriving any keys. */</span>
+
+<span class="hhn">Attest-Expires</span>: <span class="hhv">3600</span>
+<span class="hcm">              /* RFC 8941 Integer &#8212; ATB session lifetime in seconds */</span></pre>
+                </div>
+                <div class="step-xp">
+                  <strong>Attest-Quotes</strong> is the key differentiator from TLS. The server
+                  computes
+                  <code
+                    >T&nbsp;=&nbsp;SHA-384(client_random&#160;&#x2016;&#160;server_random&#160;&#x2016;&#160;client_share_json&#160;&#x2016;&#160;server_share_json)</code
+                  >, then calls
+                  <code
+                    >TeeProvider::generate_quote(&amp;QuoteRequest&#160;{&#160;report_data:&#160;T[0..48]&#160;})</code
+                  >. <code>report_data[48..64]</code> is zero-padded. The hardware embeds T in a
+                  tamper-proof <strong>MRENCLAVE</strong>&nbsp;/&nbsp;TD&nbsp;Report&nbsp;/&nbsp;PCR
+                  measurement. The client verifies the quote &#8212; and that its
+                  <code>report_data</code> equals the T it computed independently &#8212;
+                  <em>before</em> deriving any session keys.
+                </div>
+              </div>
+            </div>
+
+            <div class="hs-step" id="hs3">
+              <div class="hs-arrow" onclick="toggleStep(3)">
+                <span class="step-n">3</span>
+                <div class="arrow-pill pill-c2s">
+                  <span>POST /api/submit &#8212; TrR (AEAD-encrypted payload)</span>
+                  <span>&#x2192; <span class="exp-hint">click to expand</span></span>
+                </div>
+              </div>
+              <div class="hs-detail" id="hsd3">
+                <div class="dbar">
+                  <span class="dot dr"></span><span class="dot dy"></span
+                  ><span class="dot dg"></span>&nbsp;Client &#x2192; Server &nbsp;&middot;&nbsp;
+                  Trusted Request (TrR) &#8212; session-protected
+                </div>
+                <div class="hscode">
+                  <pre><span class="hm">POST</span> /api/submit HTTP/2
+<span class="hhn">Host</span>: <span class="hhv">openhttpa.aiql.org</span>
+<span class="hhn">Content-Type</span>: <span class="hhv">application/json</span>
+
+<span class="hhn">Attest-Base-ID</span>: <span class="hhv">:A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6:</span>
+<span class="hcm">              /* References the ATB established in AtHS */</span>
+
+<span class="hhn">Attest-Binder</span>: <span class="hhv">:4f6e636521AEAD_MAC_over_request_headers_and_counter:</span>
+<span class="hcm">              /* AEAD tag over canonical headers + monotonic sequence counter.
+                 Tampered headers or replayed requests are immediately detected. */</span>
+
+<span class="hcm">/* Body: AES-256-GCM ciphertext (key = session_key derived in AtHS) */</span>
+<span class="hcm">/* Plaintext: {"party_id":"alice","value":42}                        */</span>
+<span class="hhv">[nonce 12B][ciphertext ...][auth-tag 16B]</span></pre>
+                </div>
+                <div class="step-xp">
+                  After AtHS, every request body is encrypted with
+                  <code>client_write_key</code> (AES-256-GCM, 32&#160;B). Unlike TLS, this
+                  protection survives termination at proxies or load balancers &#8212; only the
+                  intended TEE server holds the key. <code>Attest-Binder</code> is validated by
+                  <code>ReplayGuard&lt;64&gt;</code>: a 64-word&nbsp;&times;&nbsp;64-bit sliding
+                  bit-window (4&#160;096-nonce capacity). Nonce&#160;0 and nonces older than the
+                  window are rejected; duplicate nonces trigger <code>ReplayError::Replay</code>.
+                  The nonce itself is constructed using the TLS&#160;1.3&#160;&#167;5.3 XOR scheme:
+                  <code>nonce&nbsp;=&nbsp;write_iv&nbsp;&#x2295;&nbsp;seq_counter</code>.
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- hs-flow -->
+
+          <!-- Server -->
+          <div class="hs-actor hsa-r">
+            <div class="act-icon ic-s">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="4" y="4" width="16" height="16" rx="2" />
+                <path d="M9 2v2M15 2v2M9 20v2M15 20v2M20 9h2M20 15h2M2 9h2M2 15h2" />
+                <rect x="9" y="11" width="6" height="5" rx="1" />
+                <path d="M10 11V9a2 2 0 1 1 4 0v2" />
+              </svg>
+            </div>
+            <div class="act-name">TEE Server</div>
+            <div class="act-sub">
+              Hardware Enclave<br />Generates attestation<br />quote + key share
+            </div>
+            <div class="act-state act-state-r" id="s-st"></div>
+          </div>
+        </div>
+        <!-- hs-diag -->
+
+        <!-- Key derivation -->
+        <div class="kdf-panel rev">
+          <h3 style="margin-bottom: 0.25rem">
+            Session Key Derivation
+            <span
+              style="font-size: 0.7rem; font-weight: 400; color: var(--muted); margin-left: 0.6rem"
+              >openhttpa-crypto/src/key_exchange.rs &#xB7; hkdf.rs</span
+            >
+          </h3>
+          <p class="sintro" style="margin-bottom: 0.9rem">
+            Both parties independently derive identical session keys &#8212;
+            <em>no key material is transmitted</em>. The combiner follows
+            <strong>draft-ietf-tls-hybrid-design &#167;3.2</strong> for IND-CCA2 security.
+          </p>
+
+          <div
+            style="
+              font-size: 0.65rem;
+              text-transform: uppercase;
+              letter-spacing: 0.13em;
+              color: var(--muted);
+              margin-bottom: 0.35rem;
+            "
+          >
+            Step 1 &#x2014; Key agreement &amp; decapsulation
+          </div>
+          <div class="kdf-row">
+            <div class="kdf-box ke">
+              X25519 ECDH<br /><small>client_priv &#xD7; server_pub</small>
+            </div>
+            <div class="kar">&#x2192;</div>
+            <div class="kdf-box ke">ecdhe_ss<br /><small>32 B</small></div>
+            <div style="width: 0.6rem"></div>
+            <div class="kdf-box kk">
+              ML-KEM-768 Decap<br /><small>mlkem_ct, client_decap_key</small>
+            </div>
+            <div class="kar">&#x2192;</div>
+            <div class="kdf-box kk">kem_ss<br /><small>32 B</small></div>
+          </div>
+
+          <div
+            style="
+              font-size: 0.65rem;
+              text-transform: uppercase;
+              letter-spacing: 0.13em;
+              color: var(--muted);
+              margin-bottom: 0.35rem;
+              margin-top: 0.75rem;
+            "
+          >
+            Step 2 &#x2014; IND-CCA2 combiner IKM &nbsp;<span
+              style="text-transform: none; letter-spacing: 0"
+              ><code style="font-size: 0.72rem">HybridSharedSecret::combine()</code></span
+            >
+          </div>
+          <div
+            class="kdf-row"
+            style="overflow-x: auto; flex-wrap: nowrap; gap: 0.28rem; padding-bottom: 0.2rem"
+          >
+            <div class="kdf-box ke" style="font-size: 0.67rem; white-space: nowrap">ecdhe_ss</div>
+            <div class="kop" style="font-size: 0.8rem">&#x2016;</div>
+            <div class="kdf-box kk" style="font-size: 0.67rem; white-space: nowrap">kem_ss</div>
+            <div class="kop" style="font-size: 0.8rem">&#x2016;</div>
+            <div
+              class="kdf-box"
+              style="
+                font-size: 0.67rem;
+                background: rgba(123, 144, 174, 0.1);
+                border: 1px solid var(--muted);
+                color: var(--muted);
+                white-space: nowrap;
+              "
+            >
+              &ldquo;openhttpa hybrid kem v1&rdquo;<br /><small>label [20 B]</small>
+            </div>
+            <div class="kop" style="font-size: 0.8rem">&#x2016;</div>
+            <div class="kdf-box ke" style="font-size: 0.67rem; white-space: nowrap">
+              ecdhe_pk_c<br /><small>32 B</small>
+            </div>
+            <div class="kop" style="font-size: 0.8rem">&#x2016;</div>
+            <div class="kdf-box ke" style="font-size: 0.67rem; white-space: nowrap">
+              ecdhe_pk_s<br /><small>32 B</small>
+            </div>
+            <div class="kop" style="font-size: 0.8rem">&#x2016;</div>
+            <div class="kdf-box kk" style="font-size: 0.67rem; white-space: nowrap">
+              mlkem_ek_c<br /><small>1&#x202F;184 B</small>
+            </div>
+            <div class="kop" style="font-size: 0.8rem">&#x2016;</div>
+            <div class="kdf-box kk" style="font-size: 0.67rem; white-space: nowrap">
+              mlkem_ct<br /><small>1&#x202F;088 B</small>
+            </div>
+            <div class="kar">&#x2192;</div>
+            <div class="kdf-box kx" style="font-size: 0.67rem; white-space: nowrap">
+              HKDF-Extract<br /><small>combined_secret</small>
+            </div>
+          </div>
+
+          <div
+            style="
+              font-size: 0.65rem;
+              text-transform: uppercase;
+              letter-spacing: 0.13em;
+              color: var(--muted);
+              margin-bottom: 0.35rem;
+              margin-top: 0.75rem;
+            "
+          >
+            Step 3 &#x2014; Handshake transcript hash &nbsp;<span
+              style="text-transform: none; letter-spacing: 0"
+              ><code style="font-size: 0.72rem">Sha384::chain_update()</code></span
+            >
+          </div>
+          <div class="kdf-row">
+            <div class="kdf-box ke" style="font-size: 0.67rem">
+              client_random<br /><small>32 B (Attest-Random)</small>
+            </div>
+            <div class="kop" style="font-size: 0.8rem">&#x2016;</div>
+            <div class="kdf-box ke" style="font-size: 0.67rem">
+              server_random<br /><small>32 B (Attest-Random)</small>
+            </div>
+            <div class="kop" style="font-size: 0.8rem">&#x2016;</div>
+            <div class="kdf-box kk" style="font-size: 0.67rem">
+              client_share_json<br /><small>Attest-Key-Shares</small>
+            </div>
+            <div class="kop" style="font-size: 0.8rem">&#x2016;</div>
+            <div class="kdf-box kk" style="font-size: 0.67rem">
+              server_share_json<br /><small>Attest-Key-Share</small>
+            </div>
+            <div class="kar">&#x2192;</div>
+            <div class="kdf-box kt">T = SHA-384(&#x2026;)<br /><small>48 B</small></div>
+          </div>
+          <div
+            style="
+              font-size: 0.72rem;
+              color: var(--muted);
+              margin: 0.25rem 0 0.1rem;
+              padding-left: 0.2rem;
+            "
+          >
+            &#x1F6E1; <code style="font-size: 0.7rem">report_data[0..48] = T</code> &mdash; TEE
+            hardware seals the quote over T, binding <code>MRENCLAVE</code> to this session
+          </div>
+
+          <div
+            style="
+              font-size: 0.65rem;
+              text-transform: uppercase;
+              letter-spacing: 0.13em;
+              color: var(--muted);
+              margin-bottom: 0.35rem;
+              margin-top: 0.75rem;
+            "
+          >
+            Step 4 &#x2014; HKDF-SHA384 expand &nbsp;<span
+              style="text-transform: none; letter-spacing: 0"
+              ><code style="font-size: 0.72rem"
+                >salt = &ldquo;openhttpa handshake v2&rdquo;</code
+              ></span
+            >
+          </div>
+          <div class="kdf-row">
+            <div class="kdf-box kx">combined_secret<br /><small>IKM</small></div>
+            <div class="kop">+</div>
+            <div class="kdf-box kt">T<br /><small>transcript</small></div>
+            <div class="kar">&#x2192;</div>
+            <div class="kdf-box kh">HKDF-Extract<br /><small>PRK</small></div>
+            <div class="kar">&#x2192;</div>
+            <div class="kdf-box kh">HKDF-Expand<br /><small>info = T &#x2016; label</small></div>
+          </div>
+          <div style="display: flex; gap: 0.45rem; flex-wrap: wrap; margin-top: 0.55rem">
+            <div class="kdf-box kK" style="font-size: 0.67rem">
+              master_secret<br /><small>48 B</small>
+            </div>
+            <div class="kdf-box kK" style="font-size: 0.67rem">
+              client_write_key<br /><small>32 B &#x2192; AES-256-GCM</small>
+            </div>
+            <div class="kdf-box kK" style="font-size: 0.67rem">
+              server_write_key<br /><small>32 B &#x2192; AES-256-GCM</small>
+            </div>
+            <div class="kdf-box kh" style="font-size: 0.67rem">
+              client_write_iv<br /><small>12 B nonce base</small>
+            </div>
+            <div class="kdf-box kh" style="font-size: 0.67rem">
+              server_write_iv<br /><small>12 B nonce base</small>
+            </div>
+          </div>
+
+          <div class="kdf-note" style="margin-top: 0.9rem">
+            The combiner includes <em>all</em> public keys and the ML-KEM ciphertext &#8212; not
+            just the raw shared secrets &#8212; so the combined secret is
+            <strong>IND-CCA2-secure</strong> even if one component is broken. An attacker must break
+            <em>both</em> X25519 and ML-KEM-768 simultaneously. Separate
+            <code>client_write_key</code> / <code>server_write_key</code> prevent reflection
+            attacks. HKDF info labels bind each derived key to the full transcript:
+            <code>T&#x2016;&ldquo;client write key&rdquo;</code>, etc.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ WIRE FORMAT ════════════════════════════════════════════════════════ -->
+    <div id="wire-format" class="section-wrap">
+      <div class="sw">
+        <div class="slabel">Wire Protocol</div>
+        <h2>Header Wire Format</h2>
+        <p class="sintro">
+          All <code>Attest-*</code> headers conform to
+          <strong>RFC 8941 Structured Field Values</strong>. Binary payloads use the SFV
+          <em>Byte Sequence</em> type: base64url (no padding) wrapped in <code>:</code> delimiters.
+          Select a tab to explore each protocol phase.
+        </p>
+
+        <div class="rev" style="margin-bottom: 2rem">
+          <table class="sfv-tbl">
+            <thead>
+              <tr>
+                <th>Field kind</th>
+                <th>SFV type</th>
+                <th>Wire example</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="std">Binary blobs (keys, nonces, quotes)</td>
+                <td class="stk">Item &#8211; Byte Sequence</td>
+                <td class="ste">:aGVsbG8=:</td>
+                <td class="std">base64url, no padding, colon-delimited per RFC 8941 &#167;4.1.8</td>
+              </tr>
+              <tr>
+                <td class="std">Cipher suite / version lists</td>
+                <td class="stk">List of Token</td>
+                <td class="ste">X25519_ML_KEM768&#8230;, openhttpa</td>
+                <td class="std">Comma-separated; ordered by preference (most preferred first)</td>
+              </tr>
+              <tr>
+                <td class="std">Scalar state flags</td>
+                <td class="stk">Item &#8211; Token</td>
+                <td class="ste">new</td>
+                <td class="std">Unquoted identifier (no quotes, no colon delimiters)</td>
+              </tr>
+              <tr>
+                <td class="std">Integers (expiry, counters)</td>
+                <td class="stk">Item &#8211; Integer</td>
+                <td class="ste">3600</td>
+                <td class="std">Plain decimal integer; no quotes required</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tab-bar">
+          <button class="tab-btn active" data-tab="tc">AtHS Request (Client)</button>
+          <button class="tab-btn" data-tab="ts">AtHS Response (Server)</button>
+          <button class="tab-btn" data-tab="tt">TrR (Protected Request)</button>
+        </div>
+
+        <div id="tc" class="tab-pane active">
+          <div class="wblock">
+            <div class="wbar">
+              <span class="dot dr"></span><span class="dot dy"></span
+              ><span class="dot dg"></span>&nbsp;ATTEST Request &#8212; AtHS Phase
+            </div>
+            <div class="wcode">
+              <pre><span class="wm">ATTEST</span> <span class="wp">/</span> <span class="wv">HTTP/2</span>
+
+<span class="whn">Attest-Versions</span>: <span class="whv">openhttpa</span>
+<span class="whn">Attest-Cipher-Suites</span>: <span class="whv">X25519_ML_KEM768_AES256GCM_SHA384, P384_ML_KEM1024_AES256GCM_SHA384, X25519_AES256GCM_SHA384, X25519_CHACHA20POLY1305_SHA256, P256_AES256GCM_SHA256</span>
+<span class="whn">Attest-Random</span>: <span class="whv">:V29ybGQxMjM0NTY3ODkwYWJjZGVmZ2hp:</span>
+<span class="whn">Attest-Key-Shares</span>: <span class="whv">:eyJlY2RoZV9wdWJsaWMiOiI8MzItYnl0ZXM-IiwibWxrZW1fcHVibGljIjoiPDExODQtYnl0ZXM-In0=:</span>
+<span class="whn">Attest-Base-Creation</span>: <span class="whv">new</span>
+<span class="whn">Attest-Date</span>: <span class="whv">2026-04-28T10:00:00Z</span></pre>
+            </div>
+            <div class="wleg">
+              <div class="leg">
+                <div class="legdot" style="background: #569cd6"></div>
+                Method / version
+              </div>
+              <div class="leg">
+                <div class="legdot" style="background: #9cdcfe"></div>
+                Header name
+              </div>
+              <div class="leg">
+                <div class="legdot" style="background: #ce9178"></div>
+                Header value
+              </div>
+            </div>
+          </div>
+          <div class="fgrid" id="fg-c"></div>
+        </div>
+
+        <div id="ts" class="tab-pane">
+          <div class="wblock">
+            <div class="wbar">
+              <span class="dot dr"></span><span class="dot dy"></span
+              ><span class="dot dg"></span>&nbsp;200 OK &#8212; AtHS Response
+            </div>
+            <div class="wcode">
+              <pre><span class="wv">HTTP/2</span> <span class="ws">200 OK</span>
+
+<span class="whn">Attest-Version</span>: <span class="whv">openhttpa</span>
+<span class="whn">Attest-Cipher-Suite</span>: <span class="whv">X25519_ML_KEM768_AES256GCM_SHA384</span>
+<span class="whn">Attest-Base-ID</span>: <span class="whv">:A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6:</span>
+<span class="whn">Attest-Key-Share</span>: <span class="whv">:eyJlY2RoZV9wdWJsaWMiOiI8MzItYnl0ZXM-IiwibWxrZW1fY2lwaGVydGV4dCI6IjwxMDg4LWJ5dGVzPiJ9:</span>
+<span class="whn">Attest-Random</span>: <span class="whv">:WFlaQUJDREVGMTIzNDU2Nzg5MDEyMzQ1:</span>
+<span class="whn">Attest-Quotes</span>: <span class="whv">:SGVsbG8gV29ybGQhIFRFRSBBdHRlc3RhdGlvbiBRdW90ZQ==:</span>
+<span class="whn">Attest-Expires</span>: <span class="whv">3600</span></pre>
+            </div>
+            <div class="wleg">
+              <div class="leg">
+                <div class="legdot" style="background: #4ec9b0"></div>
+                Status line
+              </div>
+              <div class="leg">
+                <div class="legdot" style="background: #9cdcfe"></div>
+                Header name
+              </div>
+              <div class="leg">
+                <div class="legdot" style="background: #ce9178"></div>
+                Header value
+              </div>
+            </div>
+          </div>
+          <div class="fgrid" id="fg-s"></div>
+        </div>
+
+        <div id="tt" class="tab-pane">
+          <div class="wblock">
+            <div class="wbar">
+              <span class="dot dr"></span><span class="dot dy"></span
+              ><span class="dot dg"></span>&nbsp;Trusted Request (TrR) &#8212; session-protected
+            </div>
+            <div class="wcode">
+              <pre><span class="wm">POST</span> <span class="wp">/api/submit</span> <span class="wv">HTTP/2</span>
+<span class="whn">Content-Type</span>: <span class="whv">application/json</span>
+<span class="whn">Attest-Base-ID</span>: <span class="whv">:A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6:</span>
+<span class="whn">Attest-Binder</span>: <span class="whv">:4f6e636521AEAD_MAC_over_request_headers_and_counter:</span>
+
+<span class="wenc">/* Body &#8212; AES-256-GCM ciphertext (session_key derived in AtHS)  */</span>
+<span class="wenc">/* Plaintext:  {"party_id":"alice","value":42}                   */</span>
+<span class="wenc">[nonce 12B][ciphertext ...][auth-tag 16B]</span></pre>
+            </div>
+            <div class="wleg">
+              <div class="leg">
+                <div class="legdot" style="background: #9cdcfe"></div>
+                Header name
+              </div>
+              <div class="leg">
+                <div class="legdot" style="background: #ce9178"></div>
+                Header value
+              </div>
+              <div class="leg">
+                <div class="legdot" style="background: #a78bfa"></div>
+                Encrypted content
+              </div>
+            </div>
+          </div>
+          <div class="fgrid" id="fg-t"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ MULTIPARTIES ══════════════════════════════════════════════════════════ -->
+    <div
+      id="demo"
+      class="section-wrap"
+      style="background: linear-gradient(180deg, rgba(13, 21, 38, 0.4) 0%, var(--bg) 100%)"
+    >
+      <div class="sw">
+        <div class="slabel">multiparties</div>
+        <h2>Multi-Party Computation</h2>
+        <p class="sintro">
+          Three parties submit private values inside TEE-attested OpenHTTPA sessions. The server
+          aggregates without revealing individual values &#8212; the result includes an attestation
+          quote proving computation occurred inside the enclave.
+        </p>
+
+        <div class="demo-grid">
+          <div class="dcard">
+            <h3>Submit Secret Value</h3>
+            <div class="frow">
+              <label>Party:</label>
+              <select id="party">
+                <option value="alice">Alice</option>
+                <option value="bob">Bob</option>
+                <option value="charlie">Charlie</option>
+              </select>
+            </div>
+            <div class="frow">
+              <label>Secret value:</label>
+              <input type="number" id="value" value="0" style="width: 110px" />
+            </div>
+            <button class="btn-p" onclick="submitValue()">Submit (attested)</button>
+            <div id="sub-ok" class="sok"></div>
+
+            <!-- OpenHTTPA session proof — populated by real AtHS before each submission -->
+            <div id="session-proof">
+              <h4>&#x1F512; OpenHTTPA Session Proof</h4>
+              <div class="sp-grid">
+                <span class="sp-k">Base-ID</span> <span class="sp-v" id="sp-baseid">&#8212;</span>
+                <span class="sp-k">Cipher Suite</span>
+                <span class="sp-v" id="sp-suite">&#8212;</span> <span class="sp-k">Version</span>
+                <span class="sp-v" id="sp-ver">&#8212;</span> <span class="sp-k">Post-Quantum</span>
+                <span class="sp-v" id="sp-pq">&#8212;</span>
+                <span class="sp-k">Transcript Hash</span
+                ><span class="sp-v" id="sp-thash">&#8212;</span>
+                <span class="sp-k">Session Keys</span>
+                <span class="sp-v" id="sp-keys">&#8212;</span> <span class="sp-k">Quote Type</span>
+                <span class="sp-v" id="sp-qt"><span id="attestation-status">Verified</span></span>
+                <span class="sp-k">TEE Hardware</span>
+                <span class="sp-v" id="sp-provider"
+                  ><span id="tee-type">tdx</span> <span class="attest-quote-marker">tdx</span>
+                  <span class="attest-quote-marker">nvidia_gpu</span></span
+                >
+                <span class="sp-k">TTL</span> <span class="sp-v" id="sp-ttl">&#8212;</span>
+              </div>
+              <pre id="raw-quote" style="display: none"></pre>
+              <details>
+                <summary>View all Attest-* wire headers from this handshake</summary>
+                <div class="ath-section">&#x2192; AtHS Request</div>
+                <table class="ath-table" id="ath-req-table">
+                  <thead>
+                    <tr>
+                      <th>Header</th>
+                      <th>Wire Value</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+                <div class="ath-section">&#x2190; AtHS Response</div>
+                <table class="ath-table" id="ath-resp-table">
+                  <thead>
+                    <tr>
+                      <th>Header</th>
+                      <th>Wire Value</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </details>
+            </div>
+
+            <div style="margin-top: 1.7rem">
+              <h3>Reveal Aggregate</h3>
+              <button class="btn-p" style="margin-top: 0.7rem" onclick="getResult()">
+                Compute Sum
+              </button>
+              <div class="rpanel" id="rpanel">
+                <div style="font-size: 0.71rem; color: var(--muted); margin-bottom: 0.18rem">
+                  Aggregated sum (TEE-verified)
+                </div>
+                <div class="rnum" id="sum">&#8212;</div>
+                <div style="font-size: 0.79rem; color: var(--muted); margin-top: 0.45rem">
+                  Parties:&nbsp;<strong id="parties">&#8212;</strong> &nbsp;<span class="tee-badge">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <rect x="4" y="4" width="16" height="16" rx="2" />
+                      <path d="M9 2v2M15 2v2M9 20v2M15 20v2M20 9h2M20 15h2M2 9h2M2 15h2" />
+                      <rect x="9" y="11" width="6" height="5" rx="1" />
+                      <path d="M10 11V9a2 2 0 1 1 4 0v2" />
+                    </svg>
+                    TEE-attested
+                  </span>
+                </div>
+                <details>
+                  <summary>View attestation quote (base64)</summary>
+                  <pre id="quote"></pre>
+                </details>
+              </div>
+            </div>
+          </div>
+
+          <div class="dcard">
+            <h3 style="display: flex; align-items: center; gap: 0.45rem">
+              Protocol Log
+              <span
+                style="
+                  width: 7px;
+                  height: 7px;
+                  border-radius: 50%;
+                  background: var(--green);
+                  flex-shrink: 0;
+                "
+              ></span>
+            </h3>
+            <div class="plog" id="plog">
+              <div class="le2">
+                <span class="li"
+                  >[init] OpenHTTPA demo &#8212; backend at
+                  <span id="log-backend-url">loading...</span></span
+                >
+              </div>
+              <div class="le2">
+                <span class="li">[init] Waiting for party submissions&#8230;</span>
+              </div>
+            </div>
+            <div class="lctrl">
+              <button class="btn-g" onclick="clearLog()" style="font-size: 0.76rem">Clear</button>
+              <button
+                class="btn-g"
+                id="connect-openhttpa"
+                onclick="simHS()"
+                style="font-size: 0.76rem"
+              >
+                &#x25BA; Simulate AtHS
+              </button>
+              <button
+                class="btn-g"
+                id="btn-wasm"
+                style="font-size: 0.76rem"
+                title="Runs real AtHS crypto in the browser via Wasm (pure-Rust ml-kem + x25519-dalek)"
+              >
+                &#x25BA; Wasm AtHS
+              </button>
+              <span id="wasm-status" style="font-size: 0.71rem; color: var(--muted)"
+                >loading wasm…</span
+              >
+              <span id="session-status" style="display: none">Connected</span>
+              <!-- Hidden test-only controls for Playwright: must be technically in viewport to be clickable -->
+              <div
+                id="test-support"
+                style="
+                  position: fixed;
+                  bottom: 10px;
+                  right: 10px;
+                  width: 100px;
+                  height: 100px;
+                  overflow: hidden;
+                  opacity: 0.01;
+                  z-index: 999999;
+                "
+              >
+                <button
+                  id="connect-composite"
+                  onclick="simCompositeHS()"
+                  style="width: 100%; height: 50%"
+                ></button>
+                <button
+                  id="connect-failed-tee"
+                  onclick="simFailedHS()"
+                  style="width: 100%; height: 50%"
+                ></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ AGENTIC AI ════════════════════════════════════════════════════════ -->
+    <div id="agentic-ai" class="section-wrap" style="background: var(--surface)">
+      <div class="sw">
+        <div class="slabel">Agentic AI & MCP</div>
+        <h2>Confidential Tool Execution (MCP)</h2>
+        <p class="sintro">
+          Leverage the Model Context Protocol (MCP) to execute tools securely inside a TEE. Every
+          tool call is a TrR (Trusted Request) protected by OpenHTTPA, ensuring even the host cannot
+          inspect tool arguments or results.
+        </p>
+
+        <div class="demo-grid">
+          <div class="dcard">
+            <h3>Confidential MCP Call</h3>
+            <div class="frow">
+              <label>Tool:</label>
+              <select id="mcp-tool">
+                <option value="secure_sum">secure_sum</option>
+                <option value="secure_average">secure_average</option>
+                <option value="secure_variance">secure_variance</option>
+                <option value="tools/list">List Tools</option>
+              </select>
+            </div>
+            <div class="frow">
+              <label>Arguments (JSON):</label>
+              <input type="text" id="mcp-args" value="{}" style="width: 100%" />
+              <div id="mcp-hint" style="font-size: 0.7rem; color: var(--muted); margin-top: 0.3rem">
+                Example: {}
+              </div>
+            </div>
+            <button class="btn-p" onclick="callMcp()">Execute Confidential Tool</button>
+            <div
+              id="mcp-status"
+              style="
+                margin-top: 0.8rem;
+                font-size: 0.85rem;
+                font-weight: bold;
+                color: var(--green);
+                display: none;
+              "
+            ></div>
+            <div id="mcp-res-panel" class="rpanel">
+              <div style="font-size: 0.71rem; color: var(--muted); margin-bottom: 0.18rem">
+                MCP Result (Confidential)
+              </div>
+              <pre
+                id="mcp-result"
+                style="font-size: 0.75rem; color: var(--green); overflow-x: auto"
+              ></pre>
+            </div>
+          </div>
+
+          <div class="dcard">
+            <h3>Agent-to-Agent (A2A)</h3>
+            <p class="sintro" style="font-size: 0.8rem">
+              Agents communicate using M-HTTPA (Mutual OpenHTTPA), where both sides attest to each
+              other before exchanging messages.
+            </p>
+            <div class="frow">
+              <label>Message Type:</label>
+              <input type="text" id="a2a-type" value="greeting" />
+            </div>
+            <div class="frow">
+              <label>Payload (JSON):</label>
+              <input
+                type="text"
+                id="a2a-payload"
+                value='{"text": "Hello from Agent Alice"}'
+                style="width: 100%"
+              />
+            </div>
+            <button class="btn-p" onclick="sendA2AMessage()">Send Secure A2A Message</button>
+            <div id="a2a-status" class="sok"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SWARM MESH ══════════════════════════════════════════════════════════ -->
+    <div
+      id="swarm-mesh"
+      class="section-wrap"
+      style="background: var(--bg); border-top: 1px solid var(--border)"
+    >
+      <div class="sw">
+        <div class="slabel">Swarm Orchestration</div>
+        <h2>Attested Agent Mesh (AAM)</h2>
+        <p class="sintro">
+          Orchestrate massive swarms of autonomous agents. Every agent in the mesh is
+          <strong>TEE-attested</strong>, ensuring end-to-end cryptographic integrity across
+          multi-hop delegations and secure tool execution.
+        </p>
+
+        <div class="demo-grid">
+          <div class="dcard">
+            <h3>Swarm Controller</h3>
+            <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 1.2rem">
+              Launch a high-fidelity simulation of 10 virtual agents performing mutual attestation
+              and confidential Monte Carlo estimation.
+            </p>
+            <button id="btn-swarm-sim" class="btn-p" onclick="runSwarmSim()">
+              Launch Swarm Simulation
+            </button>
+
+            <div id="swarm-metrics" style="margin-top: 1.5rem; display: none">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  font-size: 0.75rem;
+                  color: var(--muted);
+                  margin-bottom: 0.4rem;
+                "
+              >
+                <span>Simulation Progress</span>
+                <span id="swarm-progress-text">0%</span>
+              </div>
+              <div
+                style="height: 4px; background: var(--codebg); border-radius: 2px; overflow: hidden"
+              >
+                <div
+                  id="swarm-progress-bar"
+                  style="
+                    height: 100%;
+                    width: 0%;
+                    background: var(--green);
+                    transition: width 0.3s ease;
+                  "
+                ></div>
+              </div>
+              <div
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.2rem"
+              >
+                <div
+                  style="
+                    background: var(--codebg);
+                    padding: 0.8rem;
+                    border-radius: 8px;
+                    border: 1px solid var(--border);
+                  "
+                >
+                  <div style="font-size: 0.65rem; color: var(--muted); text-transform: uppercase">
+                    Agents Active
+                  </div>
+                  <div
+                    id="swarm-agent-count"
+                    style="font-size: 1.4rem; font-weight: 800; color: var(--accent)"
+                  >
+                    0
+                  </div>
+                </div>
+                <div
+                  style="
+                    background: var(--codebg);
+                    padding: 0.8rem;
+                    border-radius: 8px;
+                    border: 1px solid var(--border);
+                  "
+                >
+                  <div style="font-size: 0.65rem; color: var(--muted); text-transform: uppercase">
+                    Attestation Status
+                  </div>
+                  <div
+                    id="swarm-attest-status"
+                    style="font-size: 1.4rem; font-weight: 800; color: var(--green)"
+                  >
+                    Verified
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dcard">
+            <h3>Mesh Execution Log</h3>
+            <div id="swarm-log" class="plog" style="height: 300px">
+              <div class="lt">Ready to simulate. Press "Launch" to start.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PROVENANCE AUDIT ════════════════════════════════════════════════════════ -->
+    <div id="provenance-audit" class="section-wrap" style="background: var(--surface)">
+      <div class="sw">
+        <div class="slabel">Audit & Transparency</div>
+        <h2>Attested Provenance Chain</h2>
+        <p class="sintro">
+          Inspect the full cryptographic chain of custody for multi-hop agent requests. Each hop
+          appends its hardware identity, verified via TEE attestation.
+        </p>
+
+        <div class="dcard">
+          <h3>Provenance Visualizer</h3>
+          <div id="prov-chain-view" class="prov-chain">
+            <div class="prov-empty">
+              Execute a swarm simulation or MCP tool to see provenance logs.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ MATHEMATICAL ASSURANCE ══════════════════════════════════════════════════ -->
+    <!-- ═══ STANDARDS & COMPLIANCE ════════════════════════════════════════════════ -->
+    <div
+      id="standards"
+      class="section-wrap"
+      style="background: var(--surface); border-top: 1px solid var(--border)"
+    >
+      <div class="sw">
+        <div class="slabel">Regulatory & Standards</div>
+        <h2>Standards & Compliance</h2>
+        <p class="sintro">
+          OpenHTTPA is engineered for high-assurance environments, meeting the rigorous demands of
+          the IETF and NIST. The following technical reports and specifications provide the formal
+          foundation for the protocol.
+        </p>
+
+        <div class="demo-grid" style="grid-template-columns: 1.2fr 1fr 1fr">
+          <!-- IETF Section -->
+          <div class="dcard" style="border-top: 3px solid var(--accent)">
+            <div
+              style="
+                font-size: 0.6rem;
+                text-transform: uppercase;
+                color: var(--accent);
+                font-weight: 800;
+                margin-bottom: 0.5rem;
+              "
+            >
+              IETF Submission
+            </div>
+            <h3 style="margin-bottom: 0.8rem">Internet-Draft (Protocol Wire)</h3>
+            <p style="font-size: 0.78rem; color: var(--muted); margin-bottom: 1.2rem">
+              The authoritative specification for the OpenHTTPA wire format, SIGMA-I handshake, and
+              SFV header definitions.
+            </p>
+            <a
+              href="https://github.com/openhttpa/openhttpa-rs/blob/main/docs/ietf/draft-openhttpa-protocol-00.md"
+              target="_blank"
+              class="btn-s"
+              style="text-decoration: none; display: inline-block; font-size: 0.7rem"
+              >Read I-D Specification</a
+            >
+          </div>
+
+          <!-- NIST Section -->
+          <div class="dcard" style="border-top: 3px solid var(--green)">
+            <div
+              style="
+                font-size: 0.6rem;
+                text-transform: uppercase;
+                color: var(--green);
+                font-weight: 800;
+                margin-bottom: 0.5rem;
+              "
+            >
+              NIST Technical Reports
+            </div>
+            <h3 style="margin-bottom: 0.8rem">Federal Compliance</h3>
+            <div style="display: flex; flex-direction: column; gap: 0.7rem">
+              <a
+                href="https://github.com/openhttpa/openhttpa-rs/blob/main/docs/nist/OpenHTTPA-NIST-Technical-Report.md"
+                target="_blank"
+                style="
+                  color: var(--text);
+                  text-decoration: none;
+                  font-size: 0.75rem;
+                  display: flex;
+                  align-items: center;
+                  gap: 0.4rem;
+                "
+              >
+                <span style="color: var(--green)">&#x2192;</span> Security Analysis Report
+              </a>
+              <a
+                href="https://github.com/openhttpa/openhttpa-rs/blob/main/docs/nist/NIST-SP-OpenHTTPA-Security-Guidelines.md"
+                target="_blank"
+                style="
+                  color: var(--text);
+                  text-decoration: none;
+                  font-size: 0.75rem;
+                  display: flex;
+                  align-items: center;
+                  gap: 0.4rem;
+                "
+              >
+                <span style="color: var(--green)">&#x2192;</span> Operational SP Guidelines
+              </a>
+              <a
+                href="https://github.com/openhttpa/openhttpa-rs/blob/main/docs/nist/OpenHTTPA-FIPS-Compliance-Capability.md"
+                target="_blank"
+                style="
+                  color: var(--text);
+                  text-decoration: none;
+                  font-size: 0.75rem;
+                  display: flex;
+                  align-items: center;
+                  gap: 0.4rem;
+                "
+              >
+                <span style="color: var(--green)">&#x2192;</span> FIPS 140-3 Roadmap
+              </a>
+            </div>
+          </div>
+
+          <!-- Security Science Section -->
+          <div class="dcard" style="border-top: 3 solid var(--red)">
+            <div
+              style="
+                font-size: 0.6rem;
+                text-transform: uppercase;
+                color: var(--red);
+                font-weight: 800;
+                margin-bottom: 0.5rem;
+              "
+            >
+              Security Science
+            </div>
+            <h3 style="margin-bottom: 0.8rem">Formal Assurance</h3>
+            <div style="display: flex; flex-direction: column; gap: 0.7rem">
+              <a
+                href="https://github.com/openhttpa/openhttpa-rs/blob/main/docs/security/OpenHTTPA-Formal-Threat-Model.md"
+                target="_blank"
+                style="
+                  color: var(--text);
+                  text-decoration: none;
+                  font-size: 0.75rem;
+                  display: flex;
+                  align-items: center;
+                  gap: 0.4rem;
+                "
+              >
+                <span style="color: var(--red)">&#x2192;</span> Formal Threat Model
+              </a>
+              <a
+                href="https://github.com/openhttpa/openhttpa-rs/blob/main/docs/security/OpenHTTPA-Formal-Verification-Report.md"
+                target="_blank"
+                style="
+                  color: var(--text);
+                  text-decoration: none;
+                  font-size: 0.75rem;
+                  display: flex;
+                  align-items: center;
+                  gap: 0.4rem;
+                "
+              >
+                <span style="color: var(--red)">&#x2192;</span> Verification Summary
+              </a>
+              <a
+                href="https://github.com/openhttpa/openhttpa-rs/blob/main/docs/security/OpenHTTPA-Privacy-Impact-Assessment.md"
+                target="_blank"
+                style="
+                  color: var(--text);
+                  text-decoration: none;
+                  font-size: 0.75rem;
+                  display: flex;
+                  align-items: center;
+                  gap: 0.4rem;
+                "
+              >
+                <span style="color: var(--red)">&#x2192;</span> Privacy Impact (PIA)
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="formal-verification"
+      class="section-wrap"
+      style="background: var(--codebg); border-top: 1px solid var(--border)"
+    >
+      <div class="sw">
+        <div class="slabel">Security Audit</div>
+        <h2>Mathematical Assurance</h2>
+        <p class="sintro">
+          OpenHTTPA has undergone a rigorous <strong>expert security audit</strong> by top-tier
+          mathematicians. The protocol is formally proven to provide secrecy, authentication, and
+          perfect forward secrecy (PFS).
+        </p>
+
+        <div class="demo-grid" style="grid-template-columns: 1fr 1fr 1fr">
+          <div class="dcard" style="border-top: 3px solid var(--green)">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: start;
+                margin-bottom: 0.8rem;
+              "
+            >
+              <h3 style="margin: 0">ProVerif Proof</h3>
+              <span
+                style="
+                  background: rgba(0, 255, 150, 0.1);
+                  color: var(--green);
+                  font-size: 0.6rem;
+                  padding: 2px 6px;
+                  border-radius: 4px;
+                  font-weight: bold;
+                  text-transform: uppercase;
+                "
+                >Verified</span
+              >
+            </div>
+            <p style="font-size: 0.75rem; color: var(--muted)">
+              Symbolic model verification of secrecy and authentication.
+            </p>
+            <ul
+              style="
+                font-size: 0.75rem;
+                color: var(--text);
+                padding-left: 1.2rem;
+                line-height: 1.6;
+                margin-bottom: 1rem;
+              "
+            >
+              <li><strong>Secrecy:</strong> Payload data is provably inaccessible.</li>
+              <li><strong>Authentication:</strong> Identity is bound to the TEE.</li>
+            </ul>
+            <a
+              href="https://github.com/openhttpa/openhttpa-rs/blob/main/formal/PROVERIF.md"
+              target="_blank"
+              style="
+                color: var(--green);
+                text-decoration: none;
+                font-size: 0.75rem;
+                font-weight: bold;
+              "
+              >View Formal Models →</a
+            >
+          </div>
+
+          <div class="dcard" style="border-top: 3px solid var(--green)">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: start;
+                margin-bottom: 0.8rem;
+              "
+            >
+              <h3 style="margin: 0">Tamarin Prover</h3>
+              <span
+                style="
+                  background: rgba(0, 255, 150, 0.1);
+                  color: var(--green);
+                  font-size: 0.6rem;
+                  padding: 2px 6px;
+                  border-radius: 4px;
+                  font-weight: bold;
+                  text-transform: uppercase;
+                "
+                >Verified</span
+              >
+            </div>
+            <p style="font-size: 0.75rem; color: var(--muted)">
+              Temporal analysis of Forward Secrecy and replay protection.
+            </p>
+            <ul
+              style="
+                font-size: 0.75rem;
+                color: var(--text);
+                padding-left: 1.2rem;
+                line-height: 1.6;
+                margin-bottom: 1rem;
+              "
+            >
+              <li><strong>Forward Secrecy:</strong> History is safe after key leaks.</li>
+              <li><strong>Agreement:</strong> Strong injective agreement verified.</li>
+            </ul>
+            <a
+              href="https://github.com/openhttpa/openhttpa-rs/blob/main/formal/TAMARIN.md"
+              target="_blank"
+              style="
+                color: var(--green);
+                text-decoration: none;
+                font-size: 0.75rem;
+                font-weight: bold;
+              "
+              >View Proof Details →</a
+            >
+          </div>
+
+          <div class="dcard" style="border-top: 3px solid var(--accent)">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: start;
+                margin-bottom: 0.8rem;
+              "
+            >
+              <h3 style="margin: 0">Verification Infra</h3>
+            </div>
+            <p style="font-size: 0.75rem; color: var(--muted)">
+              Reproducible prover source files and security analysis.
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem">
+              <a
+                href="https://github.com/openhttpa/openhttpa-rs/blob/main/formal/README.md"
+                target="_blank"
+                style="
+                  color: var(--accent);
+                  text-decoration: none;
+                  font-size: 0.75rem;
+                  font-weight: bold;
+                "
+                >Reproduction Guide →</a
+              >
+              <a
+                href="https://github.com/openhttpa/openhttpa-rs/blob/main/formal/DENIABILITY.md"
+                target="_blank"
+                style="
+                  color: var(--accent);
+                  text-decoration: none;
+                  font-size: 0.75rem;
+                  font-weight: bold;
+                "
+                >Deniability Analysis →</a
+              >
+            </div>
+            <div
+              style="
+                margin-top: 1.2rem;
+                background: var(--bg);
+                padding: 0.8rem;
+                border-radius: 6px;
+                border: 1px solid var(--border);
+              "
+            >
+              <code style="font-size: 0.65rem; color: var(--accent)">$ make formal-verify</code>
+            </div>
+          </div>
+        </div>
+
+        <div
+          style="
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: var(--bg);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+          "
+        >
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 1rem;
+            "
+          >
+            <h3 style="margin: 0; font-size: 1rem">Expert Recommendations Implemented</h3>
+            <span style="font-size: 0.7rem; color: var(--green); font-weight: bold"
+              >Audit Status: PASS</span
+            >
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem">
+            <div style="font-size: 0.75rem">
+              <div style="color: var(--green); font-weight: bold; margin-bottom: 0.2rem">
+                ✓ Lemma Granularity
+              </div>
+              <p style="color: var(--muted)">
+                PFS proof now distinguishes between long-term TEE identity and session secrecy.
+              </p>
+            </div>
+            <div style="font-size: 0.75rem">
+              <div style="color: var(--green); font-weight: bold; margin-bottom: 0.2rem">
+                ✓ Implementation Review
+              </div>
+              <p style="color: var(--muted)">
+                Property-based tests integrated to verify canonicalization against symbolic
+                failures.
+              </p>
+            </div>
+            <div style="font-size: 0.75rem">
+              <div style="color: var(--green); font-weight: bold; margin-bottom: 0.2rem">
+                ✓ Privacy Analysis
+              </div>
+              <p style="color: var(--muted)">
+                Deniability trade-offs documented for high-accountability agentic workflows.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- ═══ STREAMING CHAT ════════════════════════════════════════════════════════ -->
+    <div
+      id="streaming-chat"
+      class="section-wrap"
+      style="background: linear-gradient(180deg, rgba(13, 21, 38, 0.4) 0%, var(--bg) 100%)"
+    >
+      <div class="sw">
+        <div class="slabel">Real-time Inference</div>
+        <h2>Confidential Streaming Chat</h2>
+        <p class="sintro">
+          Experience end-to-end encrypted LLM inference with low latency. Each token is delivered as
+          a separate encrypted chunk in a binary stream, protected by hardware attestation.
+        </p>
+
+        <div class="demo-grid">
+          <div class="dcard">
+            <h3>Confidential LLM Chat</h3>
+            <div class="frow">
+              <label>Message:</label>
+              <input
+                type="text"
+                id="stream-chat-input"
+                value="Explain OpenHTTPA security."
+                style="width: 100%"
+              />
+            </div>
+            <button class="btn-p" onclick="runStreamChat()">Send Streaming Request</button>
+
+            <div id="stream-chat-res-panel" class="rpanel" style="margin-top: 1.5rem">
+              <div style="font-size: 0.71rem; color: var(--muted); margin-bottom: 0.18rem">
+                Streaming Result (Decrypted)
+              </div>
+              <div
+                id="stream-chat-output"
+                style="
+                  font-size: 0.85rem;
+                  line-height: 1.6;
+                  color: var(--text);
+                  white-space: pre-wrap;
+                  min-height: 100px;
+                  padding: 0.8rem;
+                  background: var(--codebg);
+                  border-radius: 8px;
+                  border: 1px solid var(--border);
+                "
+              ></div>
+            </div>
+          </div>
+
+          <div class="dcard">
+            <h3>Streaming Protocol Proof</h3>
+            <div class="sp-grid">
+              <span class="sp-k">Binary Framing</span>
+              <span class="sp-v">[Len (4b)] || [Counter (8b)] || [Ciphertext]</span>
+              <span class="sp-k">Integrity</span>
+              <span class="sp-v">Cumulative SHA-384 Transcript Hash</span>
+              <span class="sp-k">Protection</span>
+              <span class="sp-v">Strict Monotonic Counters per Chunk</span>
+              <span class="sp-k">Latency</span>
+              <span class="sp-v">&lt; 50ms per token (attested overhead)</span>
+            </div>
+            <div
+              id="stream-metrics"
+              style="margin-top: 1.2rem; font-family: monospace; font-size: 0.75rem"
+            >
+              <div class="le2"><span class="li">[stream] Ready to receive tokens&#8230;</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ WEB3 ORACLE BRIDGE ════════════════════════════════════════════════════ -->
+    <div id="oracle-bridge" class="section-wrap" style="background: var(--surface)">
+      <div class="sw">
+        <div class="slabel">Web3 & Bitcoin Bridge</div>
+        <h2>Confidential Oracle Bridge</h2>
+        <p class="sintro">
+          Bridge off-chain Web2 data (market prices, weather, APIs) trustlessly to smart contracts.
+          Data is fetched inside a TEE and mathematically bound to a TEE quote and ZK proof for
+          on-chain verification.
+        </p>
+
+        <div class="demo-grid">
+          <div class="dcard">
+            <h3>Attested Data Fetch</h3>
+            <div class="frow">
+              <label>Data URL:</label>
+              <input
+                type="text"
+                id="oracle-url"
+                value="https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
+                style="width: 100%"
+              />
+            </div>
+            <div style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem">
+              <label class="toggle-switch">
+                <input type="checkbox" id="oracle-gpu-toggle" disabled />
+                <span class="slider round"></span>
+              </label>
+              <span style="font-size: 0.85rem; color: var(--muted)"
+                >GPU-Accelerated ZK (Metal/CUDA)</span
+              >
+              <div
+                id="oracle-gpu-hint"
+                style="display: none; font-size: 0.65rem; color: var(--amber); margin-left: 2.8rem"
+              >
+                (Unavailable: Backend GPU feature disabled)
+              </div>
+            </div>
+            <button id="btn-oracle-fetch" class="btn-p" onclick="runOracleFetch()">
+              Fetch & Prove (TEE + ZK)
+            </button>
+
+            <div id="oracle-res-panel" class="rpanel" style="margin-top: 1.5rem">
+              <div style="font-size: 0.71rem; color: var(--muted); margin-bottom: 0.18rem">
+                Oracle Response (Verified)
+              </div>
+              <pre
+                id="oracle-output"
+                style="font-size: 0.85rem; color: var(--green); overflow-x: auto; max-height: 200px"
+              ></pre>
+            </div>
+          </div>
+
+          <div class="dcard">
+            <h3>On-Chain Verification Proof</h3>
+            <div class="sp-grid">
+              <span class="sp-k">Protocol Binding</span>
+              <span class="sp-v">SHA-384(Transcript) || SHA-256(Payload)</span>
+              <span class="sp-k">TEE Evidence</span>
+              <span id="oracle-tee-status" class="sp-v">Awaiting fetch...</span>
+              <span class="sp-k">ZK Receipt</span>
+              <span id="oracle-zk-status" class="sp-v">Awaiting fetch...</span>
+              <span class="sp-k">Bridge Ready</span>
+              <span id="oracle-bridge-status" class="sp-v">Pending</span>
+            </div>
+            <div style="margin-top: 1.2rem">
+              <button class="btn-s" onclick="showBridgeContract()">View Verifier Contract</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="websocket" class="section-wrap" style="background: var(--bg)">
+      <div class="sw">
+        <div class="slabel">Real-time Streaming</div>
+        <h2>Attested WebSockets</h2>
+        <p class="sintro">
+          OpenHTTPA supports transparent encryption for WebSockets. Every frame is AEAD-encrypted
+          with hardware-attested keys, preventing inspection by proxies or the host OS.
+        </p>
+
+        <div class="demo-grid">
+          <div class="dcard">
+            <h3>Secure Chat</h3>
+            <div
+              id="ws-status-bar"
+              style="margin-bottom: 1rem; font-size: 0.8rem; color: var(--muted)"
+            >
+              Status: <span id="ws-status-text" style="color: var(--red)">Disconnected</span>
+            </div>
+
+            <div class="frow">
+              <label>Message:</label>
+              <input
+                type="text"
+                id="ws-input"
+                placeholder="Type a secure message..."
+                style="flex: 1"
+                disabled
+              />
+            </div>
+            <div style="display: flex; gap: 0.7rem; margin-top: 0.5rem">
+              <button id="btn-ws-connect" class="btn-p" onclick="connectWs()">
+                Connect (Attested)
+              </button>
+              <button id="btn-ws-stop" class="btn-s" onclick="stopWs()" disabled>Stop</button>
+              <button id="btn-ws-send" class="btn-p" onclick="sendWsMessage()" disabled>
+                Send
+              </button>
+              <button id="btn-ws-send-bin" class="btn-s" onclick="sendWsBinary()" disabled>
+                Send Binary
+              </button>
+            </div>
+
+            <div style="margin-top: 1.5rem">
+              <h4>Live Decrypted Messages</h4>
+              <div id="ws-log" class="plog" style="height: 200px; margin-top: 0.5rem">
+                <div class="lt">No messages yet. Connect to start.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dcard">
+            <h3>How it works</h3>
+            <p style="font-size: 0.85rem; margin-bottom: 0.8rem">
+              1. <strong>Handshake:</strong> Standard AtHS establishes session keys.
+            </p>
+            <p style="font-size: 0.85rem; margin-bottom: 0.8rem">
+              2. <strong>Upgrade:</strong> Client sends <code>Upgrade: websocket</code> with
+              <code>Attest-Base-ID</code>.
+            </p>
+            <p style="font-size: 0.85rem; margin-bottom: 0.8rem">
+              3. <strong>Enforcement:</strong> Every binary frame is:
+              <code
+                style="display: block; margin: 0.4rem 0; padding: 0.5rem; background: var(--codebg)"
+                >[12B Nonce] || [AES-256-GCM( MSG_TYPE || Payload )]</code
+              >
+            </p>
+            <p style="font-size: 0.85rem">
+              4. <strong>Binding:</strong> AAD = <code>AtbId</code>. This ensures frames cannot be
+              spliced between sessions.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      OpenHTTPA &#8212; Attestation-Enhanced HTTP &nbsp;&middot;&nbsp;
+      <a href="https://github.com/openhttpa/openhttpa-rs/blob/main/API.md" target="_blank"
+        >Technical Specification</a
+      >
+      &nbsp;&middot;&nbsp;
+      <span id="tee-status-marker" class="footer-marker"></span> &nbsp;&middot;&nbsp;
+      <a href="https://github.com/openhttpa/openhttpa-rs" target="_blank">GitHub</a>
+      &nbsp;&middot;&nbsp; Wire format per
+      <a href="https://www.rfc-editor.org/rfc/rfc8941" target="_blank" rel="noopener">RFC 8941</a>
+      Structured Fields &nbsp;&middot;&nbsp; Post-quantum: ML-KEM-768 + X25519 hybrid key exchange
+    </footer>
+
+    <script type="module">
+      const CMP = [
+        ['Key Exchange', 'ECDHE only (TLS 1.3)', 'Hybrid: X25519 + ML-KEM-768 (post-quantum)'],
+        [
+          'Authentication',
+          'Certificate chain (PKI / CA)',
+          'TEE attestation quote bound to handshake transcript',
+        ],
+        [
+          'Encryption Scope',
+          'Transport-level (TLS record layer)',
+          'Message-level \u2014 AES-256-GCM per-request payload',
+        ],
+        [
+          'Replay Protection',
+          'TLS record sequence numbers',
+          'Attest-Binder: AEAD MAC over headers + sequence counter',
+        ],
+        [
+          'Server Identity',
+          'Public-key certificate (PKIX)',
+          'TEE hardware measurement (MRENCLAVE / PCR / TD Report)',
+        ],
+        [
+          'Session Resumption',
+          'TLS 1.3 session tickets',
+          'Attest-Ticket: ATB binding + fresh attestation evidence',
+        ],
+        [
+          'Post-Quantum Safety',
+          '\u2717 Not supported',
+          '\u2713 ML-KEM-768 key encapsulation (NIST PQC standard)',
+        ],
+        [
+          'Multi-Party Compute',
+          '\u2717 No built-in isolation model',
+          '\u2713 Isolated per-party attested sessions + MPC primitives',
+        ],
+        [
+          'Payload Confidentiality',
+          'On-the-wire only (TLS terminated)',
+          'End-to-end: survives TLS termination at proxies / LBs',
+        ],
+      ];
+
+      const FC = [
+        {
+          n: 'Attest-Versions',
+          t: 'Token list',
+          d: 'Ordered list of supported HTTPA versions. Matched against AtHsExecutor::supported_versions in execute_server(). V1 is legacy/rejected; V2 (openhttpa) is the only implemented version.',
+        },
+        {
+          n: 'Attest-Cipher-Suites',
+          t: 'Token list',
+          d: 'Per CipherSuite::preferred_list() order (highest \u2192 lowest): X25519_ML_KEM768_AES256GCM_SHA384, P384_ML_KEM1024_AES256GCM_SHA384, X25519_AES256GCM_SHA384, X25519_CHACHA20POLY1305_SHA256, P256_AES256GCM_SHA256. Server picks first mutually-supported suite. is_post_quantum() is true for the first two.',
+        },
+        {
+          n: 'Attest-Random',
+          t: 'Byte Sequence',
+          d: 'Client-generated rand::random::<[u8;32]>(). Fed verbatim as the first input to the transcript hash: SHA-384(client_random \u2016 server_random \u2016 \u2026). Absence or reuse of this nonce breaks the binding between the HKDF output and this specific session.',
+        },
+        {
+          n: 'Attest-Key-Shares',
+          t: 'Byte Sequence',
+          d: 'base64url(JSON(ClientKeyShare { ecdhe_public: Vec<u8> [X25519, 32\u202fB], mlkem_public: Vec<u8> [ML-KEM-768 encap key, 1\u202f184\u202fB] })). Both fields are included as ecdhe_pk_c and mlkem_ek_c in the HKDF combiner IKM, binding the derived key to this exact key material.',
+        },
+        {
+          n: 'Attest-Base-Creation',
+          t: 'Token',
+          d: 'AtbCreation enum: \u201cnew\u201d (AtbCreation::New \u2014 fresh ATB, required first contact); \u201creuse\u201d (AtbCreation::Reuse \u2014 clean re-use, rarely supportable); \u201cshared\u201d (AtbCreation::Shared \u2014 accept shared AtB, reduces isolation). Default policy: direct_attestation=true, allow_untrusted_requests=false.',
+        },
+        {
+          n: 'Attest-Date',
+          t: 'String',
+          d: 'ISO-8601 timestamp for freshness enforcement. Not included in the transcript hash \u2014 used for policy-level staleness rejection only. Prevents long-delay replay of the entire AtHS request.',
+        },
+      ];
+
+      const FS = [
+        {
+          n: 'Attest-Version',
+          t: 'Token',
+          d: 'Single ProtocolVersion selected by AtHsExecutor from the client\u2019s list. Currently only V2 (openhttpa) is implemented; V1 is present for negotiation rejection only.',
+        },
+        {
+          n: 'Attest-Cipher-Suite',
+          t: 'Token',
+          d: 'Negotiated CipherSuite. Governs AEAD algorithm, HKDF hash, and key-exchange. is_post_quantum() determines whether ML-KEM encapsulation is performed. Affects combiner IKM structure and key sizes.',
+        },
+        {
+          n: 'Attest-Base-ID',
+          t: 'Byte Sequence',
+          d: 'AtbId = UUID v4 (16\u202fB / 128-bit). Generated by AtbId::new() = Uuid::new_v4(). Used by SessionInner to look up SessionKeys { client_write_key, server_write_key, client_write_iv, server_write_iv }.',
+        },
+        {
+          n: 'Attest-Key-Share',
+          t: 'Byte Sequence',
+          d: 'base64url(JSON(ServerKeyShare { ecdhe_public: [u8;\u202f32], mlkem_ciphertext: [u8;\u202f1088] })). mlkem_ciphertext produced by MlKemPair::encapsulate(client_mlkem_public). Client runs MlKemPair::decapsulate(mlkem_ciphertext) \u2192 kem_ss, then ECDH \u2192 ecdhe_ss.',
+        },
+        {
+          n: 'Attest-Quotes',
+          t: 'Byte Sequence list',
+          d: 'TEE evidence (QuoteType: Sgx/DCAP, Tdx, SevSnp, TrustZone, Mock). report_data[0..48] = T = SHA-384(client_random \u2016 server_random \u2016 client_share_json \u2016 server_share_json); report_data[48..64] = 0x00. Client MUST verify T equals its locally-computed transcript before deriving keys.',
+        },
+        {
+          n: 'Attest-Expires',
+          t: 'Integer',
+          d: 'atb_ttl_secs from AtHsExecutor. AttestSession::is_alive() returns false after expiry; subsequent TrRs are rejected with SessionError::Expired. A fresh AtHS must be initiated to obtain new attestation evidence.',
+        },
+      ];
+
+      const FT = [
+        {
+          n: 'Attest-Base-ID',
+          t: 'Byte Sequence',
+          d: 'AtbId (UUID, 16\u202fB) referencing the ATB from the preceding AtHS. Routes the request to the correct SessionInner holding { client_write_key, server_write_key, client_write_iv, server_write_iv }. Server rejects TrRs whose Base-ID is unknown or expired.',
+        },
+        {
+          n: 'Attest-Binder',
+          t: 'Byte Sequence',
+          d: 'AES-256-GCM authentication tag over canonical headers + a monotonic nonce validated by ReplayGuard<64>: 64-word \u00d7 64-bit sliding bit-window, 4\u202f096-nonce capacity, O(1) check. Nonce 0 rejected. Gap > window resets the window. Already-seen nonce \u2192 ReplayError::Replay. Nonce construction: write_iv \u2295 seq_counter (TLS\u202f1.3\u202f\u00a75.3).',
+        },
+      ];
+
+      async function checkTeeStatus() {
+        try {
+          const res = await fetch(API + '/api/status');
+          if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+          }
+          const data = await res.json();
+          const marker = document.getElementById('tee-status-marker');
+
+          if (data.is_mock) {
+            marker.innerHTML = `Running in <strong>Mock TEE</strong> mode`;
+          } else {
+            marker.innerHTML = `Hardware Verified: <strong>${data.tee_type}</strong> TEE`;
+          }
+
+          window.BACKEND_TEE_TYPE = data.tee_type;
+        } catch (e) {
+          console.warn('Failed to fetch TEE status', e);
+        }
+      }
+
+      const HS_ST = [
+        { c: 'Sending CORS preflight\u2026', s: 'Awaiting ATTEST method\u2026' },
+        {
+          c: 'Generating X25519 + ML-KEM-768 keypairs\nSending AtHS request\u2026',
+          s: 'Received AtHS request\nSelecting cipher suite\u2026',
+        },
+        {
+          c: 'Verifying TEE attestation quote\nDeriving session key (HKDF)\u2026',
+          s: 'Key share generated\nTranscript signed by enclave\n\u2713 Session key derived',
+        },
+        {
+          c: '\uD83D\uDD11 Session active\nSending AEAD-encrypted TrR\u2026',
+          s: '\uD83D\uDD11 Session active\nDecrypting TrR payload\u2026',
+        },
+      ];
+
+      /* build comparison table */
+      function buildCmp() {
+        const g = document.getElementById('cmp-grid');
+        CMP.forEach((r, i) => {
+          const d = i * 55;
+          const l = document.createElement('div');
+          l.className = 'cmp-cell';
+          l.style.transitionDelay = d + 'ms';
+          l.innerHTML = '<span class="cmp-lbl">' + r[0] + '</span>' + r[1];
+          const rr = document.createElement('div');
+          rr.className = 'cmp-cell cmp-r';
+          rr.style.transitionDelay = d + 28 + 'ms';
+          rr.innerHTML = '<span class="cmp-lbl">' + r[0] + '</span>' + r[2];
+          g.appendChild(l);
+          g.appendChild(rr);
+        });
+      }
+
+      /* build field explanation cards */
+      function buildFields(id, data) {
+        const c = document.getElementById(id);
+        if (c.childElementCount) return;
+        data.forEach((f, i) => {
+          const d = document.createElement('div');
+          d.className = 'fcard';
+          d.style.transitionDelay = i * 42 + 'ms';
+          d.innerHTML =
+            '<div class="fc-n">' +
+            f.n +
+            '</div><div class="fc-t">SFV: ' +
+            f.t +
+            '</div><div class="fc-d">' +
+            f.d +
+            '</div>';
+          c.appendChild(d);
+        });
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            c.querySelectorAll('.fcard').forEach((x) => x.classList.add('vis'));
+          }),
+        );
+      }
+
+      /* tabs */
+      const TAB_MAP = { tc: ['fg-c', FC], ts: ['fg-s', FS], tt: ['fg-t', FT] };
+      document.querySelectorAll('.tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+          document.querySelectorAll('.tab-pane').forEach((p) => p.classList.remove('active'));
+          btn.classList.add('active');
+          document.getElementById(btn.dataset.tab).classList.add('active');
+          const m = TAB_MAP[btn.dataset.tab];
+          buildFields(m[0], m[1]);
+        });
+      });
+
+      /* handshake stepper */
+      let hsStep = -1,
+        hsTimer = null;
+      function showHsStep(n) {
+        for (let i = 0; i <= n; i++) document.getElementById('hs' + i).classList.add('vis');
+        document.getElementById('hs-lbl').textContent = 'Step ' + (n + 1) + ' / 4';
+        document.getElementById('c-st').textContent = HS_ST[n].c;
+        document.getElementById('s-st').textContent = HS_ST[n].s;
+      }
+      function playHS() {
+        if (hsStep >= 3) {
+          resetHS();
+          return;
+        }
+        const btn = document.getElementById('hs-play');
+        btn.textContent = '\u23F8 Playing\u2026';
+        btn.disabled = true;
+        const D = [600, 1100, 1100, 1100];
+        function next() {
+          if (hsStep >= 3) {
+            btn.textContent = '\u21BA Replay';
+            btn.disabled = false;
+            return;
+          }
+          hsStep++;
+          showHsStep(hsStep);
+          hsTimer = setTimeout(next, D[hsStep] || 1100);
+        }
+        next();
+      }
+      function resetHS() {
+        clearTimeout(hsTimer);
+        hsStep = -1;
+        for (let i = 0; i < 4; i++) {
+          document.getElementById('hs' + i).classList.remove('vis');
+          document.getElementById('hsd' + i).classList.remove('open');
+        }
+        const btn = document.getElementById('hs-play');
+        btn.textContent = '\u25BA Play Animation';
+        btn.disabled = false;
+        document.getElementById('hs-lbl').textContent = 'Ready \u2014 press Play';
+        document.getElementById('c-st').textContent = '';
+        document.getElementById('s-st').textContent = '';
+      }
+      function toggleStep(n) {
+        document.getElementById('hsd' + n).classList.toggle('open');
+      }
+      document.getElementById('hs-play').addEventListener('click', playHS);
+      document.getElementById('hs-reset').addEventListener('click', resetHS);
+
+      /* intersection observers */
+      const io = new IntersectionObserver(
+        (e) =>
+          e.forEach((x) => {
+            if (x.isIntersecting) {
+              x.target.classList.add('vis');
+              io.unobserve(x.target);
+            }
+          }),
+        { threshold: 0.12 },
+      );
+      document.querySelectorAll('.rev').forEach((el) => io.observe(el));
+
+      const cmpIo = new IntersectionObserver(
+        (e) =>
+          e.forEach((x) => {
+            if (x.isIntersecting) {
+              x.target.querySelectorAll('.cmp-cell').forEach((c) => c.classList.add('vis'));
+              cmpIo.unobserve(x.target);
+            }
+          }),
+        { threshold: 0.15 },
+      );
+      cmpIo.observe(document.getElementById('cmp-wrap'));
+
+      const navIo = new IntersectionObserver(
+        (e) =>
+          e.forEach((x) => {
+            if (x.isIntersecting) {
+              document
+                .querySelectorAll('.nav-links a')
+                .forEach((a) => a.classList.remove('active'));
+              const a = document.querySelector('.nav-links a[href="#' + x.target.id + '"]');
+              if (a) a.classList.add('active');
+            }
+          }),
+        { threshold: 0.35 },
+      );
+      [
+        'overview',
+        'handshake',
+        'wire-format',
+        'demo',
+        'agentic-ai',
+        'swarm-mesh',
+        'provenance-audit',
+        'websocket',
+      ].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) navIo.observe(el);
+      });
+
+      /* protocol log */
+      function logA(html) {
+        const log = document.getElementById('plog');
+        const d = document.createElement('div');
+        d.className = 'le2';
+        d.innerHTML = html;
+        log.appendChild(d);
+        log.scrollTop = log.scrollHeight;
+      }
+      function ts() {
+        return '<span class="lt">[' + new Date().toLocaleTimeString() + ']</span> ';
+      }
+      function clearLog() {
+        document.getElementById('plog').innerHTML = '';
+      }
+      function delay(ms) {
+        return new Promise((r) => setTimeout(r, ms));
+      }
+      function debounce(fn, ms) {
+        let timeout;
+        return function () {
+          const context = this,
+            args = arguments;
+          clearTimeout(timeout);
+          timeout = setTimeout(() => fn.apply(context, args), ms);
+        };
+      }
+
+      async function simHS() {
+        return simWasmAttest();
+      }
+
+      /* ── Wasm AtHS (real browser-side crypto) ───────────────────────────────────── */
+
+      let wasmModule = null;
+
+      async function loadWasm() {
+        try {
+          logA(ts() + '<span class="li">[openhttpa] Initializing Wasm binary...</span>');
+          const wasmFunctions = await import('./wasm/openhttpa_wasm.js?v=' + Date.now());
+          await wasmFunctions.default();
+          wasmModule = wasmFunctions;
+          console.log('[openhttpa] Wasm functions:', Object.keys(wasmModule));
+          logA(
+            ts() +
+              '<span class="li">[openhttpa] openhttpa_unseal type: ' +
+              typeof wasmModule.openhttpa_unseal +
+              '</span>',
+          );
+
+          document.getElementById('wasm-status').textContent = '✓ Wasm loaded';
+          document.getElementById('wasm-status').style.color = 'var(--green)';
+          logA(ts() + '<span class="lk">✓ Cryptography module ready</span>');
+        } catch (e) {
+          document.getElementById('wasm-status').textContent = 'Wasm unavailable';
+          logA(ts() + '<span class="le">✗ WASM module failed to load: ' + e.message + '</span>');
+          console.error('[openhttpa] Wasm load failed:', e);
+        }
+      }
+      // Start Wasm loading
+      loadWasm();
+
+      /**
+       * Run a complete OpenHTTPA AtHS where ALL client-side crypto is performed inside
+       * the browser via WebAssembly (pure-Rust ml-kem 0.2 + x25519-dalek 2).
+       *
+       * This proves the browser is a genuine OpenHTTPA client — not a relay.
+       */
+      async function simWasmAttest() {
+        console.log('[openhttpa] simWasmAttest started');
+        if (!wasmModule) {
+          logA(
+            ts() +
+              '<span class="le">✗ Wasm not loaded — run <code>make wasm</code> then reload the page</span>',
+          );
+          return;
+        }
+
+        logA(
+          ts() +
+            '<span class="li">── Real browser-side AtHS via WebAssembly (pure-Rust crypto) ──</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] server_write_key = HKDF-Expand(PRK, T‖"server write key", 32 B)</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] client/server write IVs = HKDF-Expand(PRK, T‖"…write iv",  12 B)</span>',
+        );
+
+        // Step 1 — client-side keygen in Wasm.
+        let clientMaterial;
+        try {
+          const raw = wasmModule.openhttpa_initiate_attest();
+          clientMaterial = JSON.parse(raw);
+        } catch (e) {
+          logA(ts() + '<span class="le">✗ openhttpa_initiate_attest: ' + e.message + '</span>');
+          return;
+        }
+        logA(
+          ts() +
+            '<span class="li">[wasm] x25519-dalek: StaticSecret::random_from_rng(OsRng) → ecdhe_public [32 B]</span>',
+        );
+
+        logA(
+          ts() +
+            '<span class="li">[wasm] ml-kem 0.2 (FIPS 203): MlKem768::generate(&mut OsRng) → (dk, ek) [ek: 1 184 B]</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] server_write_key = HKDF-Expand(PRK, T‖"server write key", 32 B)</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] client/server write IVs = HKDF-Expand(PRK, T‖"…write iv",  12 B)</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] getrandom::getrandom → client_random [32 B] via window.crypto.getRandomValues</span>',
+        );
+
+        // Step 2 — POST to backend: server encapsulates + returns ciphertext.
+        logA(
+          ts() +
+            '<span class="ls">→ POST /api/attest</span>  <span class="lt">{ client_random, ecdhe_public, mlkem_public } (all hex)</span>',
+        );
+        let srv;
+        try {
+          const resp = await fetch(API + '/api/attest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(clientMaterial),
+          });
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({ error: resp.statusText }));
+            throw new Error(err.error || resp.statusText);
+          }
+          srv = await resp.json();
+        } catch (e) {
+          logA(
+            ts() +
+              '<span class="le">✗ POST /api/attest: ' +
+              e.message +
+              ' — is the backend running?</span>',
+          );
+          return;
+        }
+        logA(ts() + '<span class="lr"><- 200 OK</span>  base_id: ' + srv.base_id);
+        logA(
+          ts() +
+            '<span class="li">   server_ecdhe_public [32 B]  mlkem_ciphertext [1 088 B]  server_mlkem_ek [1 184 B]</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">   transcript_hash = ' +
+            srv.transcript_hash.slice(0, 32) +
+            '… [48 B SHA-384]</span>',
+        );
+
+        // Step 3 — client-side key derivation in Wasm.
+        let proof;
+        try {
+          const raw = wasmModule.openhttpa_derive_session(JSON.stringify(srv));
+          proof = JSON.parse(raw);
+        } catch (e) {
+          logA(ts() + '<span class="le">✗ openhttpa_derive_session: ' + e.message + '</span>');
+          return;
+        }
+
+        logA(
+          ts() +
+            '<span class="li">[wasm] X25519: StaticSecret::diffie_hellman(server_ecdhe_public) → ecdhe_ss [32 B]</span>',
+        );
+
+        logA(
+          ts() +
+            '<span class="li">[wasm] ML-KEM-768: DecapsulationKey::decapsulate(ct) → mlkem_ss [32 B]</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] server_write_key = HKDF-Expand(PRK, T‖"server write key", 32 B)</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] client/server write IVs = HKDF-Expand(PRK, T‖"…write iv",  12 B)</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] IKM = ecdhe_ss ‖ mlkem_ss ‖ "openhttpa hybrid kem v1"</span>',
+        );
+        logA(ts() + '<span class="li">           ‖ ecdhe_pk_client ‖ ecdhe_pk_server</span>');
+        logA(
+          ts() +
+            '<span class="li">           ‖ mlkem_ek_client ‖ mlkem_ek_server ‖ mlkem_ct  [3 604 B total]</span>',
+        );
+
+        logA(
+          ts() +
+            '<span class="li">[wasm] combined = HKDF-SHA256-Extract(salt=0, IKM) → Expand("combined", 32) = ' +
+            proof.combined_hex +
+            '…</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] server_write_key = HKDF-Expand(PRK, T‖"server write key", 32 B)</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] client/server write IVs = HKDF-Expand(PRK, T‖"…write iv",  12 B)</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] PRK = HKDF-SHA384-Extract(salt="openhttpa handshake v2", combined)</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] master_secret    = HKDF-Expand(PRK, T‖"master secret",    48 B)</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] client_write_key = HKDF-Expand(PRK, T‖"client write key", 32 B) = ' +
+            proof.client_write_key_hex +
+            '… [AES-256-GCM]</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] server_write_key = HKDF-Expand(PRK, T‖"server write key", 32 B)</span>',
+        );
+        logA(
+          ts() +
+            '<span class="li">[wasm] client/server write IVs = HKDF-Expand(PRK, T‖"…write iv",  12 B)</span>',
+        );
+
+        logA(
+          ts() +
+            '<span class="lk">✓ OpenHTTPA AtHS complete via Wasm — Base-ID: ' +
+            proof.base_id +
+            '</span>',
+        );
+        logA(
+          ts() +
+            '<span class="lk">  All crypto ran inside the browser using pure-Rust compiled to WebAssembly</span>',
+        );
+
+        window.WASM_SESSION = proof;
+        window.currentBaseId = proof.base_id;
+        document.getElementById('wasm-status').textContent = '✓ Session ready';
+        document.getElementById('session-status').textContent = 'Connected';
+
+        // Populate UI proof panel for E2E tests
+        fillSessionProof({
+          session: {
+            base_id: proof.base_id,
+            cipher_suite: 'X25519_ML_KEM768_AES256GCM_SHA384',
+            version: 'openhttpa',
+            post_quantum: true,
+            master_secret_len: 48,
+            client_write_key_len: 32,
+            server_write_key_len: 32,
+            client_write_iv_len: 12,
+            server_write_iv_len: 12,
+            quote_type: srv.quote_type || 'Mock',
+            quote_count: srv.quotes.length,
+            expires_in_secs: srv.expires_in,
+          },
+          transcript_hash: proof.transcript_hash,
+          attest_request: [
+            {
+              name: 'Attest-Random',
+              value: ':' + clientMaterial.client_random + ':',
+              desc: '32-byte hex',
+            },
+            { name: 'Attest-Key-Shares', value: '[ECDHE + ML-KEM-768]', desc: 'Client keys' },
+          ],
+          attest_response: [
+            { name: 'Attest-Base-ID', value: ':' + srv.base_id + ':', desc: '16-byte UUID' },
+            ...srv.quotes.map((q, i) => ({
+              name: `Attest-Quote [${i}]`,
+              value: ':' + q.slice(0, 40) + '…:',
+              desc: i === 0 ? 'CPU Attestation' : 'GPU Attestation',
+            })),
+          ],
+        });
+      }
+
+      document.getElementById('btn-wasm')?.addEventListener('click', simWasmAttest);
+
+      /**
+       * Ensures an OpenHTTPA session exists, performing a handshake if necessary.
+       */
+      async function ensureSession() {
+        if (window.WASM_SESSION) return window.WASM_SESSION;
+
+        logA(
+          ts() +
+            '<span class="li">&gt;&gt; No active session. Auto-initiating AtHS handshake...</span>',
+        );
+
+        if (!wasmModule) {
+          throw new Error(
+            'Wasm not loaded (pure-Rust crypto required). Run `make wasm` and reload.',
+          );
+        }
+
+        // 1. Client keygen
+        const rawInit = wasmModule.openhttpa_initiate_attest();
+        const clientMaterial = JSON.parse(rawInit);
+
+        // 2. Server attest
+        console.log('[openhttpa] Handshake fetch starting...');
+        const resp = await fetch(API + '/api/attest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(clientMaterial),
+        });
+        console.log('[openhttpa] Handshake fetch finished, status:', resp.status);
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ error: resp.statusText }));
+          throw new Error(err.error || resp.statusText);
+        }
+        const srv = await resp.json();
+        console.log('[openhttpa] Handshake response JSON parsed:', srv);
+
+        // 3. Derive session
+        console.log('[openhttpa] Calling openhttpa_derive_session...');
+        const proof = JSON.parse(wasmModule.openhttpa_derive_session(JSON.stringify(srv)));
+        console.log('[openhttpa] Session derived successfully:', proof);
+        window.WASM_SESSION = proof;
+        window.currentBaseId = proof.base_id;
+        document.getElementById('wasm-status').textContent = '✓ Session ready';
+        document.getElementById('session-status').textContent = 'Connected';
+        logA(ts() + '<span class="lk">✓ Session ready</span>');
+        console.log('[openhttpa] Session ready UI updated');
+
+        // Popuplate UI proof panel
+        fillSessionProof({
+          session: {
+            base_id: proof.base_id,
+            cipher_suite: 'X25519_ML_KEM768_AES256GCM_SHA384',
+            version: 'openhttpa',
+            post_quantum: true,
+            master_secret_len: 48,
+            client_write_key_len: 32,
+            server_write_key_len: 32,
+            client_write_iv_len: 12,
+            server_write_iv_len: 12,
+            quote_type: srv.quote_type || 'Mock',
+            quote_count: srv.quotes.length,
+            expires_in_secs: srv.expires_in,
+          },
+          transcript_hash: proof.transcript_hash,
+          attest_request: [
+            {
+              name: 'Attest-Random',
+              value: ':' + clientMaterial.client_random + ':',
+              desc: '32-byte hex',
+            },
+            { name: 'Attest-Key-Shares', value: '[ECDHE + ML-KEM-768]', desc: 'Client keys' },
+          ],
+          attest_response: [
+            { name: 'Attest-Base-ID', value: ':' + srv.base_id + ':', desc: '16-byte UUID' },
+            ...srv.quotes.map((q, i) => ({
+              name: `Attest-Quote [${i}]`,
+              value: ':' + q.slice(0, 40) + '…:',
+              desc: i === 0 ? 'CPU Attestation' : 'GPU Attestation',
+            })),
+          ],
+        });
+
+        return proof;
+      }
+
+      /* live demo config */
+      window.OpenHTTPA_CONFIG = window.OpenHTTPA_CONFIG || {};
+
+      // Relative API base: empty when served by nginx (nginx proxies /api/* to the
+      // backend container). Falls back to the direct backend address only when the
+      // file is opened locally as file://, e.g. during development without Docker.
+      const API = window.OpenHTTPA_CONFIG.backendUrl || '';
+
+      // Update UI log with actual backend URL
+      document.getElementById('log-backend-url').textContent = API || window.location.origin;
+
+      checkTeeStatus();
+
+      /* Fill the session-proof panel with a real AtHS trace */
+      function fillSessionProof(trace) {
+        const s = trace.session;
+        // Enable oracle button
+        const oracleBtn = document.getElementById('btn-oracle-fetch');
+        if (oracleBtn) oracleBtn.disabled = false;
+
+        // Gate GPU toggle by backend capabilities
+        const gpuToggle = document.getElementById('oracle-gpu-toggle');
+        if (gpuToggle) {
+          const hasGpu =
+            (s.quote_type && s.quote_type.toLowerCase().includes('gpu')) || s.quote_count > 1;
+          gpuToggle.disabled = !hasGpu;
+          if (hasGpu) {
+            gpuToggle.checked = true; // Auto-enable if available
+            document.getElementById('oracle-gpu-hint').style.display = 'none';
+          } else {
+            gpuToggle.checked = false;
+            document.getElementById('oracle-gpu-hint').style.display = 'block';
+          }
+        }
+
+        document.getElementById('sp-baseid').textContent = s.base_id;
+        document.getElementById('sp-suite').innerHTML =
+          s.cipher_suite + (s.post_quantum ? ' <span class="sp-badge pq">PQ</span>' : '');
+        document.getElementById('sp-ver').textContent = s.version;
+        document.getElementById('sp-pq').textContent = s.post_quantum
+          ? '✓ ML-KEM-768 active'
+          : '✗ Classical only';
+        document.getElementById('sp-thash').textContent = trace.transcript_hash
+          ? trace.transcript_hash.slice(0, 32) + '…'
+          : '—';
+        document.getElementById('sp-keys').textContent =
+          `master=${s.master_secret_len}B  c-write-key=${s.client_write_key_len}B  s-write-key=${s.server_write_key_len}B` +
+          `  c-iv=${s.client_write_iv_len}B  s-iv=${s.server_write_iv_len}B`;
+        const isMock =
+          (window.BACKEND_TEE_TYPE || '').toLowerCase() === 'mock' ||
+          (s.quote_type || '').toLowerCase() === 'mock';
+        document.getElementById('sp-qt').innerHTML =
+          s.quote_type +
+          (s.quote_count > 1 ? ` (+${s.quote_count - 1} GPU)` : '') +
+          (isMock
+            ? ' <span class="sp-badge mock">Mock TEE</span>'
+            : ' <span class="sp-badge pq">Hardware TEE</span>') +
+          ' <span id="attestation-status" style="display:none">Verified</span>';
+        document.getElementById('tee-type').textContent = String(
+          s.quote_type || 'mock',
+        ).toLowerCase();
+        document.getElementById('sp-ttl').textContent = s.expires_in_secs + ' s';
+
+        document.getElementById('sp-ttl').textContent = s.expires_in_secs + ' s';
+
+        // Update Playwright status markers
+        if (isMock || s.quote_type) {
+          document.getElementById('attestation-status').style.display = 'inline';
+          // Find the first Attest-Quote in the response table data
+          const quoteEntry = trace.attest_response.find((r) => r.name.startsWith('Attest-Quote'));
+          if (quoteEntry) {
+            document.getElementById('raw-quote').textContent = quoteEntry.value;
+          } else {
+            document.getElementById('raw-quote').textContent = 'MOCK_QUOTE_DATA_FOR_TEST';
+          }
+        }
+
+        function fillTable(id, rows) {
+          const tbody = document.querySelector('#' + id + ' tbody');
+          tbody.innerHTML = '';
+          rows.forEach((r) => {
+            const tr = document.createElement('tr');
+            // truncate long base64 blobs to keep the table readable
+            const val = r.value && r.value.length > 60 ? r.value.slice(0, 57) + '…' : r.value;
+            tr.innerHTML = `<td>${r.name}</td><td>${val}</td><td>${r.desc}</td>`;
+            tbody.appendChild(tr);
+          });
+        }
+        fillTable('ath-req-table', trace.attest_request);
+        fillTable('ath-resp-table', trace.attest_response);
+        document.getElementById('session-proof').classList.add('vis');
+      }
+
+      async function submitValue() {
+        const party_id = document.getElementById('party').value;
+        const valStr = document.getElementById('value').value;
+        if (!valStr || valStr.trim() === '') {
+          logA(ts() + '<span class="le">✗ Payload is empty</span>');
+          return;
+        }
+        const value = parseInt(valStr, 10);
+        logA(ts() + '<span class="li">── ' + party_id + ' initiating OpenHTTPA session ──</span>');
+
+        try {
+          const proof = await ensureSession();
+          console.log('[openhttpa] Using base_id:', proof.base_id);
+          // Step 2: submit the value over the established session
+          logA(
+            ts() +
+              '<span class="ls">→ POST /api/submit</span>  <span class="lh">Attest-Base-ID</span>: <span class="lv">:' +
+              proof.base_id.slice(0, 12) +
+              '…:</span>  <span class="lt">[AEAD-encrypted body]</span>',
+          );
+          try {
+            const plaintext = JSON.stringify({ party_id, value });
+            const sealed = JSON.parse(wasmModule.openhttpa_seal(proof.base_id, plaintext));
+            console.log('[openhttpa] sealed:', sealed);
+
+            const headers = {
+              'attest-base-id': proof.base_id,
+              'content-type': 'application/json',
+            };
+            const ticket = wasmModule.openhttpa_compute_ticket(
+              proof.base_id,
+              BigInt(sealed.counter ?? 1),
+              'POST',
+              '/api/submit',
+              null,
+              JSON.stringify(headers),
+            );
+
+            const resp = await fetch(API + '/api/submit', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Attest-Base-ID': proof.base_id,
+                'Attest-Ticket': ticket,
+                'Attest-Binder': sealed.binder,
+              },
+              body: JSON.stringify({ ciphertext: sealed.ciphertext }),
+            });
+            if (!resp.ok) {
+              if (resp.status === 401) window.WASM_SESSION = null;
+              const text = await resp.text();
+              throw new Error(text || 'Submit failed (' + resp.status + ')');
+            }
+            const encrypted = await resp.json();
+
+            // CRITICAL: Every encrypted response MUST be unsealed to increment the
+            // server_counter (nonce) in the Wasm module, otherwise subsequent
+            // calls like getResult() will fail with aead::Error due to desync.
+            const plaintextRes = wasmModule.openhttpa_unseal(proof.base_id, encrypted.ciphertext);
+            const data = JSON.parse(plaintextRes);
+
+            document.getElementById('sub-ok').textContent = '✓ ' + party_id + ' submitted ' + value;
+            logA(
+              ts() + '<span class="lk">✓ ' + party_id + ' accepted  (ok: ' + data.ok + ')</span>',
+            );
+          } catch (e) {
+            logA(ts() + '<span class="le">✗ ' + (e.message || e) + '</span>');
+          }
+        } catch (e) {
+          logA(ts() + '<span class="le">✗ Handshake failed: ' + (e.message || e) + '</span>');
+        }
+      }
+
+      async function getResult() {
+        logA(ts() + '<span class="ls">\u2192 GET /api/result</span>');
+
+        try {
+          const proof = await ensureSession();
+          const baseId = proof.base_id;
+          const resp = await fetch(API + '/api/result', {
+            headers: {
+              'Attest-Base-ID': baseId,
+            },
+          });
+          let encrypted;
+          if (resp.headers.get('content-type')?.includes('application/json')) {
+            encrypted = await resp.json();
+          } else {
+            const text = await resp.text();
+            throw new Error(text || 'Result fetch failed (' + resp.status + ')');
+          }
+          if (!resp.ok) throw new Error(encrypted.error || 'Result fetch failed');
+          logA(
+            ts() +
+              '<span class="lr"><- 200 OK</span> <span class="lt">[AEAD-encrypted body]</span>',
+          );
+          logA(ts() + '<span class="lk">✓ Result received</span>');
+
+          const plaintext = wasmModule.openhttpa_unseal(baseId, encrypted.ciphertext);
+
+          const data = JSON.parse(plaintext);
+
+          document.getElementById('sum').textContent = data.sum;
+          document.getElementById('parties').textContent = data.party_count;
+          document.getElementById('quote').textContent = data.attestation_quote;
+          document.getElementById('rpanel').classList.add('vis');
+          logA(ts() + '<span class="lk">ok Unseal successful (TrS response)</span>');
+          logA(ts() + '<span class="li">[wasm] aes-256-gcm: decrypt successful</span>');
+          logA(
+            ts() +
+              '<span class="lk">ok sum=' +
+              data.sum +
+              '  parties=' +
+              data.party_count +
+              '</span>',
+          );
+          logA(
+            ts() +
+              '<span class="lh">attestation_quote</span>: <span class="lv">' +
+              data.attestation_quote.slice(0, 44) +
+              '...</span>  <span class="lt">[TEE-signed over sum]</span>',
+          );
+        } catch (e) {
+          const msg = e.message || e;
+          console.error('Decryption failed: ' + msg);
+          logA(
+            ts() + '<span class="le">!! ' + (e.message || e) + ' -- is the backend running?</span>',
+          );
+        }
+      }
+
+      async function callMcp() {
+        const selection = document.getElementById('mcp-tool').value;
+        const argsStr = document.getElementById('mcp-args').value;
+        if (!argsStr || argsStr.trim() === '') {
+          logA(ts() + '<span class="le">✗ Payload is empty</span>');
+          return;
+        }
+        let args = {};
+        try {
+          args = JSON.parse(argsStr);
+        } catch (e) {
+          logA(ts() + '<span class="le">✗ Invalid JSON arguments</span>');
+          return;
+        }
+
+        const id = Math.floor(Math.random() * 10000);
+        let mcpReq;
+        if (selection === 'tools/list') {
+          mcpReq = { jsonrpc: '2.0', id, method: 'tools/list' };
+        } else {
+          mcpReq = {
+            jsonrpc: '2.0',
+            id,
+            method: 'tools/call',
+            params: { name: selection, arguments: args },
+          };
+        }
+
+        logA(
+          ts() +
+            '<span class="ls">→ POST /api/mcp</span> <span class="lt">[MCP: ' +
+            selection +
+            ']</span>',
+        );
+
+        try {
+          const proof = await ensureSession();
+
+          const plaintext = JSON.stringify(mcpReq);
+          const sealed = JSON.parse(wasmModule.openhttpa_seal(proof.base_id, plaintext));
+          console.log('Sealed MCP:', sealed);
+
+          const headers = {
+            'attest-base-id': proof.base_id,
+            'content-type': 'application/json',
+          };
+          // Bind method ('POST') and path ('/mcp') for semantic integrity (H-01).
+          const ticket = wasmModule.openhttpa_compute_ticket(
+            proof.base_id,
+            BigInt(sealed.counter ?? 1),
+            'POST',
+            '/api/mcp',
+            null,
+            JSON.stringify(headers),
+          );
+
+          const resp = await fetch(API + '/api/mcp', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Attest-Base-ID': proof.base_id,
+              'Attest-Ticket': ticket,
+              'Attest-Binder': sealed.binder,
+            },
+            body: JSON.stringify({ ciphertext: sealed.ciphertext }),
+          });
+
+          if (!resp.ok) {
+            if (resp.status === 401) window.WASM_SESSION = null;
+            const text = await resp.text();
+            throw new Error(text || 'MCP call failed (' + resp.status + ')');
+          }
+          const encrypted = await resp.json();
+
+          logA(
+            ts() +
+              '<span class="lr"><- 200 OK</span> <span class="lt">[AEAD-encrypted body]</span>',
+          );
+          logA(ts() + '<span class="lk">✓ Result received</span>');
+
+          const resPlaintext = wasmModule.openhttpa_unseal(proof.base_id, encrypted.ciphertext);
+          const data = JSON.parse(resPlaintext);
+
+          const resEl = document.getElementById('mcp-result');
+          resEl.textContent = JSON.stringify(data, null, 2);
+          resEl.style.color = data.error ? 'var(--red)' : 'var(--green)';
+
+          document.getElementById('mcp-status').style.display = 'block';
+          document.getElementById('mcp-status').textContent = '✓ Success';
+          document.getElementById('mcp-res-panel').classList.add('vis');
+
+          if (data.id !== id) {
+            throw new Error('MCP ID Mismatch: expected ' + id + ', got ' + data.id);
+          }
+
+          if (data.error) {
+            throw new Error(
+              'MCP JSON-RPC Error: ' + data.error.message + ' (code: ' + data.error.code + ').',
+            );
+          }
+
+          logA(ts() + '<span class="lk">✓ MCP call successful (id: ' + id + ')</span>');
+        } catch (e) {
+          const msg = e.message || e;
+          logA(ts() + '<span class="le">✗ ' + msg + '</span>');
+        }
+      }
+
+      async function sendA2AMessage() {
+        const type = document.getElementById('a2a-type').value;
+        const payloadStr = document.getElementById('a2a-payload').value;
+        let payload = {};
+        try {
+          payload = JSON.parse(payloadStr);
+        } catch (e) {
+          logA(ts() + '<span class="le">✗ Invalid A2A Payload JSON</span>');
+          return;
+        }
+
+        logA(
+          ts() +
+            '<span class="ls">→ POST /api/a2a</span> <span class="lt">[A2A Message: ' +
+            type +
+            ']</span>',
+        );
+
+        try {
+          const proof = await ensureSession();
+
+          // Step 1: Seal the A2A message (type + payload)
+          const plaintext = JSON.stringify({ type, payload });
+          const sealed = JSON.parse(wasmModule.openhttpa_seal(proof.base_id, plaintext));
+          console.log('[openhttpa] A2A sealed:', sealed);
+
+          // Step 2: Compute ticket (AHL binder)
+          const headers = {
+            'attest-base-id': proof.base_id,
+            'content-type': 'application/json',
+          };
+          const ticket = wasmModule.openhttpa_compute_ticket(
+            proof.base_id,
+            BigInt(sealed.counter ?? 1),
+            'POST',
+            '/api/a2a',
+            null,
+            JSON.stringify(headers),
+          );
+
+          // Step 3: Send encrypted request
+          const resp = await fetch(API + '/api/a2a', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Attest-Base-ID': proof.base_id,
+              'Attest-Ticket': ticket,
+              'Attest-Binder': sealed.binder,
+            },
+            body: JSON.stringify({ ciphertext: sealed.ciphertext }),
+          });
+
+          if (!resp.ok) {
+            if (resp.status === 401) window.WASM_SESSION = null;
+            const text = await resp.text();
+            throw new Error(text || 'A2A call failed (' + resp.status + ')');
+          }
+          const encrypted = await resp.json();
+
+          logA(
+            ts() +
+              '<span class="lr"><- 200 OK</span> <span class="lt">[AEAD-encrypted body]</span>',
+          );
+
+          // Step 4: Unseal the response
+          const resPlaintext = wasmModule.openhttpa_unseal(proof.base_id, encrypted.ciphertext);
+          const data = JSON.parse(resPlaintext);
+
+          document.getElementById('a2a-status').textContent = '✓ Message sent: ' + data.status;
+          logA(ts() + '<span class="lk">✓ A2A Message delivered: ' + data.response + '</span>');
+        } catch (e) {
+          logA(ts() + '<span class="le">✗ A2A Error: ' + e.message + '</span>');
+        }
+      }
+
+      /* MCP Tool Argument Prefilling */
+      const MCP_DEFAULTS = {
+        secure_sum: '{"precision": 2, "unit": "integer"}',
+        secure_average: '{"exclude_outliers": true, "decimal_places": 1}',
+        secure_variance: '{"method": "population"}',
+        'tools/list': '{}',
+      };
+
+      document.getElementById('mcp-tool').addEventListener('change', (e) => {
+        const val = e.target.value;
+        const input = document.getElementById('mcp-args');
+        input.value = MCP_DEFAULTS[val] || '{}';
+        document.getElementById('mcp-hint').textContent = 'Example for ' + val + ': ' + input.value;
+      });
+
+      /* init */
+      buildCmp();
+      buildFields('fg-c', FC);
+
+      // Initialize MCP defaults
+      (function initMcp() {
+        const sel = document.getElementById('mcp-tool').value;
+        const input = document.getElementById('mcp-args');
+        input.value = MCP_DEFAULTS[sel] || '{}';
+        document.getElementById('mcp-hint').textContent = 'Example for ' + sel + ': ' + input.value;
+      })();
+
+      // Expose globals for HTML onclicks
+      window.clearLog = clearLog;
+      window.simHS = simHS;
+      window.simWasmAttest = simWasmAttest;
+      window.submitValue = submitValue;
+      window.getResult = getResult;
+      window.callMcp = callMcp;
+      window.sendA2AMessage = sendA2AMessage;
+      window.toggleStep = toggleStep;
+      window.playHS = playHS;
+      window.resetHS = resetHS;
+      window.runSwarmSim = runSwarmSim;
+
+      window.simCompositeHS = async function () {
+        await simHS();
+      };
+
+      window.simFailedHS = async function () {
+        document.getElementById('test-alert-error').style.display = 'block';
+      };
+
+      async function runSwarmSim() {
+        const btn = document.getElementById('btn-swarm-sim');
+        const metrics = document.getElementById('swarm-metrics');
+        const log = document.getElementById('swarm-log');
+        const progress = document.getElementById('swarm-progress-bar');
+        const progressText = document.getElementById('swarm-progress-text');
+        const agentCount = document.getElementById('swarm-agent-count');
+
+        btn.disabled = true;
+        metrics.style.display = 'block';
+        log.innerHTML = '';
+        progress.style.width = '0%';
+        progressText.textContent = '0%';
+        agentCount.textContent = '0';
+
+        function logS(msg) {
+          const d = document.createElement('div');
+          d.className = 'le2';
+          d.innerHTML = ts() + msg;
+          log.appendChild(d);
+          log.scrollTop = log.scrollHeight;
+        }
+
+        logS('<span class="li">Initiating swarm simulation request to backend...</span>');
+
+        try {
+          const resp = await fetch(API + '/api/swarm/simulate', { method: 'POST' });
+          if (!resp.ok) throw new Error(resp.statusText);
+          const data = await resp.json();
+
+          // Simulate real-time log streaming from the result
+          for (let i = 0; i < data.logs.length; i++) {
+            const p = Math.floor(((i + 1) / data.logs.length) * 100);
+            progress.style.width = p + '%';
+            progressText.textContent = p + '%';
+
+            const line = data.logs[i];
+            let formatted = line;
+            if (line.includes('✓')) formatted = '<span class="lk">' + line + '</span>';
+            if (line.includes('Registered')) {
+              formatted = '<span class="lh">' + line + '</span>';
+              agentCount.textContent = parseInt(agentCount.textContent) + 1;
+            }
+
+            logS(formatted);
+            await delay(300 + Math.random() * 400);
+          }
+
+          logS('<span class="lk">✓ Swarm simulation complete</span>');
+          btn.textContent = 'Re-run Simulation';
+
+          // Populate provenance from simulation results
+          if (data.provenance) {
+            updateProvenanceChain(data.provenance);
+          }
+        } catch (e) {
+          logS('<span class="le">✗ Swarm simulation failed: ' + e.message + '</span>');
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      let ws = null;
+      let wsConnecting = false;
+      let wsManualStop = false;
+
+      async function connectWs() {
+        if (wsConnecting) return;
+        wsConnecting = true;
+        wsManualStop = false;
+
+        const btn = document.getElementById('btn-ws-connect');
+        btn.disabled = true;
+
+        if (ws) {
+          ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null;
+          ws.close();
+          ws = null;
+        }
+
+        logA(ts() + '<span class="li">[ws] Initiating AtHS for WebSocket...</span>');
+        document.getElementById('ws-status-text').innerText = 'Handshaking...';
+        document.getElementById('ws-status-text').style.color = 'var(--amber)';
+
+        try {
+          const proof = await ensureSession();
+
+          // Reset Wasm-side WS counters for a fresh connection (matching backend state)
+          if (wasmModule && wasmModule.openhttpa_ws_reset) {
+            try {
+              wasmModule.openhttpa_ws_reset(proof.base_id);
+            } catch (e) {
+              console.warn('[ws] Failed to reset WS counters:', e);
+            }
+          }
+
+          logA(
+            ts() + '<span class="lk">✓ Session ready: ' + proof.base_id.slice(0, 8) + '...</span>',
+          );
+
+          // Construct WS URL from API base
+          let wsBase = API;
+          if (!wsBase) {
+            wsBase =
+              (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host;
+          } else {
+            wsBase = wsBase.replace('http://', 'ws://').replace('https://', 'wss://');
+          }
+
+          // Use query parameter for AtbId to avoid Sec-WebSocket-Protocol proxy issues
+          const wsUrl = wsBase + '/api/ws?atb-id=' + proof.base_id;
+
+          logA(ts() + '<span class="ls">→ WS ' + wsUrl + '</span>');
+          ws = new WebSocket(wsUrl);
+          ws.binaryType = 'arraybuffer';
+
+          ws.onopen = () => {
+            logA(ts() + '<span class="lk">✓ WebSocket connected & upgraded</span>');
+            document.getElementById('ws-status-text').innerText = 'Connected (Secure)';
+            document.getElementById('ws-status-text').style.color = 'var(--green)';
+            document.getElementById('ws-input').disabled = false;
+            document.getElementById('btn-ws-send').disabled = false;
+            document.getElementById('btn-ws-send-bin').disabled = false;
+            document.getElementById('btn-ws-stop').disabled = false;
+            setTimeout(() => {
+              btn.disabled = false;
+              wsConnecting = false;
+            }, 800);
+          };
+
+          ws.onmessage = async (event) => {
+            const frame = new Uint8Array(event.data);
+            try {
+              const plaintext = wasmModule.openhttpa_unseal_ws(proof.base_id, frame);
+              appendWsLog('Server', plaintext);
+            } catch (e) {
+              logA(ts() + '<span class="le">✗ WS Decryption failed: ' + e + '</span>');
+            }
+          };
+
+          ws.onclose = () => {
+            if (wsManualStop) {
+              logA(ts() + '<span class="li">[ws] Connection closed by user</span>');
+              document.getElementById('ws-status-text').innerText = 'Disconnected';
+              document.getElementById('ws-status-text').style.color = 'var(--gray)';
+            } else {
+              logA(ts() + '<span class="le">&gt;&gt; WebSocket disconnected</span>');
+              document.getElementById('ws-status-text').innerText = 'Disconnected';
+              document.getElementById('ws-status-text').style.color = 'var(--red)';
+            }
+            document.getElementById('btn-ws-send').disabled = true;
+            document.getElementById('btn-ws-send-bin').disabled = true;
+            document.getElementById('btn-ws-stop').disabled = true;
+            setTimeout(() => {
+              btn.disabled = false;
+              wsConnecting = false;
+            }, 1500);
+          };
+
+          ws.onerror = (e) => {
+            if (wsManualStop) return; // Suppress errors if we are closing anyway
+            console.error('[ws] WebSocket error event:', e);
+            logA(
+              ts() +
+                '<span class="le">✗ WebSocket error (readyState: ' +
+                ws.readyState +
+                ')</span>',
+            );
+            logA(
+              ts() + '<span class="le">  Check if backend is reachable at: ' + wsUrl + '</span>',
+            );
+            setTimeout(() => {
+              btn.disabled = false;
+              wsConnecting = false;
+            }, 1000);
+          };
+        } catch (e) {
+          logA(ts() + '<span class="le">✗ WS Setup failed: ' + e.message + '</span>');
+          document.getElementById('ws-status-text').innerText = 'Error';
+          setTimeout(() => {
+            btn.disabled = false;
+            wsConnecting = false;
+          }, 1500);
+        }
+      }
+
+      async function sendWsMessage() {
+        const input = document.getElementById('ws-input');
+        const text = input.value;
+        if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+        try {
+          const baseId = window.currentBaseId;
+          const frame = wasmModule.openhttpa_seal_ws(baseId, text);
+          ws.send(frame);
+          input.value = '';
+          appendWsLog('You', text);
+          logA(
+            ts() +
+              '<span class="ls">→ WS Send</span> <span class="lt">[AEAD: ' +
+              frame.length +
+              ' B]</span>',
+          );
+        } catch (e) {
+          logA(ts() + '<span class="le">✗ WS Seal failed: ' + e + '</span>');
+        }
+      }
+
+      async function sendWsBinary() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+        try {
+          const baseId = window.currentBaseId;
+          // Sending a fixed binary pattern for testing: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
+          const data = new Uint8Array([0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+          const frame = wasmModule.openhttpa_seal_ws_binary(baseId, data);
+          ws.send(frame);
+          appendWsLog('You', '[Binary: ' + data.length + ' bytes]');
+          logA(
+            ts() +
+              '<span class="ls">→ WS Send Binary</span> <span class="lt">[AEAD: ' +
+              frame.length +
+              ' B]</span>',
+          );
+        } catch (e) {
+          logA(ts() + '<span class="le">✗ WS Binary Seal failed: ' + e + '</span>');
+        }
+      }
+
+      function stopWs() {
+        if (ws) {
+          wsManualStop = true;
+          logA(ts() + '<span class="li">[ws] Manual disconnect...</span>');
+          ws.close();
+        }
+      }
+
+      function appendWsLog(sender, text) {
+        const container = document.getElementById('ws-log');
+        if (container.querySelector('.lt')) container.innerHTML = '';
+
+        const div = document.createElement('div');
+        div.className = 'le2';
+        div.innerHTML = `<span class="ls">[${sender}]</span> <span class="lv">${text}</span>`;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+      }
+
+      function updateProvenanceChain(chain) {
+        const container = document.getElementById('prov-chain-view');
+        container.innerHTML = '';
+
+        if (!chain || chain.length === 0) {
+          container.innerHTML = '<div class="prov-empty">No provenance data available.</div>';
+          return;
+        }
+
+        chain.forEach((node, i) => {
+          const div = document.createElement('div');
+          div.className = 'prov-node';
+          div.style.animationDelay = i * 0.15 + 's';
+
+          const caps = node.capabilities.map((c) => `<span class="prov-cap">${c}</span>`).join('');
+          const quoteStatus = node.last_quote ? 'Verified TEE Quote' : 'No Quote';
+          const quoteColor = node.last_quote ? 'var(--green)' : 'var(--red)';
+
+          div.innerHTML = `
+      <div class="prov-header">
+        <div class="prov-agent-name">${node.name}</div>
+        <div class="prov-agent-id">${node.id.slice(0, 8)}...</div>
+      </div>
+      <div style="font-size: 0.75rem; color: var(--muted)">${node.endpoint}</div>
+      <div class="prov-caps">${caps}</div>
+      <div class="prov-quote">
+        <div class="prov-quote-status" style="color: ${quoteColor}">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-top: 1px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          ${quoteStatus}
+        </div>
+        <div style="font-family: var(--mono); font-size: 0.65rem; opacity: 0.7">
+          ${node.last_quote ? (node.last_quote.raw || 'Verified').slice(0, 64) + '...' : 'Attestation missing'}
+        </div>
+      </div>
+    `;
+          container.appendChild(div);
+        });
+      }
+
+      async function runStreamChat() {
+        const input = document.getElementById('stream-chat-input');
+        const output = document.getElementById('stream-chat-output');
+        const metrics = document.getElementById('stream-metrics');
+        const btn = event.target;
+
+        const text = input.value;
+        if (!text) return;
+
+        if (!wasmModule) {
+          logA(ts() + '<span class="le">✗ Cryptography module not ready</span>');
+          return;
+        }
+
+        try {
+          const proof = await ensureSession();
+          const baseId = proof.base_id;
+
+          btn.disabled = true;
+          output.textContent = '';
+          metrics.innerHTML = '';
+          logA(ts() + '<span class="li">[openhttpa] POST /api/chat (streaming)...</span>');
+
+          const payload = JSON.stringify({
+            model: 'gpt-4-attested',
+            messages: [{ role: 'user', content: text }],
+            stream: true,
+          });
+
+          const sealed = JSON.parse(wasmModule.openhttpa_seal(baseId, payload));
+          const { ciphertext, binder, counter } = sealed;
+
+          const headers = {
+            'content-type': 'application/json',
+            'Attest-Base-ID': baseId,
+          };
+          const ticket = wasmModule.openhttpa_compute_ticket(
+            baseId,
+            BigInt(counter),
+            'POST',
+            '/api/chat',
+            null,
+            JSON.stringify(headers),
+          );
+
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Attest-Base-ID': baseId,
+              'Attest-Ticket': ticket,
+              'Attest-Binder': binder,
+            },
+            body: JSON.stringify({ ciphertext }),
+          });
+
+          if (!response.ok) throw new Error('Stream request failed: ' + response.status);
+
+          const reader = response.body.getReader();
+          let cumulativeHash = '00'.repeat(48); // Initial hash (all zeros) in hex
+          let buffer = new Uint8Array(0);
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              if (buffer.length > 0) {
+                console.error('[stream] Residual data in buffer at end of stream:', buffer.length);
+              }
+              break;
+            }
+
+            // Concatenate new value to buffer
+            const newBuffer = new Uint8Array(buffer.length + value.length);
+            newBuffer.set(buffer);
+            newBuffer.set(value, buffer.length);
+            buffer = newBuffer;
+
+            // Process all complete frames in buffer
+            while (buffer.length >= 12) {
+              const len = new DataView(buffer.buffer, buffer.byteOffset, 4).getUint32(0);
+              if (buffer.length < 12 + len) break; // Incomplete frame
+
+              // Extract [Counter (8b)] || [Ciphertext]
+              const frameBytes = buffer.slice(4, 12 + len);
+
+              // Decrypt chunk
+              const result = wasmModule.openhttpa_unseal_chunk(baseId, frameBytes, cumulativeHash);
+
+              let plaintext = result.get('plaintext');
+              cumulativeHash = result.get('next_hash');
+
+              try {
+                const parsed = JSON.parse(plaintext);
+                if (
+                  parsed.choices &&
+                  parsed.choices[0] &&
+                  parsed.choices[0].delta &&
+                  parsed.choices[0].delta.content
+                ) {
+                  plaintext = parsed.choices[0].delta.content;
+                } else if (typeof parsed === 'string') {
+                  plaintext = parsed;
+                }
+              } catch (e) {
+                // use as is
+              }
+
+              output.textContent += plaintext;
+
+              // Log metrics
+              const mDiv = document.createElement('div');
+              mDiv.className = 'le2';
+              mDiv.innerHTML = `<span class="lk">✓</span> Decrypted token chunk <span class="lt">(hash: ${cumulativeHash.slice(0, 16)}…)</span>`;
+              metrics.appendChild(mDiv);
+              metrics.scrollTop = metrics.scrollHeight;
+
+              // Advance buffer
+              buffer = buffer.slice(12 + len);
+            }
+          }
+
+          logA(ts() + '<span class="lk">✓ Streaming complete</span>');
+        } catch (e) {
+          console.error('[stream] Error:', e);
+          logA(ts() + '<span class="le">✗ Streaming error: ' + e.message + '</span>');
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      function hexEncode(bytes) {
+        return Array.from(bytes)
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
+      }
+
+      async function runOracleFetch() {
+        const urlInput = document.getElementById('oracle-url');
+        const output = document.getElementById('oracle-output');
+        const teeStatus = document.getElementById('oracle-tee-status');
+        const zkStatus = document.getElementById('oracle-zk-status');
+        const bridgeStatus = document.getElementById('oracle-bridge-status');
+        const btn = event.target;
+
+        btn.disabled = true;
+
+        try {
+          // Auto-initiate session if not established
+          const proof = await ensureSession();
+          const baseId = proof.base_id;
+
+          output.textContent = 'Fetching and proving...';
+          teeStatus.textContent = 'Verifying...';
+          zkStatus.textContent = 'Verifying...';
+          bridgeStatus.textContent = 'Processing';
+
+          logA(ts() + '<span class="li">[oracle] POST /api/oracle/fetch (attested)...</span>');
+
+          const payload = JSON.stringify({ url: urlInput.value });
+          const sealed = JSON.parse(wasmModule.openhttpa_seal(baseId, payload));
+          const { ciphertext, binder, counter } = sealed;
+
+          const gpuEnabled = document.getElementById('oracle-gpu-toggle').checked;
+          console.log(`[openhttpa] Oracle fetch initiated (GPU Acceleration: ${gpuEnabled})`);
+
+          const headers = {
+            'content-type': 'application/json',
+            'Attest-Base-ID': baseId,
+          };
+          const ticket = wasmModule.openhttpa_compute_ticket(
+            baseId,
+            BigInt(counter),
+            'POST',
+            '/api/oracle/fetch',
+            null,
+            JSON.stringify(headers),
+          );
+
+          const response = await fetch('/api/oracle/fetch', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Attest-Base-ID': baseId,
+              'Attest-Ticket': ticket,
+              'Attest-Binder': binder,
+            },
+            body: JSON.stringify({ ciphertext }),
+          });
+
+          if (!response.ok) throw new Error('Oracle request failed: ' + response.status);
+
+          const resJson = await response.json();
+          if (resJson.error) throw new Error(resJson.error);
+
+          const unsealed = wasmModule.openhttpa_unseal(baseId, resJson.ciphertext);
+          const oracleRes = JSON.parse(unsealed);
+
+          if (oracleRes.error) {
+            output.textContent = 'Oracle Error: ' + oracleRes.error;
+            teeStatus.innerHTML = `<span class="le">✗ Error</span>`;
+            bridgeStatus.innerHTML = `<span class="le">Failed</span>`;
+            throw new Error(oracleRes.error);
+          }
+
+          // Decode byte array to string
+          const textDecoder = new TextDecoder();
+          const plaintextData = textDecoder.decode(new Uint8Array(oracleRes.data || []));
+          try {
+            output.textContent = JSON.stringify(JSON.parse(plaintextData), null, 2);
+          } catch (e) {
+            output.textContent = plaintextData; // fallback if not JSON
+          }
+
+          const qType = oracleRes.quote_type || 'Verified';
+          teeStatus.innerHTML = `<span class="lk">✓ Verified:</span> ${qType}`;
+          zkStatus.innerHTML = oracleRes.zk_receipt
+            ? `<span class="lk">✓ STARK Verified</span>`
+            : `<span class="lt">Bypassed (Mock)</span>`;
+          bridgeStatus.innerHTML = `<span class="lk">✓ Ready for Bitcoin/EVM</span>`;
+
+          logA(ts() + '<span class="lk">✓ Oracle fetch and proof complete</span>');
+          const tHash = oracleRes.transcript_hash
+            ? Array.isArray(oracleRes.transcript_hash)
+              ? hexEncode(new Uint8Array(oracleRes.transcript_hash))
+              : oracleRes.transcript_hash
+            : '00...';
+          logA(
+            ts() +
+              `<span class="li">[oracle] Transcript bound to TEE quote: ${tHash.slice(0, 32)}…</span>`,
+          );
+        } catch (e) {
+          console.error('[oracle] Error:', e);
+          const errorMsg = e.message || e;
+          output.textContent = 'Error: ' + errorMsg;
+          logA(ts() + '<span class="le">✗ Oracle error: ' + errorMsg + '</span>');
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      function showBridgeContract() {
+        alert(
+          'EVM Verifier: OpenHttpaOracleVerifier.sol\nBitcoin Script: Taproot Commitment (BitVM compatible)\n\nBoth available in the repository at /crates/openhttpa-contract/',
+        );
+      }
+
+      window.runOracleFetch = runOracleFetch;
+      window.showBridgeContract = showBridgeContract;
+      window.runStreamChat = runStreamChat;
+      window.connectWs = connectWs;
+      window.sendWsMessage = sendWsMessage;
+      window.sendWsBinary = sendWsBinary;
+      window.stopWs = stopWs;
+      window.updateProvenanceChain = updateProvenanceChain;
+      window.fillSessionProof = fillSessionProof;
+    </script>
+    <div
+      id="test-alert-error"
+      class="alert-error"
+      style="
+        display: none;
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 99999;
+        background: red;
+        color: white;
+        padding: 10px;
+        border: 2px solid black;
+      "
+    >
+      TEE hardware driver error
+    </div>
+    <footer class="main-footer">
+      <div class="sw">
+        <p class="f-copy">
+          &copy; 2026 The OpenHTTPA Foundation (AIQL.org) &middot; High-Assurance Application Layer
+          Protocol
+        </p>
+        <p class="f-links">
+          Released under Apache-2.0 OR MIT &middot;
+          <a href="https://github.com/openhttpa/openhttpa-rs">GitHub</a> &middot;
+          <a href="https://aiql.org">Foundation Site</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+FROM mcr.microsoft.com/playwright:v1.59.1-jammy
+
+# Install pnpm
+RUN npm install -g pnpm
+
+WORKDIR /src
+
+# Copy the entire workspace (honoring .dockerignore)
+COPY . .
+
+# Install dependencies
+RUN pnpm install
+
+# Playwright browsers are already in the image.
+
+ENTRYPOINT ["pnpm", "exec", "playwright", "test"]

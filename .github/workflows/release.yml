@@ -1,0 +1,285 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# 🚀 OpenHTTPA RELEASE AUTOMATION & SECURITY BLUEPRINT
+# ──────────────────────────────────────────────────────────────────────────────
+# This workflow is the authoritative source for project distribution. It
+# manages the complex task of cross-compiling Rust logic into multiple target
+# environments (Python, Node.js, WASM, Go) and ensuring cryptographic integrity.
+#
+# ─── SECURITY MANDATE ────────────────────────────────────────────────────────
+# 1. ZERO-TRUST GATE: No artifact is published without 'make verify-all' passing.
+#    This includes linting, unit tests, and full Playwright E2E browser tests.
+# 2. NO MOCK HARDWARE: Production binaries strictly enable hardware TEE features
+#    (TDX, SNP, Nitro). Mocks are strictly for development only.
+# 3. PROVENANCE: Generates SLSA build attestations and CycloneDX SBOMs.
+#
+# ─── REGISTRY & TOKEN SETUP (MAINTAINER ACTION REQUIRED) ──────────────────────
+# To enable this workflow, the following GitHub Secrets MUST be configured:
+#
+# | SECRET NAME    | REGISTRY       | SCOPE / NOTES                               |
+# | :------------- | :------------- | :------------------------------------------ |
+# | PYPI_TOKEN     | pypi.org       | '__token__' user; scope to project 'openhttpa' |
+# | NPM_TOKEN      | npmjs.com      | 'Automation' type; bypasses 2FA in CI       |
+# | GITHUB_TOKEN   | ghcr.io / GPR  | Automatic; provided by GitHub Actions        |
+#
+# ─── CONFIGURATION RATIONALE ──────────────────────────────────────────────────
+# - self-hosted: Required because TEE-aware tests need specialized host kernels.
+# - workflow_dispatch: Allows manual trigger for 'dry-run' testing before tagging.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ─── Deployment Trigger Strategy ──────────────────────────────────────────────
+# 1. workflow_dispatch: (Manual) Used for testing the pipeline without a version tag.
+# 2. push tags: (Trigger) Automatically fires when a git tag like 'v0.1.2' is pushed.
+# ──────────────────────────────────────────────────────────────────────────────
+on:
+  # push:
+  #   tags:
+  #     - 'v*'
+  workflow_dispatch:
+
+# ─── Permissions & Capabilities ──────────────────────────────────────────────
+# This workflow requires high-privilege permissions to manage:
+# - Contents: To create GitHub Releases and upload binaries.
+# - Packages: To distribute to GitHub Packages (if used).
+# - Id-token: To verify build provenance and sign attestations.
+# - Attestations: To generate SLSA-compliant build evidence.
+# ──────────────────────────────────────────────────────────────────────────────
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '9'
+  WASM_PACK_VERSION: '0.12.1'
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ─── Phase 1: Formal Validation (The Gatekeeper) ──────────────────────────
+  # HIGH-03: All publish jobs depend on this job so that test failures on a tagged
+  # commit prevent any artifacts from being published to PyPI/npm/crates.io.
+  # This ensures project integrity and prevents broken code from reaching users.
+  validate:
+    name: validate (pre-publish gate)
+    # Runner Requirement: Must be 'self-hosted' with TEE-simulation or hardware
+    # capabilities to run 'make verify-all' which includes e2e tests.
+    runs-on: self-hosted
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: dtolnay/rust-toolchain@stable
+      # Build dependencies (cmake, ninja-build, etc.) are pre-installed via setup_linux_env.sh
+      - name: Formal Validation & Verification
+        run: |
+          # HIGH-01: Enforce exhaustive validation (lints, tests, e2e) before release
+          # Ensure mock features are NOT enabled for formal verification unless explicitly testing mock logic
+          OpenHTTPA_SKIP_ZK_BUILD=1 RISC0_SKIP_BUILD_KERNELS=1 make verify-all
+
+  # ─── Phase 2: Multi-Language Binding Distribution ──────────────────────────
+  # These jobs run in parallel after the 'validate' gate passes.
+  # We distribute to Python, Node.js, and WASM registries to provide a
+  # comprehensive developer surface.
+
+  publish-python:
+    name: publish python wheels
+    needs: [validate]
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install maturin
+      - uses: actions/cache@v4
+        with:
+          path: target/release
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build wheels
+        run: |
+          # ─── Entry-Level Guidance: Python Bindings ──────────────────────────
+          # 1. Maturin: This is the bridge between Rust and Python. It compiles 
+          #    the Rust code into a binary 'wheel' (.whl) that Python can import.
+          # 2. UV: A modern, ultra-fast Python package manager used here to 
+          #    build and upload the artifacts without needing a full pip setup.
+          # 3. Release Mode: Always use --release to strip debug info and enable 
+          #    LLVM optimizations for production performance.
+          # ────────────────────────────────────────────────────────────────────
+          cd bindings/python
+          uvx maturin build --release --out dist
+      - name: Publish to PyPI
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          # The '--skip-existing' flag prevents the pipeline from failing if 
+          # you try to upload a version that already exists on PyPI.
+          cd bindings/python
+          uvx maturin publish --skip-existing
+
+  # ─── Publish npm package ────────────────────────────────────────────────────
+  publish-npm:
+    name: publish npm package
+    needs: [validate]
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '${{ env.NODE_VERSION }}'
+          registry-url: 'https://registry.npmjs.org'
+      - run: |
+          # ─── Entry-Level Guidance: Node.js Bindings ─────────────────────────
+          # 1. NAPI-RS: Node.js cannot run Rust directly. NAPI-RS generates the 
+          #    necessary C-level 'glue' code to expose Rust functions as 
+          #    Javascript methods in a '.node' binary.
+          # 2. Dual-Publish: We push to both npm and GitHub to maximize 
+          #    availability. GITHUB_TOKEN is built-in, but NPM_TOKEN must be 
+          #    added as a secret by an admin.
+          # ────────────────────────────────────────────────────────────────────
+          cd bindings/nodejs
+          pnpm install
+          pnpm run build --release
+
+          # Dual-Publish Strategy: 
+          # 1. Official npm registry
+          pnpm publish --no-git-checks --registry https://registry.npmjs.org
+
+          # 2. GitHub Packages (Free for OSS)
+          # We update the name in package.json temporarily or use npm config
+          npm config set //npm.pkg.github.com/:_authToken ${{ secrets.GITHUB_TOKEN }}
+          pnpm publish --no-git-checks --registry https://npm.pkg.github.com
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ─── Publish WASM package to npm ───────────────────────────────────────────
+  publish-wasm:
+    name: publish wasm package
+    needs: [validate]
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack@${{ env.WASM_PACK_VERSION }}
+      - name: Build WASM (Release)
+        run: |
+          # ─── Entry-Level Guidance: WebAssembly (WASM) ───────────────────────
+          # 1. wasm-pack: This tool takes your Rust code and compiles it to 
+          #    WebAssembly (a binary format browsers can run).
+          # 2. Target 'web': This generates ES Modules (import/export) that 
+          #    work directly in modern browsers without needing a bundler.
+          # 3. wasm-opt: This is a post-processing tool that further shrinks 
+          #    the .wasm file size (often by 20-50%) for faster web downloads.
+          # ────────────────────────────────────────────────────────────────────
+          cd bindings/wasm
+          wasm-pack build --target web --release
+      - name: Optimize WASM artifact
+        run: |
+          cd bindings/wasm
+          # wasm-opt is pre-installed on self-hosted runners via setup_linux_env.sh
+          if command -v wasm-opt >/dev/null 2>&1; then
+            wasm-opt -O3 pkg/openhttpa_wasm_bg.wasm -o pkg/openhttpa_wasm_bg.wasm
+          fi
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org'
+      - name: Publish to npm and GitHub Packages
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          cd bindings/wasm/pkg
+          # Dual-Publish Strategy for WASM
+          pnpm publish --no-git-checks --registry https://registry.npmjs.org
+
+          npm config set //npm.pkg.github.com/:_authToken ${{ secrets.GITHUB_TOKEN }}
+          pnpm publish --no-git-checks --registry https://npm.pkg.github.com
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ─── Publish Go package ─────────────────────────────────────────────────────
+  publish-go:
+    name: publish go package
+    needs: [validate]
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Build C Library
+        run: |
+          # ─── Entry-Level Guidance: Go Bindings ──────────────────────────────
+          # 1. CGO: Go's way of calling C code. Since Rust can export a C-style 
+          #    API, Go can talk to Rust through this 'FFI' (Foreign Function Interface).
+          # 2. Static Archive (.a): By bundling the Rust logic into a static 
+          #    library, the final Go user doesn't need to install Rust; they 
+          #    just link against this pre-built file.
+          # ────────────────────────────────────────────────────────────────────
+          cargo build --release -p openhttpa-c
+      - name: Bundle Artifacts
+        run: |
+          mkdir -p bindings/go/lib
+          cp target/release/libopenhttpa_c.a bindings/go/lib/
+          cp bindings/go/openhttpa.h bindings/go/lib/
+          # Copy FIPS dependencies for macOS/Linux
+          if [ -d target/release/build/aws-lc-fips-sys-* ]; then
+            cp target/release/build/aws-lc-fips-sys-*/out/build/artifacts/libaws_lc_fips_* bindings/go/lib/ || true
+          fi
+      - name: Tag and Push
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          # GO-MODULE: Go requires tags to follow 'vX.Y.Z' for versioning.
+          # We create a 'go-v*' alias tag to allow the Go proxy to resolve 
+          # this sub-directory as a versioned module.
+          git config user.name "openhttpa-bot"
+          git config user.email "bot@aiql.org"
+          git tag -f go-${{ github.ref_name }}
+          git push origin go-${{ github.ref_name }}
+
+  # ─── Phase 3: Final Production Binary Release ─────────────────────────────
+  # This final phase bundles the compiled hardware-hardened binaries along
+  # with a Software Bill of Materials (SBOM) for auditability.
+
+  github-release:
+    name: github release
+    runs-on: self-hosted
+    needs: [publish-python, publish-npm, publish-wasm, publish-go]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # Build dependencies (cmake, ninja-build, etc.) are pre-installed via setup_linux_env.sh
+      - uses: actions/cache@v4
+        with:
+          path: target/release
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+      # LOW-04: release binary must NOT include the mock feature (MockTeeProvider).
+      # Enforce tdx,sev_snp,aws_nitro for production builds
+      - run: cargo build --release --workspace --features tdx,sev_snp,aws_nitro,trustzone,nvidia_gpu
+      - name: Generate SBOM (CycloneDX)
+        # SBOM: publish a machine-readable software bill of materials so downstream
+        # consumers and auditors can inspect the full dependency tree (including
+        # transitive crates) without needing the source repository.
+        run: |
+          cargo install cargo-cyclonedx --locked
+          cargo cyclonedx --format json --output-pattern prefix --all
+      - name: Generate build attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: target/release/backend
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/release/backend
+            *.cdx.json

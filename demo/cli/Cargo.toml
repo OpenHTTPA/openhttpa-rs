@@ -1,0 +1,38 @@
+[package]
+name = "openhttpa-cli"
+license = "Apache-2.0"
+readme = "README.md"
+version = "0.1.0"
+edition = "2021"
+authors = ["AIQL Team <info@aiql.org>"]
+publish = false
+
+[dependencies]
+openhttpa-core = { path = "../../crates/openhttpa-core" }
+openhttpa-crypto = { path = "../../crates/openhttpa-crypto" }
+openhttpa-headers = { path = "../../crates/openhttpa-headers" }
+openhttpa-proto = { path = "../../crates/openhttpa-proto" }
+openhttpa-tee = { path = "../../crates/openhttpa-tee" }
+openhttpa-client = { path = "../../crates/openhttpa-client" }
+openhttpa-server = { path = "../../crates/openhttpa-server" }
+openhttpa-transport = { path = "../../crates/openhttpa-transport" }
+openhttpa-attestation = { path = "../../crates/openhttpa-attestation" }
+
+tokio = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1.0"
+hex = { workspace = true }
+bytes = { workspace = true }
+http = { workspace = true }
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+async-trait = { workspace = true }
+reqwest = { workspace = true }
+rand = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+getrandom = { workspace = true }

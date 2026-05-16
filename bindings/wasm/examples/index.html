@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>OpenHTTPA Wasm Example</title>
+    <style>
+      body {
+        font-family: system-ui;
+        line-height: 1.5;
+        max-width: 800px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+      }
+      pre {
+        background: #f4f4f4;
+        padding: 1rem;
+        border-radius: 4px;
+        overflow-x: auto;
+      }
+      button {
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+      }
+      .status {
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>OpenHTTPA Wasm Minimal Example</h1>
+    <p>
+      This page demonstrates pure-Rust cryptographic operations running in the browser via
+      WebAssembly.
+    </p>
+
+    <button id="runBtn">Run Handshake</button>
+    <p>Status: <span id="status" class="status">Idle</span></p>
+
+    <h3>Protocol Log:</h3>
+    <pre id="log">Click 'Run Handshake' to start...</pre>
+
+    <script type="module">
+      import init, {
+        openhttpa_initiate_attest,
+        openhttpa_derive_session,
+      } from './pkg/openhttpa_wasm.js';
+
+      const log = (msg) => {
+        const el = document.getElementById('log');
+        el.textContent += `\n${msg}`;
+        console.log(msg);
+      };
+
+      const setStatus = (msg) => {
+        document.getElementById('status').textContent = msg;
+      };
+
+      document.getElementById('runBtn').onclick = async () => {
+        try {
+          setStatus('Processing...');
+          log('\n--- Starting OpenHTTPA Wasm Handshake ---');
+
+          // 1. Initialize Wasm
+          await init();
+          log('[wasm] Module initialized');
+
+          // 2. Initiate Attestation (Client Key Share)
+          const initiateJson = openhttpa_initiate_attest();
+          const clientMaterial = JSON.parse(initiateJson);
+          log('[wasm] Generated client keys & random');
+          log(`       Random: ${clientMaterial.client_random.slice(0, 16)}...`);
+
+          // 3. Send to Backend
+          log('[fetch] Sending ATTEST request to http://127.0.0.1:8080...');
+          const resp = await fetch('http://127.0.0.1:8080/api/attest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: initiateJson,
+          });
+
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+          const serverJson = await resp.text();
+          const serverMaterial = JSON.parse(serverJson);
+          log('[fetch] Received server key share & quotes');
+
+          // 4. Derive Session (Hybrid KEM Agreement)
+          const proofJson = openhttpa_derive_session(serverJson);
+          const proof = JSON.parse(proofJson);
+          log('[wasm] Session keys derived successfully!');
+          log(`[wasm] Attestation-Binding ID: ${proof.base_id}`);
+          log(`[wasm] Transcript Hash: ${proof.transcript_hash.slice(0, 16)}...`);
+
+          setStatus('✓ Success');
+        } catch (err) {
+          log(`[error] ${err.message}`);
+          setStatus('✗ Failed');
+        }
+      };
+    </script>
+  </body>
+</html>

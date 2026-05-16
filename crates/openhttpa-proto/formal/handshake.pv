@@ -1,0 +1,54 @@
+(* SPDX-License-Identifier: Apache-2.0 OR MIT
+ * Copyright 2026 The OpenHTTPA Foundation (AIQL.org)
+ *)
+
+
+type key.
+type nonce.
+type msg.
+type host.
+type ticket.
+
+free c: channel.
+
+fun aead_seal(msg, key, nonce): msg.
+reduc forall m: msg, k: key, n: nonce; aead_unseal(aead_seal(m, k, n), k, n) = m.
+
+fun kdf(key, msg): key.
+fun derive_resumption_secret(key): key.
+fun derive_0rtt_key(key, nonce): key.
+
+free salt0rtt: msg [private].
+
+event client_started_0rtt(host, host, msg).
+event server_received_0rtt(host, host, msg).
+event session_established(host, host, key).
+
+(* Queries *)
+query secret secret_data_0rtt.
+query hostA: host, hostB: host, m: msg; 
+    event(server_received_0rtt(hostA, hostB, m)) ==> event(client_started_0rtt(hostA, hostB, m)).
+
+(* Processes *)
+
+(* Client Process *)
+let Client(hA: host, hB: host, resumption_secret: key) =
+    new n0: nonce;
+    new secret_data_0rtt: msg;
+    let k0rtt = derive_0rtt_key(resumption_secret, n0) in
+    event client_started_0rtt(hA, hB, secret_data_0rtt);
+    out(c, (n0, aead_seal(secret_data_0rtt, k0rtt, n0))).
+
+(* Server Process *)
+let Server(hB: host, hA: host, resumption_secret: key) =
+    in(c, (n: nonce, sealed_data: msg));
+    let k0rtt = derive_0rtt_key(resumption_secret, n) in
+    let m = aead_unseal(sealed_data, k0rtt, n) in
+    event server_received_0rtt(hA, hB, m).
+
+(* Main Process *)
+process
+    new k_resumption: key;
+    new hA: host;
+    new hB: host;
+    ( (!Client(hA, hB, k_resumption)) | (!Server(hB, hA, k_resumption)) )

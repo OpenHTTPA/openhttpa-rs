@@ -1,0 +1,14 @@
+{
+  "name": "openhttpa-native-tests",
+  "version": "1.0.0",
+  "description": "E2E tests for OpenHTTPA native modules",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:puppeteer": "node tests/puppeteer-test.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.43.0",
+    "puppeteer": "^22.6.0"
+  }
+}

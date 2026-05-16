@@ -1,0 +1,190 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/openhttpa-proto",
+    "crates/openhttpa-crypto",
+    "crates/openhttpa-headers",
+    "crates/openhttpa-core",
+    "crates/openhttpa-tee",
+    "crates/openhttpa-attestation",
+    "crates/openhttpa-transport",
+    "crates/openhttpa-grpc",
+    "crates/openhttpa-server",
+    "crates/openhttpa-client",
+    "crates/openhttpa-llm",
+    "crates/openhttpa-mcp",
+    "crates/openhttpa-mesh",
+    "crates/openhttpa-a2a",
+    "crates/openhttpa-zk",
+    "bindings/c",
+    "bindings/nodejs",
+    "bindings/python",
+    "bindings/wasm",
+    "demo/multiparty-webapp/backend",
+    "demo/multiparty-webapp/healthcheck",
+    "demo/cli",
+    "modules/nginx", "crates/openhttpa-oracle",
+    "crates/openhttpa-zk/methods/guest",
+]
+# bindings/python must be built with `maturin` (not plain `cargo build`).
+# Exclude it from the default workspace build so `cargo build --workspace`
+# and `cargo test --workspace` succeed without a Python interpreter on PATH.
+# bindings/wasm must be built with `wasm-pack --target web`; exclude it from
+# the default build so a native target triple is never used for the cdylib.
+default-members = [
+    "crates/openhttpa-proto",
+    "crates/openhttpa-crypto",
+    "crates/openhttpa-headers",
+    "crates/openhttpa-core",
+    "crates/openhttpa-tee",
+    "crates/openhttpa-attestation",
+    "crates/openhttpa-transport",
+    "crates/openhttpa-grpc",
+    "crates/openhttpa-server",
+    "crates/openhttpa-client",
+    "crates/openhttpa-llm",
+    "crates/openhttpa-mcp",
+    "crates/openhttpa-mesh",
+    "crates/openhttpa-a2a",
+    "crates/openhttpa-zk",
+    "bindings/c",
+    "bindings/nodejs",
+    "demo/multiparty-webapp/backend",
+    "demo/cli",
+]
+
+[workspace.package]
+version     = "0.1.1"
+edition     = "2021"
+rust-version = "1.88"
+license     = "Apache-2.0 OR MIT"
+authors     = ["The OpenHTTPA Foundation (AIQL.org) <info@aiql.org>"]
+repository  = "https://github.com/openhttpa/openhttpa-rs"
+homepage    = "https://aiql.org"
+documentation = "https://docs.rs/openhttpa-core"
+categories  = ["cryptography", "network-programming", "development-tools"]
+keywords    = ["http", "attestation", "tee", "pqc", "security"]
+
+[workspace.dependencies]
+# ── async runtime ──────────────────────────────────────────────────────────────
+tokio            = { version = "1", features = ["full"] }
+
+# ── async utilities ────────────────────────────────────────────────────────────
+async-trait      = "0.1"
+futures          = "0.3"
+
+# ── error handling ─────────────────────────────────────────────────────────────
+thiserror        = "2"
+
+# ── serialisation ──────────────────────────────────────────────────────────────
+serde            = { version = "1", features = ["derive"] }
+serde_json       = "1"
+bytes            = { version = "1", features = ["serde"] }
+
+# ── cryptography ───────────────────────────────────────────────────────────────
+aws-lc-rs        = { version = "1.16", features = ["fips"] }
+oqs              = { version = "0.11", default-features = false, features = [
+    "ml_kem",
+    "ml_dsa",
+    "sphincs",
+] }
+zeroize          = { version = "1.8", features = ["derive"] }
+rand             = "0.8"
+hpke             = "0.12"
+
+# ── HTTP / network ─────────────────────────────────────────────────────────────
+http             = "1"
+hyper            = { version = "1", features = ["http1", "http2", "client", "server"] }
+hyper-util       = { version = "0.1", features = ["tokio", "client", "server"] }
+h2               = "0.4"
+tower            = { version = "0.5", features = ["full"] }
+axum             = { version = "0.8", features = ["tracing", "ws", "query"] }
+reqwest          = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+dashmap          = "6"
+quinn            = "0.11"
+h3               = "0.0.8"
+h3-quinn         = "0.0.10"
+redis            = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+
+# ── gRPC ───────────────────────────────────────────────────────────────────────
+tonic            = { version = "0.14", features = ["tls-aws-lc"] }
+prost            = "0.14"
+
+# ── TLS / certs ────────────────────────────────────────────────────────────────
+hmac             = "0.12"
+sha2             = "0.10"
+rustls           = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
+uuid             = { version = "1", features = ["v4", "serde", "js"] }
+base64ct         = { version = "1", features = ["alloc"] }
+hkdf             = "0.12"
+hex              = "0.4"
+chrono           = { version = "0.4", features = ["serde"] }
+ciborium         = "0.2"
+coset            = "0.3"
+aes-gcm          = "0.10"
+getrandom        = "0.2"
+rdrand           = "=0.8.3"
+bloomfilter      = "1.0"
+postcard         = { version = "1.1", features = ["alloc"] }
+subtle           = "2.6"
+strum            = "0.26"
+strum_macros     = "0.26"
+
+# ── observability ──────────────────────────────────────────────────────────────
+tracing          = "0.1"
+tracing-subscriber = "0.3"
+pin-project      = "1"
+
+# ── napi-rs (Node.js bindings) ─────────────────────────────────────────────────
+napi             = { version = "3.8.5", default-features = false }
+napi-derive      = "3.5.4"
+
+# ── PyO3 (Python bindings) ──────────────────────────────────────────────────────
+pyo3             = { version = "0.28.3", default-features = false }
+
+# ── testing ────────────────────────────────────────────────────────────────────
+proptest         = "1.11"
+fs2              = "0.4"
+
+# ── internal crates ────────────────────────────────────────────────────────────
+openhttpa-proto      = { path = "crates/openhttpa-proto" }
+openhttpa-crypto     = { path = "crates/openhttpa-crypto" }
+openhttpa-headers    = { path = "crates/openhttpa-headers" }
+openhttpa-core       = { path = "crates/openhttpa-core" }
+openhttpa-tee        = { path = "crates/openhttpa-tee" }
+openhttpa-attestation = { path = "crates/openhttpa-attestation" }
+openhttpa-transport  = { path = "crates/openhttpa-transport" }
+openhttpa-server     = { path = "crates/openhttpa-server" }
+openhttpa-client     = { path = "crates/openhttpa-client" }
+openhttpa-llm        = { path = "crates/openhttpa-llm" }
+openhttpa-mcp        = { path = "crates/openhttpa-mcp" }
+openhttpa-mesh       = { path = "crates/openhttpa-mesh" }
+openhttpa-a2a         = { path = "crates/openhttpa-a2a" }
+
+[profile.release]
+opt-level       = 3
+lto             = "thin"
+codegen-units   = 16
+panic           = "abort"
+strip           = "debuginfo"
+
+# R-05: Hardened release profile for production crypto binaries.
+# Use `--profile release-hardened` to build with maximum inlining and LTO
+# across all code-gen units, eliminating cross-CGU attack surface.
+#
+# Trade-off: significantly longer compile time vs `release`.  Not used in
+# CI build-check passes; intended for final distribution binaries only.
+[profile.release-hardened]
+inherits        = "release"
+opt-level       = 3
+lto             = "fat"
+codegen-units   = 1
+panic           = "abort"
+strip           = "none"   # retain DWARF for post-crash forensics
+
+[profile.dev]
+opt-level = 1
+# Maximise parallel throughput during compilation
+codegen-units = 256
+debug = 2
+incremental = true

@@ -1,0 +1,73 @@
+# Multi-stage build using cargo-chef to optimize build caching
+FROM rust:1.88-slim AS chef
+RUN cargo install --locked cargo-chef
+WORKDIR /src
+
+# ─── Build Environment Hardening ──────────────────────────────────────────────
+# Use the pre-installed toolchain to prevent unnecessary network syncs
+ENV RUSTUP_TOOLCHAIN=stable
+# Increase resilience against transient network flakiness (O-05/SA-05)
+ENV CARGO_NET_RETRY=10
+ENV RUSTUP_MAX_RETRIES=10
+ENV CARGO_TERM_COLOR=always
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+# pkg-config + libssl-dev are required by any crate that links against OpenSSL
+# clang + libclang-dev are required by oqs-sys (bindgen needs libclang at build time).
+# cmake + make are required by oqs-sys and aws-lc-sys to compile C libraries from source.
+# ninja-build gives cmake a faster build tool alternative to make.
+# nasm is required by aws-lc-sys for assembly optimisations on x86-64.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        pkg-config \
+        libssl-dev \
+        clang \
+        libclang-dev \
+        cmake \
+        make \
+        ninja-build \
+        nasm \
+        golang \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=planner /src/recipe.json recipe.json
+# Build dependencies - this is the caching point
+RUN cargo chef cook --release --recipe-path recipe.json -p multiparty-webapp-backend
+
+# Now copy the source code and build the final binary
+COPY . .
+RUN cargo build --release --locked -p multiparty-webapp-backend -p http-healthcheck
+
+# ─── Runtime image ─────────────────────────────────────────────────────────────
+# Use Distroless cc image (includes libgcc and glibc for dynamic linking if needed,
+# though we try to build static, aws-lc and oqs often benefit from cc base).
+FROM gcr.io/distroless/cc-debian12
+
+# Redact labels for security
+LABEL org.opencontainers.image.source="https://github.com/openhttpa/openhttpa-rs"
+
+# Create non-privileged user via passwd file copy strategy
+# Distroless has 'nonroot' user (UID 65532) by default.
+# We will use that instead of manual groupadd.
+
+# Copy the binaries
+COPY --from=builder /etc/ssl/certs /etc/ssl/certs
+COPY --from=builder /src/target/release/backend /usr/local/bin/backend
+COPY --from=builder /src/target/release/http-healthcheck /usr/local/bin/healthcheck
+
+# Set up environment
+ENV RUST_LOG=info
+USER nonroot:nonroot
+
+# Health check using our static utility (O-05/SA-05 hardened)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/usr/local/bin/healthcheck", "http://127.0.0.1:8080/health"]
+
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/backend"]

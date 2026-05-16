@@ -1,0 +1,108 @@
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Copyright 2026 The OpenHTTPA Foundation (AIQL.org)
+
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: demo/multiparty-webapp/Dockerfile.backend
+    ports:
+      - '127.0.0.1:${BACKEND_PORT:-0}:8080'
+    environment:
+      # BLOCKER-01: Use info level in the compose stack. Do NOT set debug here;
+      # debug-level tracing spans may emit session IDs, key material, and PII.
+      # For local development override, use docker-compose.debug.yml.
+      - RUST_LOG=info
+      - PORT=8080
+      - OPENHTTPA_MOCK_TEE_TYPE=mock
+      - OPENHTTPA_ALLOW_MOCK_HARDWARE=1
+    restart: unless-stopped
+    init: true
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+      # SA-05: Custom seccomp allow-list scoped to the syscalls required by a
+      # static Rust binary serving HTTP/2. Reduces syscall attack surface vs the
+      # default Docker seccomp profile. See seccomp/backend-profile.json.
+      - seccomp:./seccomp/backend-profile.json
+    # SA-05: Drop ALL Linux capabilities. The backend binds on port 8080
+    # (non-privileged); no capability is required beyond what cap_drop removes.
+    # If the binary ever needs NET_BIND_SERVICE (port <1024), add it explicitly.
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ['CMD', '/usr/local/bin/healthcheck', 'http://127.0.0.1:8080/health']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    image: nginx:1.27-alpine
+    ports:
+      - '127.0.0.1:${FRONTEND_PORT:-0}:8080'
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/templates/default.conf.template:ro
+    restart: unless-stopped
+    init: true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+      - /var/log/nginx
+      - /var/lib/nginx
+      - /etc/nginx/conf.d
+    healthcheck:
+      test:
+        ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:8080/api/status']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  e2e-runner:
+    build:
+      context: ../..
+      dockerfile: demo/multiparty-webapp/Dockerfile.e2e
+    user: '${UID:-1000}:${GID:-1000}'
+    volumes:
+      - ../..:/src
+    environment:
+      - BASE_URL=http://frontend:8080
+      - OPENHTTPA_ALLOW_MOCK_HARDWARE=1
+      - PLAYWRIGHT_WORKERS=${PLAYWRIGHT_WORKERS:-1}
+    depends_on:
+      frontend:
+        condition: service_healthy
+    profiles:
+      - test
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+    security_opt:
+      - no-new-privileges:true
+    # SA-05: Drop all capabilities for the test runner; it only needs network
+    # access to connect to the frontend, which requires no Linux capabilities.
+    cap_drop:
+      - ALL

@@ -1,0 +1,44 @@
+[package]
+name        = "openhttpa-llm"
+description = "OpenHTTPA — confidential LLM inference via attested sessions"
+version.workspace    = true
+edition.workspace    = true
+rust-version.workspace = true
+license.workspace    = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+documentation.workspace = true
+categories.workspace = true
+keywords.workspace = true
+
+[dependencies]
+openhttpa-proto        = { workspace = true }
+openhttpa-crypto       = { workspace = true }
+openhttpa-client       = { workspace = true }
+openhttpa-core         = { workspace = true }
+openhttpa-tee          = { workspace = true }
+openhttpa-zk           = { path = "../openhttpa-zk" }
+sha2                = { workspace = true }
+bytes               = { workspace = true }
+http                = { workspace = true }
+serde               = { workspace = true }
+serde_json          = { workspace = true }
+thiserror           = { workspace = true }
+tracing             = { workspace = true }
+tokio               = { workspace = true }
+async-trait         = { workspace = true }
+reqwest             = { workspace = true, features = ["stream"] }
+futures             = { workspace = true }
+axum                = { workspace = true }
+hex                 = { workspace = true }
+strum               = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+openhttpa-headers = { workspace = true }
+openhttpa-transport = { workspace = true }
+openhttpa-crypto = { workspace = true }
+hex = { workspace = true }
+dashmap = { workspace = true }
+tracing-subscriber = { workspace = true }

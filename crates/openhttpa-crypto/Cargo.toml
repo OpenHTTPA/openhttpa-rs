@@ -1,0 +1,34 @@
+[package]
+name        = "openhttpa-crypto"
+description = "OpenHTTPA — cryptographic layer: key exchange, AEAD, HKDF, PQC, nonce management"
+version.workspace    = true
+edition.workspace    = true
+rust-version.workspace = true
+license.workspace    = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+documentation.workspace = true
+categories.workspace = true
+keywords.workspace = true
+
+[dependencies]
+openhttpa-proto = { workspace = true }
+aws-lc-rs    = { workspace = true }
+oqs          = { workspace = true }
+hex          = "0.4"
+hkdf         = "0.12"
+sha2         = "0.10"
+zeroize      = { workspace = true }
+rand         = { workspace = true }
+thiserror    = { workspace = true }
+serde        = { workspace = true }
+serde-big-array = "0.5"
+bytes        = { workspace = true }
+tracing      = { workspace = true }
+serde_json   = { workspace = true }
+fs2          = "0.4"
+
+[dev-dependencies]
+proptest   = { workspace = true }
+tempfile   = "3"

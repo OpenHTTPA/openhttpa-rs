@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: '-D warnings'
+  OPENHTTPA_SKIP_ZK_BUILD: '1'
+  RISC0_SKIP_BUILD_KERNELS: '1'
+
+jobs:
+  verify:
+    name: Formal Verification & CI
+    runs-on: self-hosted
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Proactive Disk Hygiene
+        run: |
+          docker system prune -f --volumes || true
+          rm -rf /tmp/openhttpa-build-* || true
+
+      - name: Run Full Verification Suite
+        run: make verify-all

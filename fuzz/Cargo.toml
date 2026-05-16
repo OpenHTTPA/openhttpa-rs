@@ -1,0 +1,32 @@
+[package]
+name = "openhttpa-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+openhttpa-headers = { path = "../crates/openhttpa-headers" }
+openhttpa-proto   = { path = "../crates/openhttpa-proto" }
+bytes      = "1"
+http       = "1"
+serde_json = "1"
+
+# Prevent optimising away the fuzz harness in release mode.
+[profile.release]
+debug = true
+
+[[bin]]
+name = "fuzz_headers"
+path = "fuzz_targets/fuzz_headers.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_quote_parse"
+path = "fuzz_targets/fuzz_quote_parse.rs"
+test = false
+doc = false

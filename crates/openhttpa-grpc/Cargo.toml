@@ -1,0 +1,32 @@
+[package]
+name        = "openhttpa-grpc"
+description = "OpenHTTPA — gRPC / tonic integration"
+version.workspace    = true
+edition.workspace    = true
+rust-version.workspace = true
+license.workspace    = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+documentation.workspace = true
+categories.workspace = true
+keywords.workspace = true
+
+[dependencies]
+openhttpa-proto        = { workspace = true }
+openhttpa-crypto       = { workspace = true }
+openhttpa-headers      = { workspace = true }
+openhttpa-core         = { workspace = true }
+openhttpa-attestation  = { workspace = true }
+openhttpa-tee          = { workspace = true }
+bytes               = { workspace = true }
+serde               = { workspace = true }
+serde_json          = { workspace = true }
+thiserror           = { workspace = true }
+tracing             = { workspace = true }
+tokio               = { workspace = true }
+async-trait         = { workspace = true }
+prost               = { workspace = true }
+tonic               = { workspace = true }
+
+[build-dependencies]

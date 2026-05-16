@@ -1,0 +1,85 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright 2026 The OpenHTTPA Foundation (AIQL.org)
+
+// OpenHTTPA gRPC service definition.
+// Used by tonic-build to generate Rust server/client stubs.
+
+syntax = "proto3";
+
+package openhttpa;
+
+// ─── AtHS (Attest Handshake) ─────────────────────────────────────────────────
+
+message AtHsRequest {
+  // Serialised client key share (JSON: {ecdhe_public, mlkem_public})
+  bytes  key_share          = 1;
+  // 32-byte random nonce
+  bytes  random             = 2;
+  // List of supported cipher suite names
+  repeated string cipher_suites = 3;
+  // List of supported HTTPA versions
+  repeated string versions  = 4;
+  // RFC 3339 UTC timestamp
+  string date               = 5;
+  // Requested AtB creation mode: "new" | "reuse" | "shared"
+  string base_creation      = 6;
+  // Client TEE attestation quote (optional, for mHTTPA)
+  AttestQuote client_quote  = 7;
+}
+
+message AtHsResponse {
+  // Selected cipher suite
+  string         cipher_suite  = 1;
+  // 32-byte server random
+  bytes          random        = 2;
+  // Server key share (JSON: {ecdhe_public, mlkem_ciphertext})
+  bytes          key_share     = 3;
+  // Allocated AtB identifier (UUID)
+  string         base_id       = 4;
+  // Selected HTTPA version
+  string         version       = 5;
+  // AtB TTL in seconds
+  uint64         expires_secs  = 6;
+  // Server TEE attestation quotes
+  repeated AttestQuote quotes  = 7;
+}
+
+// ─── Trusted Request (TrR) ───────────────────────────────────────────────────
+
+message TrustedRequest {
+  // AtB identifier
+  string base_id          = 1;
+  // AEAD-encrypted request payload
+  bytes  ciphertext       = 2;
+  // Nonce (big-endian u64)
+  bytes  nonce            = 3;
+  // Optional termination directive
+  string termination      = 4;
+}
+
+message TrustedResponse {
+  // AEAD-encrypted response payload
+  bytes  ciphertext   = 1;
+  // Nonce echo for Attest-Binder validation
+  bytes  nonce        = 2;
+}
+
+// ─── Shared types ─────────────────────────────────────────────────────────────
+
+message AttestQuote {
+  // "sgx" | "tdx" | "sev_snp" | "trustzone" | "mock"
+  string quote_type = 1;
+  bytes  raw        = 2;
+  bytes  qudd       = 3;
+}
+
+// ─── Service ─────────────────────────────────────────────────────────────────
+
+service OpenHttpaService {
+  // Execute the AtHS handshake.
+  rpc AttestHandshake(AtHsRequest) returns (AtHsResponse);
+  // Execute a trusted request inside an established AtB session.
+  rpc TrustedCall(TrustedRequest) returns (TrustedResponse);
+  // Streaming variant: client streams many trusted requests over one AtB.
+  rpc TrustedStream(stream TrustedRequest) returns (stream TrustedResponse);
+}

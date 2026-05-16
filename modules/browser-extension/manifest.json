@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "OpenHTTPA Shield",
+  "version": "0.1.0",
+  "description": "Natively enable OpenHTTPA (Attested HTTP) for secure, hardware-verified web browsing.",
+  "permissions": ["declarativeNetRequest", "webRequest", "storage", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/shield-16.png",
+      "48": "icons/shield-48.png",
+      "128": "icons/shield-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/shield-16.png",
+    "48": "icons/shield-48.png",
+    "128": "icons/shield-128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}

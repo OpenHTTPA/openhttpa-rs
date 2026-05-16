@@ -1,0 +1,48 @@
+[package]
+name        = "openhttpa-core"
+description = "OpenHTTPA protocol state machine: Preflight / AtHS / AtSP / TrR"
+version.workspace    = true
+edition.workspace    = true
+rust-version.workspace = true
+license.workspace    = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+documentation.workspace = true
+categories.workspace = true
+keywords.workspace = true
+
+[features]
+default = ["tee"]
+# Enable full TEE-integrated handshake path.
+tee     = ["openhttpa-tee"]
+# Enable ZK-proving for handshakes.
+zk      = ["openhttpa-zk/zk"]
+# Enable mock TEE provider for testing.
+mock    = ["openhttpa-tee/mock"]
+
+[dependencies]
+openhttpa-proto    = { workspace = true }
+openhttpa-crypto   = { workspace = true }
+openhttpa-headers  = { workspace = true }
+openhttpa-tee      = { workspace = true, optional = true }
+openhttpa-zk       = { path = "../openhttpa-zk", optional = true }
+openhttpa-attestation = { workspace = true }
+bytes           = { workspace = true }
+async-trait     = "0.1"
+futures         = "0.3"
+http            = { workspace = true }
+serde           = { workspace = true }
+serde_json      = { workspace = true }
+postcard        = { workspace = true }
+thiserror       = { workspace = true }
+tracing         = { workspace = true }
+uuid            = { workspace = true }
+tokio           = { workspace = true }
+zeroize         = { workspace = true }
+rand            = { workspace = true }
+sha2            = "0.10"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }
+proptest = { workspace = true }

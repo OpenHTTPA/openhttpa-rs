@@ -1,0 +1,49 @@
+[package]
+name        = "openhttpa-transport"
+description = "OpenHTTPA — HTTP/2 + HTTP/3 + QUIC transport adapters"
+version.workspace    = true
+edition.workspace    = true
+rust-version.workspace = true
+license.workspace    = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+documentation.workspace = true
+categories.workspace = true
+keywords.workspace = true
+
+[features]
+default = ["h2"]
+h2      = ["dep:h2", "dep:hyper", "dep:hyper-util", "dep:tower"]
+h3      = ["dep:h3", "dep:h3-quinn", "dep:quinn"]
+
+[dependencies]
+openhttpa-proto   = { workspace = true }
+openhttpa-crypto  = { workspace = true }
+openhttpa-headers = { workspace = true }
+openhttpa-core    = { workspace = true }
+bytes          = { workspace = true }
+http           = { workspace = true }
+serde          = { workspace = true }
+thiserror      = { workspace = true }
+tracing        = { workspace = true }
+tokio          = { workspace = true }
+rand           = { workspace = true }
+hpke           = { workspace = true }
+aes-gcm        = { workspace = true }
+async-trait    = { workspace = true }
+rustls         = { workspace = true }
+reqwest        = { workspace = true }
+axum           = { workspace = true }
+
+h2          = { workspace = true, optional = true }
+hyper       = { workspace = true, optional = true }
+hyper-util  = { workspace = true, optional = true }
+tower       = { workspace = true, optional = true }
+
+h3       = { workspace = true, optional = true }
+h3-quinn = { workspace = true, optional = true }
+quinn    = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
