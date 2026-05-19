@@ -189,15 +189,15 @@ Detailed reports and proofs are available in the [Formal Security Suite](#formal
 
 ### NIST Technical Reports & Guidelines
 
-- **[NIST Technical Report (Security Analysis)](docs/nist/OpenHTTPA-NIST-Technical-Report.md)**: Foundational security analysis and Post-Quantum alignment.
-- **[NIST Security Guidelines (Operational SP)](docs/nist/NIST-SP-OpenHTTPA-Security-Guidelines.md)**: Operational best practices and TEE configuration.
-- **[FIPS 140-3 Compliance Capability Report](docs/nist/OpenHTTPA-FIPS-Compliance-Capability.md)**: Roadmap for federal cryptographic certification.
+- **[NIST Technical Report (Security Analysis)](docs/nist/OPENHTTPA-NIST-Technical-Report.md)**: Foundational security analysis and Post-Quantum alignment.
+- **[NIST Security Guidelines (Operational SP)](docs/nist/NIST-SP-OPENHTTPA-Security-Guidelines.md)**: Operational best practices and TEE configuration.
+- **[FIPS 140-3 Compliance Capability Report](docs/nist/OPENHTTPA-FIPS-Compliance-Capability.md)**: Roadmap for federal cryptographic certification.
 
 ### Formal Security Suite
 
-- **[Formal Threat Model](docs/security/OpenHTTPA-Formal-Threat-Model.md)**: Detailed adversary modeling and attack tree analysis.
-- **[Formal Verification Report](docs/security/OpenHTTPA-Formal-Verification-Report.md)**: Mathematical proof results from ProVerif and Tamarin Prover.
-- **[Privacy Impact Assessment (PIA)](docs/security/OpenHTTPA-Privacy-Impact-Assessment.md)**: Privacy risk analysis following the NIST Privacy Framework.
+- **[Formal Threat Model](docs/security/OPENHTTPA-Formal-Threat-Model.md)**: Detailed adversary modeling and attack tree analysis.
+- **[Formal Verification Report](docs/security/OPENHTTPA-Formal-Verification-Report.md)**: Mathematical proof results from ProVerif and Tamarin Prover.
+- **[Privacy Impact Assessment (PIA)](docs/security/OPENHTTPA-Privacy-Impact-Assessment.md)**: Privacy risk analysis following the NIST Privacy Framework.
 
 ### Protocol Extensions & Architectural Evaluations
 

@@ -1,0 +1,18 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Husky prepare-commit-msg hook to automate Signed-off-by trailer generation.
+
+NAME=$(git config user.name)
+EMAIL=$(git config user.email)
+
+# Verification check: Ensure user configs exist.
+if [ -z "$NAME" ] || [ -z "$EMAIL" ]; then
+    echo "[Error] Git config 'user.name' or 'user.email' is empty. Please set them first." >&2
+    exit 1
+fi
+
+# Append the Signed-off-by trailer to the message file ($1) in-place.
+# --if-exists doNothing ensures we do not duplicate trailers if already signed off.
+git interpret-trailers --if-exists doNothing --trailer \
+    "Signed-off-by: $NAME <$EMAIL>" \
+    --in-place "$1"

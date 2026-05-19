@@ -37,7 +37,13 @@ make doctor
     make ci
     ```
 3.  **Commit Messages**: We use [Conventional Commits](https://www.conventionalcommits.org/).
-4.  **DCO Sign-off**: Every commit **must** include a `Signed-off-by:` line (Developer Certificate of Origin). You can automate this by using `git commit -s`.
+4.  **DCO Sign-off**: Every commit **must** include a `Signed-off-by:` line (Developer Certificate of Origin). You can automate this by using `git commit -s`, or by using the repository's built-in **Husky** hooks which automate this process locally:
+    - The repository is configured to automatically add sign-offs under all workflows (standard commits, GUI/desktop commits, and CLI amends or `-m` commits).
+    - To verify that your local Husky hooks are active and executable, run:
+      ```bash
+      chmod +x .husky/prepare-commit-msg .husky/commit-msg
+      ```
+    - The active hooks under `.husky/` will verify your local `user.name` and `user.email` configurations, and append the `Signed-off-by` trailer in-place via `git interpret-trailers` automatically without generating duplicate lines.
 5.  **Documentation**: Update any relevant `README.md`, `API.md`, or formal models.
 6.  **Review**: Every PR requires at least one approval from a core maintainer.
 

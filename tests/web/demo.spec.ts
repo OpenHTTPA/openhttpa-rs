@@ -449,4 +449,141 @@ test.describe('Frontend UI', () => {
     await expect(page.locator('#sum')).toContainText('50', { timeout: 10000 });
     await assertNoProtocolErrors(page);
   });
+
+  /**
+   * E2E Link Casing and Casing-Integrity Verification.
+   * Verifies that all official documentation and repository links point to the correct, case-sensitive
+   * GitHub files using the official mixed-case mixed casing org URL.
+   *
+   * Coverage (Rule 3):
+   *  1. Normal Case: Links are visible, active, point to the correct URLs, and open in a new tab.
+   *  2. Edge Case: Filenames in the nist/ and security/ directories must use the exact uppercase casing
+   *     ('OPENHTTPA') to prevent GitHub 404s (as GitHub's path resolver is strictly case-sensitive).
+   *  3. Failed/Negative Case: Ensure that there are absolutely NO links pointing to the deprecated
+   *     camel-case 'OpenHTTPA' in their nist/ or security/ filenames to avoid 404s.
+   *  4. Failed/Negative Case (Branch): Ensure that there are absolutely NO links pointing to the
+   *     non-existent 'main' branch to prevent future regressions.
+   *  5. Global Impact Case: Ensure the main repo links point correctly to the official repository at 'https://github.com/OpenHTTPA/openhttpa-rs'.
+   */
+  test('verify all documentation and repository links have correct case-sensitive URLs and target attributes', async ({
+    page,
+  }) => {
+    // List of official documentation references with expected correct case-sensitive links.
+    const expectedLinks = [
+      {
+        selector: 'a[href*="draft-openhttpa-protocol-00.md"]',
+        expectedHref:
+          'https://github.com/OpenHTTPA/openhttpa-rs/blob/openhttpa/docs/ietf/draft-openhttpa-protocol-00.md',
+        description: 'IETF Submission Wire Specification (lowercase name)',
+      },
+      {
+        selector: 'a[href*="OPENHTTPA-NIST-Technical-Report.md"]',
+        expectedHref:
+          'https://github.com/OpenHTTPA/openhttpa-rs/blob/openhttpa/docs/nist/OPENHTTPA-NIST-Technical-Report.md',
+        description: 'NIST Security Analysis Report (uppercase name)',
+      },
+      {
+        selector: 'a[href*="NIST-SP-OPENHTTPA-Security-Guidelines.md"]',
+        expectedHref:
+          'https://github.com/OpenHTTPA/openhttpa-rs/blob/openhttpa/docs/nist/NIST-SP-OPENHTTPA-Security-Guidelines.md',
+        description: 'NIST Operational SP Guidelines (uppercase name)',
+      },
+      {
+        selector: 'a[href*="OPENHTTPA-FIPS-Compliance-Capability.md"]',
+        expectedHref:
+          'https://github.com/OpenHTTPA/openhttpa-rs/blob/openhttpa/docs/nist/OPENHTTPA-FIPS-Compliance-Capability.md',
+        description: 'NIST FIPS 140-3 Roadmap (uppercase name)',
+      },
+      {
+        selector: 'a[href*="OPENHTTPA-Formal-Threat-Model.md"]',
+        expectedHref:
+          'https://github.com/OpenHTTPA/openhttpa-rs/blob/openhttpa/docs/security/OPENHTTPA-Formal-Threat-Model.md',
+        description: 'Formal Threat Model (uppercase name)',
+      },
+      {
+        selector: 'a[href*="OPENHTTPA-Formal-Verification-Report.md"]',
+        expectedHref:
+          'https://github.com/OpenHTTPA/openhttpa-rs/blob/openhttpa/docs/security/OPENHTTPA-Formal-Verification-Report.md',
+        description: 'Formal Verification Summary (uppercase name)',
+      },
+      {
+        selector: 'a[href*="OPENHTTPA-Privacy-Impact-Assessment.md"]',
+        expectedHref:
+          'https://github.com/OpenHTTPA/openhttpa-rs/blob/openhttpa/docs/security/OPENHTTPA-Privacy-Impact-Assessment.md',
+        description: 'Privacy Impact Assessment (uppercase name)',
+      },
+      {
+        selector: 'a[href*="PROVERIF.md"]',
+        expectedHref: 'https://github.com/OpenHTTPA/openhttpa-rs/blob/openhttpa/formal/PROVERIF.md',
+        description: 'ProVerif Proof (uppercase name)',
+      },
+      {
+        selector: 'a[href*="TAMARIN.md"]',
+        expectedHref: 'https://github.com/OpenHTTPA/openhttpa-rs/blob/openhttpa/formal/TAMARIN.md',
+        description: 'Tamarin Prover (uppercase name)',
+      },
+      {
+        selector: 'a[href*="formal/README.md"]',
+        expectedHref: 'https://github.com/OpenHTTPA/openhttpa-rs/blob/openhttpa/formal/README.md',
+        description: 'Formal Verification Guide (uppercase/lowercase mix)',
+      },
+      {
+        selector: 'a[href*="DENIABILITY.md"]',
+        expectedHref:
+          'https://github.com/OpenHTTPA/openhttpa-rs/blob/openhttpa/formal/DENIABILITY.md',
+        description: 'Deniability Analysis (uppercase name)',
+      },
+      {
+        selector: 'a[href$="API.md"]',
+        expectedHref: 'https://github.com/OpenHTTPA/openhttpa-rs/blob/openhttpa/API.md',
+        description: 'API Reference documentation (uppercase name)',
+      },
+    ];
+
+    // Verify each link individually for visibility, correct path, correct casing, and target="_blank"
+    for (const link of expectedLinks) {
+      console.log(`Auditing link for: ${link.description}`);
+      const locator = page.locator(link.selector);
+      await expect(locator).toBeVisible();
+      const href = await locator.getAttribute('href');
+      expect(href).toBe(link.expectedHref);
+      const target = await locator.getAttribute('target');
+      expect(target).toBe('_blank');
+    }
+
+    // Verify main Repository links point correctly to the official repository at 'https://github.com/OpenHTTPA/openhttpa-rs'
+    const mainRepoSelector = 'a[href="https://github.com/OpenHTTPA/openhttpa-rs"]';
+    const repoLinksCount = await page.locator(mainRepoSelector).count();
+    expect(repoLinksCount).toBeGreaterThanOrEqual(1);
+
+    for (let i = 0; i < repoLinksCount; i++) {
+      const repoLink = page.locator(mainRepoSelector).nth(i);
+      await expect(repoLink).toBeVisible();
+      const target = await repoLink.getAttribute('target');
+      // If target attribute is set, it must open in a new tab (_blank)
+      if (target !== null) {
+        expect(target).toBe('_blank');
+      }
+    }
+
+    // Negative/Failed Casing Check: Verify that there are absolutely NO links
+    // containing the camel-case 'OpenHTTPA' in their nist/ or security/ filenames to avoid 404s.
+    const invalidCasedLinks = page.locator(
+      'a[href*="/nist/OpenHTTPA"], a[href*="/security/OpenHTTPA"]',
+    );
+    const invalidCount = await invalidCasedLinks.count();
+    expect(invalidCount).toBe(0);
+
+    // Negative/Failed Branch Check: Verify that there are absolutely NO links
+    // pointing to the non-existent 'main' branch to prevent future regressions.
+    const mainBranchLinks = page.locator('a[href*="/blob/main/"]');
+    const mainBranchCount = await mainBranchLinks.count();
+    expect(mainBranchCount).toBe(0);
+
+    // Negative/Failed Organization Casing Check: Verify that there are absolutely NO links
+    // pointing to the lowercase 'openhttpa' organization to prevent casing issues.
+    const lowercaseOrgLinks = page.locator('a[href*="github.com/openhttpa/"]');
+    const lowercaseOrgCount = await lowercaseOrgLinks.count();
+    expect(lowercaseOrgCount).toBe(0);
+  });
 });
