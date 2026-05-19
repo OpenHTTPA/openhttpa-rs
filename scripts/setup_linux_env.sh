@@ -20,7 +20,7 @@ echo "📦 Installing system dependencies..."
 sudo apt-get install -y \
     unzip bubblewrap rsync libgtk2.0-dev m4 patch make gcc \
     wget curl gnupg lsb-release ca-certificates pkg-config \
-    libssl-dev cmake ninja-build libpcre3-dev zlib1g-dev
+    libssl-dev cmake ninja-build libpcre3-dev zlib1g-dev binaryen
 
 # 3. Install Rust Toolchain
 echo "🦀 Installing Rust toolchain..."
@@ -69,9 +69,20 @@ if ! command -v uv &> /dev/null; then
     source "$HOME/.local/bin/env"
 fi
 
+# 6b. Install GitHub CLI (gh)
+echo "📦 Installing GitHub CLI (gh)..."
+if ! command -v gh &> /dev/null; then
+    sudo mkdir -p -m 755 /etc/apt/keyrings
+    wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+    sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+    sudo apt-get update
+    sudo apt-get install -y gh
+fi
+
 # 7. Install Cargo Tools
-echo "🛡️ Installing cargo-audit, cargo-deny, and maturin..."
-cargo install cargo-audit cargo-deny maturin --locked
+echo "🛡️ Installing cargo-audit, cargo-deny, maturin, and cargo-cyclonedx..."
+cargo install cargo-audit cargo-deny maturin cargo-cyclonedx --locked
 
 # 8. Install Trivy (Container Scanner)
 echo "🔍 Installing Trivy..."

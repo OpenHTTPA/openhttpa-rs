@@ -27,7 +27,7 @@ export RISC0_SKIP_BUILD_KERNELS := 1
 # On non-hardware runners, we provide a dummy export path to allow compilation
 export OPTEE_CLIENT_EXPORT ?= /tmp
 
-.PHONY: all build build-release test test-release clean demo clippy fmt format check check-bindings audit test-web check-examples e2e test-all-examples example-resumption example-ohttpa example-attestation example-oblivious example-gpu example-hub example-orchestration example-oracle native-build native-demo native-test ci docs demo-stable-up demo-stable-down test-contracts build-contracts formal formal-verify formal-pv formal-tamarin test-zk-compression audit-zk-scalability status
+.PHONY: all build build-release test test-release clean demo clippy fmt format check check-bindings audit test-web check-examples e2e test-all-examples example-resumption example-ohttpa example-attestation example-oblivious example-gpu example-hub example-orchestration example-oracle native-build native-demo native-test ci docs demo-stable-up demo-stable-down test-contracts build-contracts formal formal-verify formal-pv formal-tamarin test-zk-compression audit-zk-scalability status publish-python publish-npm publish-wasm publish-go publish-crates publish-github publish-all
 
 all: build test
 
@@ -445,6 +445,28 @@ bind-c: ## Build C bindings
 
 wasm: ## Build browser Wasm bindings
 	make -C demo/multiparty-webapp wasm
+
+## -- Publish / Distribution --
+
+publish-python: ## Publish Python bindings to PyPI
+	@bash scripts/publish_python.sh
+
+publish-npm: ## Publish Node.js bindings to npm
+	@bash scripts/publish_npm.sh
+
+publish-wasm: ## Publish WASM bindings to npm
+	@bash scripts/publish_wasm.sh
+
+publish-go: ## Publish Go FFI module to Git/Go Proxy
+	@bash scripts/publish_go.sh
+
+publish-crates: ## Publish workspace Rust crates to crates.io
+	@bash scripts/publish_crates.sh
+
+publish-github: ## Build hardened production binary, SBOM, and publish GitHub Release
+	@bash scripts/publish_github.sh
+
+publish-all: publish-crates publish-python publish-npm publish-wasm publish-go publish-github ## Publish to all destinations sequentially
 
 ## -- Native Infrastructure --
 

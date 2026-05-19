@@ -18,7 +18,7 @@ fi
 
 # 2. Install System Dependencies
 echo "📦 Installing system dependencies via Homebrew..."
-brew install make pcre2 openssl zlib binaryen pkg-config cmake ninja
+brew install make pcre2 openssl zlib binaryen pkg-config cmake ninja gh
 
 # 3. Install Rust Toolchain
 echo "🦀 Installing Rust toolchain..."
@@ -66,8 +66,8 @@ if ! command -v uv &> /dev/null; then
 fi
 
 # 7. Install Cargo Tools
-echo "🛡️ Installing cargo-audit, cargo-deny, and maturin..."
-cargo install cargo-audit cargo-deny maturin --locked
+echo "🛡️ Installing cargo-audit, cargo-deny, maturin, and cargo-cyclonedx..."
+cargo install cargo-audit cargo-deny maturin cargo-cyclonedx --locked
 
 # 8. Install Trivy (Container Scanner)
 echo "🔍 Installing Trivy..."

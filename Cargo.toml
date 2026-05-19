@@ -147,19 +147,22 @@ proptest         = "1.11"
 fs2              = "0.4"
 
 # ── internal crates ────────────────────────────────────────────────────────────
-openhttpa-proto      = { path = "crates/openhttpa-proto" }
-openhttpa-crypto     = { path = "crates/openhttpa-crypto" }
-openhttpa-headers    = { path = "crates/openhttpa-headers" }
-openhttpa-core       = { path = "crates/openhttpa-core" }
-openhttpa-tee        = { path = "crates/openhttpa-tee" }
-openhttpa-attestation = { path = "crates/openhttpa-attestation" }
-openhttpa-transport  = { path = "crates/openhttpa-transport" }
-openhttpa-server     = { path = "crates/openhttpa-server" }
-openhttpa-client     = { path = "crates/openhttpa-client" }
-openhttpa-llm        = { path = "crates/openhttpa-llm" }
-openhttpa-mcp        = { path = "crates/openhttpa-mcp" }
-openhttpa-mesh       = { path = "crates/openhttpa-mesh" }
-openhttpa-a2a         = { path = "crates/openhttpa-a2a" }
+openhttpa-proto      = { path = "crates/openhttpa-proto", version = "0.1.1" }
+openhttpa-crypto     = { path = "crates/openhttpa-crypto", version = "0.1.1" }
+openhttpa-headers    = { path = "crates/openhttpa-headers", version = "0.1.1" }
+openhttpa-core       = { path = "crates/openhttpa-core", version = "0.1.1" }
+openhttpa-tee        = { path = "crates/openhttpa-tee", version = "0.1.1" }
+openhttpa-attestation = { path = "crates/openhttpa-attestation", version = "0.1.1" }
+openhttpa-transport  = { path = "crates/openhttpa-transport", version = "0.1.1" }
+openhttpa-server     = { path = "crates/openhttpa-server", version = "0.1.1" }
+openhttpa-client     = { path = "crates/openhttpa-client", version = "0.1.1" }
+openhttpa-llm        = { path = "crates/openhttpa-llm", version = "0.1.1" }
+openhttpa-mcp        = { path = "crates/openhttpa-mcp", version = "0.1.1" }
+openhttpa-mesh       = { path = "crates/openhttpa-mesh", version = "0.1.1" }
+openhttpa-a2a         = { path = "crates/openhttpa-a2a", version = "0.1.1" }
+openhttpa-zk         = { path = "crates/openhttpa-zk", version = "0.1.1" }
+openhttpa-oracle     = { path = "crates/openhttpa-oracle", version = "0.1.1" }
+
 
 [profile.release]
 opt-level       = 3

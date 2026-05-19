@@ -20,3 +20,12 @@ tests/web/test-results/
 .venv/
 env/
 venv/
+
+# Machine-generated CycloneDX SBOMs
+*.cdx.json
+**/*.cdx.json
+
+# Binding artifacts
+bindings/python/dist/
+bindings/nodejs/npm/
+bindings/go/lib/

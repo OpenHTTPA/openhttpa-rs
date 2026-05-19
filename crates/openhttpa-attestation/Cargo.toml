@@ -23,7 +23,7 @@ amd_snp   = []          # AMD SNP VCEK chain via system library
 [dependencies]
 openhttpa-proto = { workspace = true }
 openhttpa-tee   = { workspace = true }
-openhttpa-zk    = { path = "../openhttpa-zk" }
+openhttpa-zk    = { workspace = true }
 bytes        = { workspace = true }
 serde        = { workspace = true }
 serde_json   = { workspace = true }

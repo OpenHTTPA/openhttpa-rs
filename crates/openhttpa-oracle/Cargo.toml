@@ -6,12 +6,12 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-openhttpa-proto = { path = "../openhttpa-proto" }
-openhttpa-tee = { path = "../openhttpa-tee" }
-openhttpa-zk = { path = "../openhttpa-zk" }
-openhttpa-core = { path = "../openhttpa-core" }
-openhttpa-server = { path = "../openhttpa-server" }
-openhttpa-client = { path = "../openhttpa-client" }
+openhttpa-proto = { workspace = true }
+openhttpa-tee = { workspace = true }
+openhttpa-zk = { workspace = true }
+openhttpa-core = { workspace = true }
+openhttpa-server = { workspace = true }
+openhttpa-client = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 serde = { workspace = true }

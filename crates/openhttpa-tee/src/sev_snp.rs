@@ -12,7 +12,7 @@ use bytes::Bytes;
 
 use openhttpa_proto::{AttestQuote, QuoteType};
 
-use crate::evidence::{AttestationEvidence, SevSnpEvidence};
+use crate::evidence::AttestationEvidence;
 use crate::provider::{QuoteRequest, TeeAdapter, TeeProvider, TeeProviderError};
 
 /// SEV-SNP attestation provider.
@@ -25,17 +25,18 @@ impl TeeAdapter for SevSnpTeeProvider {
 
     fn generate_evidence(
         &self,
-        request: &QuoteRequest,
+        _request: &QuoteRequest,
     ) -> Result<AttestationEvidence, TeeProviderError> {
-        #[cfg(feature = "sev_snp")]
+        #[cfg(all(feature = "sev_snp", target_os = "linux"))]
         {
+            use crate::evidence::SevSnpEvidence;
             use sev::firmware::guest::Firmware;
 
             let mut fw =
                 Firmware::open().map_err(|e| TeeProviderError::NotAvailable(format!("{e:?}")))?;
 
             let mut user_data = [0u8; 64];
-            user_data.copy_from_slice(&request.report_data);
+            user_data.copy_from_slice(&_request.report_data);
 
             let report_bytes = fw
                 .get_report(None, Some(user_data), Some(0))
@@ -51,17 +52,18 @@ impl TeeAdapter for SevSnpTeeProvider {
         }
 
         #[allow(unreachable_code)]
-        #[cfg(not(feature = "sev_snp"))]
+        #[cfg(not(all(feature = "sev_snp", target_os = "linux")))]
         Err(TeeProviderError::NotAvailable(
-            "sev_snp feature not enabled at compile time".to_owned(),
+            "sev_snp feature not supported on this platform or not enabled at compile time"
+                .to_owned(),
         ))
     }
 
     fn is_available(&self) -> bool {
-        #[cfg(feature = "sev_snp")]
+        #[cfg(all(feature = "sev_snp", target_os = "linux"))]
         let res = sev::firmware::guest::Firmware::open().is_ok();
 
-        #[cfg(not(feature = "sev_snp"))]
+        #[cfg(not(all(feature = "sev_snp", target_os = "linux")))]
         let res = false;
 
         res

@@ -19,8 +19,8 @@ cuda = ["zk", "risc0-zkvm/cuda"]
 metal = ["zk", "risc0-zkvm/metal"]
 
 [dependencies]
-openhttpa-proto = { path = "../openhttpa-proto" }
-openhttpa-crypto = { path = "../openhttpa-crypto" }
+openhttpa-proto = { workspace = true }
+openhttpa-crypto = { workspace = true }
 risc0-zkvm = { version = "1.2", default-features = false, features = ["prove"], optional = true }
 serde = { workspace = true }
 tracing = { workspace = true }

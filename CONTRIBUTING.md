@@ -104,6 +104,44 @@ Add an entry to `CHANGELOG.md` for every notable change:
 - Use prefix labels: `Added`, `Changed`, `Fixed`, `Security`, `Breaking`, `Deprecated`, `Removed`.
 - Security findings must be tagged with their audit ID (e.g., `SA-01`, `SA-02`).
 
+## Release and Publishing
+
+The release pipeline is modularized using standard `make` targets that call specialized bash scripts under `scripts/`. This allows maintainers to test and run the entire packaging and publication process locally in dry-run mode before pushing tags to trigger the GitHub Actions release workflow.
+
+### Single Source of Version Truth
+
+To prevent version mismatch errors across language bindings and platforms, the repository enforces a central version management model:
+
+- **The Source of Truth**: The canonical project version is declared exactly once in the root **`Cargo.toml`** under `[workspace.package] version`.
+- **Dynamic Resolution**: All sub-crates (`openhttpa-*`), browser WASM packages, and demo servers inherit this central version dynamically.
+- **Release-Time Synchronization**: Publishing scripts automatically synchronize external package specifications (e.g. updating Node.js `package.json` dynamically right before publish, building correct Python wheel targets, and applying unified Go and GitHub tag names).
+- **To Bump Versions**: Simply increment the `version` field in the root **`Cargo.toml`**; the modular publish pipelines will dynamically handle all other ecosystems.
+
+### Local Dry-Run Verification
+
+To run a dry-run check of the entire publishing pipeline across all ecosystems (Crates, NPM, PyPI, WASM, Go, and GitHub Release), execute:
+
+```bash
+DRY_RUN=1 make publish-all
+```
+
+This performs all compilation, linking, and registry validations without actually publishing or pushing tags to remote servers.
+
+### Individual Package Publishing Targets
+
+If you only need to build and verify a specific target binding, you can run the individual target script:
+
+- **Workspace Rust Crates**: `DRY_RUN=1 make publish-crates`
+- **Python Bindings**: `DRY_RUN=1 make publish-python`
+- **Node.js Bindings**: `DRY_RUN=1 make publish-npm`
+- **WebAssembly (WASM)**: `DRY_RUN=1 make publish-wasm`
+- **Go FFI Bindings**: `DRY_RUN=1 make publish-go`
+- **GitHub Release & SBOM**: `DRY_RUN=1 make publish-github`
+
+### GitHub Actions CI Release
+
+The `.github/workflows/release.yml` pipeline triggers automatically when a semantic version tag (e.g., `v*`) is pushed. The CI runner executes the identical `make` targets. By default, any run not triggered by an official release tag defaults to `DRY_RUN=true` to guarantee safety.
+
 ## Getting Help
 
 If you have questions, please join our [Discord](https://discord.gg/openhttpa) or start a discussion on GitHub.

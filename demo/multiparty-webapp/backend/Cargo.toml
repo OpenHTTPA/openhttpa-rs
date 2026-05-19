@@ -14,22 +14,22 @@ path = "src/main.rs"
 zk = ["openhttpa-core/zk", "openhttpa-server/zk", "dep:openhttpa-zk"]
 
 [dependencies]
-openhttpa-zk           = { path = "../../../crates/openhttpa-zk", version = "0.1.0", optional = true }
-openhttpa-proto        = { path = "../../../crates/openhttpa-proto", version = "0.1.0" }
-openhttpa-crypto       = { path = "../../../crates/openhttpa-crypto", version = "0.1.0" }
-openhttpa-headers      = { path = "../../../crates/openhttpa-headers", version = "0.1.0" }
-openhttpa-core         = { path = "../../../crates/openhttpa-core", version = "0.1.0" }
-openhttpa-attestation  = { path = "../../../crates/openhttpa-attestation", version = "0.1.0" }
-openhttpa-tee          = { path = "../../../crates/openhttpa-tee", version = "0.1.0" }
-openhttpa-server       = { path = "../../../crates/openhttpa-server", version = "0.1.0" }
-openhttpa-client       = { path = "../../../crates/openhttpa-client", version = "0.1.0" }
+openhttpa-zk           = { workspace = true, optional = true }
+openhttpa-proto        = { workspace = true }
+openhttpa-crypto       = { workspace = true }
+openhttpa-headers      = { workspace = true }
+openhttpa-core         = { workspace = true }
+openhttpa-attestation  = { workspace = true }
+openhttpa-tee          = { workspace = true }
+openhttpa-server       = { workspace = true }
+openhttpa-client       = { workspace = true }
 getrandom           = { workspace = true }
-openhttpa-llm          = { path = "../../../crates/openhttpa-llm", version = "0.1.0" }
-openhttpa-mcp          = { path = "../../../crates/openhttpa-mcp", version = "0.1.0" }
-openhttpa-a2a           = { path = "../../../crates/openhttpa-a2a", version = "0.1.0" }
-openhttpa-mesh         = { path = "../../../crates/openhttpa-mesh", version = "0.1.0" }
-openhttpa-transport    = { path = "../../../crates/openhttpa-transport", version = "0.1.0" }
-openhttpa-oracle       = { path = "../../../crates/openhttpa-oracle", version = "0.1.0" }
+openhttpa-llm          = { workspace = true }
+openhttpa-mcp          = { workspace = true }
+openhttpa-a2a          = { workspace = true }
+openhttpa-mesh         = { workspace = true }
+openhttpa-transport    = { workspace = true }
+openhttpa-oracle       = { workspace = true }
 uuid                = { workspace = true }
 async-trait         = "0.1"
 axum                = { workspace = true, features = ["macros"] }

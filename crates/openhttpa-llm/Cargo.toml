@@ -18,7 +18,7 @@ openhttpa-crypto       = { workspace = true }
 openhttpa-client       = { workspace = true }
 openhttpa-core         = { workspace = true }
 openhttpa-tee          = { workspace = true }
-openhttpa-zk           = { path = "../openhttpa-zk" }
+openhttpa-zk           = { workspace = true }
 sha2                = { workspace = true }
 bytes               = { workspace = true }
 http                = { workspace = true }

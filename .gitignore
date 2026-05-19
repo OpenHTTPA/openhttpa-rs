@@ -85,6 +85,7 @@ test-results/
 Thumbs.db
 .pnpm-debug.log
 .eslintcache
+.pnpm-store/
 
 # Project Specific
 modules/caddy/openhttpa-caddy
@@ -103,3 +104,14 @@ runners/
 *.tar.gz
 *.pdf
 *.txt
+
+# CycloneDX SBOM output files
+*.cdx.json
+**/*.cdx.json
+
+# Release & Binding Artifacts
+bindings/python/dist/
+bindings/python/target/
+bindings/nodejs/npm/
+bindings/nodejs/target/
+bindings/go/lib/

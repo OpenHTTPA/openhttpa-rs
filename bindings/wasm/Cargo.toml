@@ -47,8 +47,8 @@ rand_core = { version = "0.6", features = ["getrandom"] }
 
 # Hex encoding / decoding
 hex = { workspace = true }
-openhttpa-proto   = { path = "../../crates/openhttpa-proto", version = "0.1.0" }
-openhttpa-headers = { path = "../../crates/openhttpa-headers", version = "0.1.0" }
+openhttpa-proto   = { workspace = true }
+openhttpa-headers = { workspace = true }
 http = { workspace = true }
 hmac = { workspace = true }
 

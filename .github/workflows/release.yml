@@ -80,7 +80,7 @@ jobs:
 
   # ─── Phase 2: Multi-Language Binding Distribution ──────────────────────────
   # These jobs run in parallel after the 'validate' gate passes.
-  # We distribute to Python, Node.js, and WASM registries to provide a
+  # We distribute to Python, Node.js, WASM, Go, and Crates registries to provide a
   # comprehensive developer surface.
 
   publish-python:
@@ -98,29 +98,12 @@ jobs:
         with:
           path: target/release
           key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
-      - name: Build wheels
-        run: |
-          # ─── Entry-Level Guidance: Python Bindings ──────────────────────────
-          # 1. Maturin: This is the bridge between Rust and Python. It compiles 
-          #    the Rust code into a binary 'wheel' (.whl) that Python can import.
-          # 2. UV: A modern, ultra-fast Python package manager used here to 
-          #    build and upload the artifacts without needing a full pip setup.
-          # 3. Release Mode: Always use --release to strip debug info and enable 
-          #    LLVM optimizations for production performance.
-          # ────────────────────────────────────────────────────────────────────
-          cd bindings/python
-          uvx maturin build --release --out dist
-      - name: Publish to PyPI
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Build and Publish Python wheels
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          # The '--skip-existing' flag prevents the pipeline from failing if 
-          # you try to upload a version that already exists on PyPI.
-          cd bindings/python
-          uvx maturin publish --skip-existing
+          DRY_RUN: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: make publish-python
 
-  # ─── Publish npm package ────────────────────────────────────────────────────
   publish-npm:
     name: publish npm package
     needs: [validate]
@@ -132,31 +115,13 @@ jobs:
         with:
           node-version: '${{ env.NODE_VERSION }}'
           registry-url: 'https://registry.npmjs.org'
-      - run: |
-          # ─── Entry-Level Guidance: Node.js Bindings ─────────────────────────
-          # 1. NAPI-RS: Node.js cannot run Rust directly. NAPI-RS generates the 
-          #    necessary C-level 'glue' code to expose Rust functions as 
-          #    Javascript methods in a '.node' binary.
-          # 2. Dual-Publish: We push to both npm and GitHub to maximize 
-          #    availability. GITHUB_TOKEN is built-in, but NPM_TOKEN must be 
-          #    added as a secret by an admin.
-          # ────────────────────────────────────────────────────────────────────
-          cd bindings/nodejs
-          pnpm install
-          pnpm run build --release
-
-          # Dual-Publish Strategy: 
-          # 1. Official npm registry
-          pnpm publish --no-git-checks --registry https://registry.npmjs.org
-
-          # 2. GitHub Packages (Free for OSS)
-          # We update the name in package.json temporarily or use npm config
-          npm config set //npm.pkg.github.com/:_authToken ${{ secrets.GITHUB_TOKEN }}
-          pnpm publish --no-git-checks --registry https://npm.pkg.github.com
+      - name: Build and Publish NPM Node.js package
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: make publish-npm
 
-  # ─── Publish WASM package to npm ───────────────────────────────────────────
   publish-wasm:
     name: publish wasm package
     needs: [validate]
@@ -169,25 +134,6 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: wasm-pack@${{ env.WASM_PACK_VERSION }}
-      - name: Build WASM (Release)
-        run: |
-          # ─── Entry-Level Guidance: WebAssembly (WASM) ───────────────────────
-          # 1. wasm-pack: This tool takes your Rust code and compiles it to 
-          #    WebAssembly (a binary format browsers can run).
-          # 2. Target 'web': This generates ES Modules (import/export) that 
-          #    work directly in modern browsers without needing a bundler.
-          # 3. wasm-opt: This is a post-processing tool that further shrinks 
-          #    the .wasm file size (often by 20-50%) for faster web downloads.
-          # ────────────────────────────────────────────────────────────────────
-          cd bindings/wasm
-          wasm-pack build --target web --release
-      - name: Optimize WASM artifact
-        run: |
-          cd bindings/wasm
-          # wasm-opt is pre-installed on self-hosted runners via setup_linux_env.sh
-          if command -v wasm-opt >/dev/null 2>&1; then
-            wasm-opt -O3 pkg/openhttpa_wasm_bg.wasm -o pkg/openhttpa_wasm_bg.wasm
-          fi
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -195,19 +141,13 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: 'https://registry.npmjs.org'
-      - name: Publish to npm and GitHub Packages
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          cd bindings/wasm/pkg
-          # Dual-Publish Strategy for WASM
-          pnpm publish --no-git-checks --registry https://registry.npmjs.org
-
-          npm config set //npm.pkg.github.com/:_authToken ${{ secrets.GITHUB_TOKEN }}
-          pnpm publish --no-git-checks --registry https://npm.pkg.github.com
+      - name: Build and Publish WebAssembly package
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: make publish-wasm
 
-  # ─── Publish Go package ─────────────────────────────────────────────────────
   publish-go:
     name: publish go package
     needs: [validate]
@@ -218,35 +158,24 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-      - name: Build C Library
-        run: |
-          # ─── Entry-Level Guidance: Go Bindings ──────────────────────────────
-          # 1. CGO: Go's way of calling C code. Since Rust can export a C-style 
-          #    API, Go can talk to Rust through this 'FFI' (Foreign Function Interface).
-          # 2. Static Archive (.a): By bundling the Rust logic into a static 
-          #    library, the final Go user doesn't need to install Rust; they 
-          #    just link against this pre-built file.
-          # ────────────────────────────────────────────────────────────────────
-          cargo build --release -p openhttpa-c
-      - name: Bundle Artifacts
-        run: |
-          mkdir -p bindings/go/lib
-          cp target/release/libopenhttpa_c.a bindings/go/lib/
-          cp bindings/go/openhttpa.h bindings/go/lib/
-          # Copy FIPS dependencies for macOS/Linux
-          if [ -d target/release/build/aws-lc-fips-sys-* ]; then
-            cp target/release/build/aws-lc-fips-sys-*/out/build/artifacts/libaws_lc_fips_* bindings/go/lib/ || true
-          fi
-      - name: Tag and Push
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          # GO-MODULE: Go requires tags to follow 'vX.Y.Z' for versioning.
-          # We create a 'go-v*' alias tag to allow the Go proxy to resolve 
-          # this sub-directory as a versioned module.
-          git config user.name "openhttpa-bot"
-          git config user.email "bot@aiql.org"
-          git tag -f go-${{ github.ref_name }}
-          git push origin go-${{ github.ref_name }}
+      - name: Build and Tag Go FFI package
+        env:
+          TAG: ${{ github.ref_name }}
+          DRY_RUN: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: make publish-go
+
+  publish-crates:
+    name: publish crates
+    needs: [validate]
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish workspace crates to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          DRY_RUN: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: make publish-crates
 
   # ─── Phase 3: Final Production Binary Release ─────────────────────────────
   # This final phase bundles the compiled hardware-hardened binaries along
@@ -255,30 +184,25 @@ jobs:
   github-release:
     name: github release
     runs-on: self-hosted
-    needs: [publish-python, publish-npm, publish-wasm, publish-go]
+    needs: [publish-python, publish-npm, publish-wasm, publish-go, publish-crates]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      # Build dependencies (cmake, ninja-build, etc.) are pre-installed via setup_linux_env.sh
       - uses: actions/cache@v4
         with:
           path: target/release
           key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
-      # LOW-04: release binary must NOT include the mock feature (MockTeeProvider).
-      # Enforce tdx,sev_snp,aws_nitro for production builds
-      - run: cargo build --release --workspace --features tdx,sev_snp,aws_nitro,trustzone,nvidia_gpu
-      - name: Generate SBOM (CycloneDX)
-        # SBOM: publish a machine-readable software bill of materials so downstream
-        # consumers and auditors can inspect the full dependency tree (including
-        # transitive crates) without needing the source repository.
-        run: |
-          cargo install cargo-cyclonedx --locked
-          cargo cyclonedx --format json --output-pattern prefix --all
+      - name: Build production binary and SBOM
+        env:
+          TAG: ${{ github.ref_name }}
+          DRY_RUN: true
+        run: make publish-github
       - name: Generate build attestation
         uses: actions/attest-build-provenance@v1
         with:
           subject-path: target/release/backend
       - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
             target/release/backend
