@@ -27,7 +27,7 @@ export RISC0_SKIP_BUILD_KERNELS := 1
 # On non-hardware runners, we provide a dummy export path to allow compilation
 export OPTEE_CLIENT_EXPORT ?= /tmp
 
-.PHONY: all build build-release test test-release clean demo clippy fmt format check check-bindings audit test-web check-examples e2e test-all-examples example-resumption example-ohttpa example-attestation example-oblivious example-gpu example-hub example-orchestration example-oracle native-build native-demo native-test ci docs demo-stable-up demo-stable-down test-contracts build-contracts formal formal-verify formal-pv formal-tamarin test-zk-compression audit-zk-scalability
+.PHONY: all build build-release test test-release clean demo clippy fmt format check check-bindings audit test-web check-examples e2e test-all-examples example-resumption example-ohttpa example-attestation example-oblivious example-gpu example-hub example-orchestration example-oracle native-build native-demo native-test ci docs demo-stable-up demo-stable-down test-contracts build-contracts formal formal-verify formal-pv formal-tamarin test-zk-compression audit-zk-scalability status
 
 all: build test
 
@@ -322,6 +322,24 @@ demo-stable-restart: demo-stable-down demo-stable-up ## Restart the stable demo 
 # Show status of the stable demo instance
 demo-stable-status: ## Show status of the stable demo instance
 	make -C demo/multiparty-webapp stable-status
+
+status: ## Show complete status of project workspace, Git, Husky hooks, and stable docker stack
+	@echo "\033[1;34m=== OpenHTTPA Project Status ===\033[0m"
+	@echo ""
+	@echo "\033[1;33m[Git Workspace Status]\033[0m"
+	@git status -s || echo "Error: Not a Git repository"
+	@echo ""
+	@echo "\033[1;33m[Husky Hooks Status]\033[0m"
+	@if [ -x .husky/commit-msg ] && [ -x .husky/prepare-commit-msg ]; then \
+		echo "  \033[1;32m✓\033[0m Husky hooks are configured and executable"; \
+	else \
+		echo "  \033[1;31m✗\033[0m Warning: Husky hooks are missing or not executable"; \
+	fi
+	@echo ""
+	@echo "\033[1;33m[Stable Demo Stack Status]\033[0m"
+	@$(MAKE) demo-stable-status
+	@echo ""
+	@echo "\033[1;34m================================\033[0m"
 
 # Follow logs from the stable demo instance
 demo-stable-logs: ## Follow logs from the stable demo instance
