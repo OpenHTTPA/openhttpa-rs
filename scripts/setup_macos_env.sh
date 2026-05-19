@@ -82,6 +82,11 @@ if ! command -v forge &> /dev/null; then
     export PATH="$HOME/.foundry/bin:$PATH"
     foundryup
 fi
+# 10. Install project package dependencies (if run in repo root)
+if [ -f "package.json" ]; then
+    echo "📦 Installing project npm packages..."
+    pnpm install
+fi
 
 echo ""
 echo "✅ macOS Setup Complete!"
