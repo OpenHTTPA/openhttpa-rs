@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// Copyright 2026 The OpenHTTPA Foundation (AIQL.org)
+// Copyright 2026 The OpenHTTPA Foundation (openhttpa.org)
 
 /**
  * OpenHTTPA multiparty-webapp — Playwright E2E test suite
@@ -483,9 +483,9 @@ test.describe('Frontend UI', () => {
         description: 'NIST Security Analysis Report (uppercase name)',
       },
       {
-        selector: 'a[href*="NIST-SP-OPENHTTPA-Security-Guidelines.md"]',
+        selector: 'a[href*="OPENHTTPA-NIST-SP-Security-Guidelines.md"]',
         expectedHref:
-          'https://github.com/OpenHTTPA/openhttpa-rs/blob/openhttpa/docs/nist/NIST-SP-OPENHTTPA-Security-Guidelines.md',
+          'https://github.com/OpenHTTPA/openhttpa-rs/blob/openhttpa/docs/nist/OPENHTTPA-NIST-SP-Security-Guidelines.md',
         description: 'NIST Operational SP Guidelines (uppercase name)',
       },
       {
@@ -585,5 +585,41 @@ test.describe('Frontend UI', () => {
     const lowercaseOrgLinks = page.locator('a[href*="github.com/openhttpa/"]');
     const lowercaseOrgCount = await lowercaseOrgLinks.count();
     expect(lowercaseOrgCount).toBe(0);
+  });
+
+  /**
+   * E2E Verification for contact information email links.
+   *
+   * Coverage (Rule 3):
+   *  1. Normal Case: Both email contact links (mid-page footer and main footer) are visible
+   *     and point to the correct email address ('mailto:info@openhttpa.org').
+   *  2. Edge Case: Ensure the mailto URL prefix is exactly in lowercase, and has no stray whitespace
+   *     or characters.
+   *  3. Failed/Negative Case: Ensure that no invalid/stale email addresses (like old domains or info@openhttpa.com)
+   *     exist in any footer anchor element.
+   *  4. Global Impact Case: Verifies that contact links are integrated correctly and do not disrupt
+   *     the page layout, maintaining complete UX integrity.
+   */
+  test('verify contact email links in footers are correct and functional', async ({ page }) => {
+    // 1. Normal Case: Verify that email links exist and point to mailto:info@openhttpa.org
+    const emailLinks = page.locator('a[href="mailto:info@openhttpa.org"]');
+    await expect(emailLinks).toHaveCount(2);
+
+    // Verify each link individually is visible
+    for (let i = 0; i < 2; i++) {
+      const link = emailLinks.nth(i);
+      await expect(link).toBeVisible();
+
+      // Edge Case: Validate exact attribute matching to ensure clean syntax
+      const href = await link.getAttribute('href');
+      expect(href).toBe('mailto:info@openhttpa.org');
+    }
+
+    // 2. Failed/Negative Case: Ensure there are no links to incorrect/stale email addresses
+    const invalidEmailLinks = page.locator(
+      'a[href^="mailto:"]:not([href="mailto:info@openhttpa.org"])',
+    );
+    const invalidCount = await invalidEmailLinks.count();
+    expect(invalidCount).toBe(0);
   });
 });

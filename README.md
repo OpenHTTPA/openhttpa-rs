@@ -1,7 +1,7 @@
 # `OpenHTTPA`
 
 <!-- SPDX-License-Identifier: Apache-2.0 OR MIT -->
-<!-- Copyright 2026 The `OpenHTTPA` Foundation (AIQL.org) -->
+<!-- Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org) -->
 
 > The authoritative reference implementation of the **OpenHTTPA** protocol — a post-quantum,
 > hardware-attested application transport standard engineered for Zero-Trust confidential
@@ -190,7 +190,7 @@ Detailed reports and proofs are available in the [Formal Security Suite](#formal
 ### NIST Technical Reports & Guidelines
 
 - **[NIST Technical Report (Security Analysis)](docs/nist/OPENHTTPA-NIST-Technical-Report.md)**: Foundational security analysis and Post-Quantum alignment.
-- **[NIST Security Guidelines (Operational SP)](docs/nist/NIST-SP-OPENHTTPA-Security-Guidelines.md)**: Operational best practices and TEE configuration.
+- **[NIST Security Guidelines (Operational SP)](docs/nist/OPENHTTPA-NIST-SP-Security-Guidelines.md)**: Operational best practices and TEE configuration.
 - **[FIPS 140-3 Compliance Capability Report](docs/nist/OPENHTTPA-FIPS-Compliance-Capability.md)**: Roadmap for federal cryptographic certification.
 
 ### Formal Security Suite
@@ -487,4 +487,4 @@ Refer to the formal [PATENTS.md](PATENTS.md) declaration for comprehensive legal
 
 - [arXiv:2205.01052](https://arxiv.org/abs/2205.01052): Original `OpenHTTPA` academic pre-print.
 
-**The `OpenHTTPA` Foundation (AIQL.org)**
+**The `OpenHTTPA` Foundation (openhttpa.org)**

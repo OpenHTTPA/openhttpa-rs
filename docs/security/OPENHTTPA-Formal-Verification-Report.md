@@ -2,11 +2,11 @@
 
 | Metadata           | Value                                      |
 | :----------------- | :----------------------------------------- |
-| **Document ID**    | AIQL-VER-2026-001                          |
+| **Document ID**    | OPENHTTPA-VER-2026-001                     |
 | **Version**        | 1.0 (Official Release)                     |
 | **Status**         | Final                                      |
 | **Date**           | May 2026                                   |
-| **Authors**        | The `OpenHTTPA` Foundation (AIQL.org)      |
+| **Authors**        | The `OpenHTTPA` Foundation (openhttpa.org) |
 | **Classification** | UNCLASSIFIED // PUBLIC                     |
 | **Subject**        | Symbolic and Temporal Verification Results |
 

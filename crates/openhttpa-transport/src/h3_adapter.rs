@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// Copyright 2026 The `OpenHTTPA` Foundation (AIQL.org)
+// Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
 //! HTTP/3 transport adapter using quinn + h3.
 //!

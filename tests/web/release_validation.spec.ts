@@ -13,7 +13,7 @@ test.describe('Release Validation', () => {
     const text = await footer.innerText();
     console.log(`FOOTER TEXT: "${text}"`);
 
-    await expect(footer).toContainText(/The OpenHTTPA Foundation \(AIQL.org\)/i);
+    await expect(footer).toContainText(/The OpenHTTPA Foundation \(openhttpa.org\)/i);
   });
 
   test('AtHS handshake succeeds', async ({ page }) => {

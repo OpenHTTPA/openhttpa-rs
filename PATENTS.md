@@ -21,4 +21,4 @@ This ensures `OpenHTTPA` remains a protected "Safe Harbor" for all legitimate us
 
 ---
 
-**The `OpenHTTPA` Foundation (AIQL.org)**
+**The `OpenHTTPA` Foundation (openhttpa.org)**

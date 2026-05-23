@@ -61,14 +61,14 @@ rm -rf dist/
 # Run the Maturin build under UV manager environment if UV is available, otherwise default
 if command -v uv >/dev/null 2>&1; then
     echo "[INFO] Using 'uvx maturin' for compilation."
-    uvx maturin build --release --out dist
+    uvx maturin build --release --out dist --auditwheel repair
 else
     echo "[INFO] Using local 'maturin' for compilation."
     if ! command -v maturin >/dev/null 2>&1; then
         echo "[ERROR] maturin is not installed. Run 'pip install maturin' or install uv." >&2
         exit 1
     fi
-    maturin build --release --out dist
+    maturin build --release --out dist --auditwheel repair
 fi
 
 echo "[INFO] Python wheels built successfully in bindings/python/dist/:"

@@ -9,7 +9,7 @@ description     = "OpenHTTPA Python bindings"
 readme          = "README.md"
 requires-python = ">=3.9"
 license         = { text = "Apache-2.0 OR MIT" }
-authors         = [{ name = "The OpenHTTPA Foundation (AIQL.org)", email = "info@aiql.org" }]
+authors         = [{ name = "The OpenHTTPA Foundation (openhttpa.org)", email = "info@openhttpa.org" }]
 
 keywords        = ["attestation", "tee", "http", "security"]
 classifiers     = [
@@ -18,7 +18,7 @@ classifiers     = [
 ]
 
 [project.urls]
-Homepage = "https://aiql.org"
+Homepage = "https://openhttpa.org"
 Repository = "https://github.com/openhttpa/openhttpa-rs"
 
 [tool.maturin]

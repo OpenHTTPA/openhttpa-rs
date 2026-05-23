@@ -105,7 +105,7 @@ fi
 
 echo "[INFO] Publishing Go module tag 'go-${TAG_NAME}'..."
 git config --global user.name "openhttpa-bot" || git config user.name "openhttpa-bot"
-git config --global user.email "bot@aiql.org" || git config user.email "bot@aiql.org"
+git config --global user.email "bot@openhttpa.org" || git config user.email "bot@openhttpa.org"
 
 # Force tag if it already exists to overwrite
 git tag -f "go-${TAG_NAME}"

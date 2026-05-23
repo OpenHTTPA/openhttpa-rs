@@ -115,3 +115,4 @@ bindings/python/target/
 bindings/nodejs/npm/
 bindings/nodejs/target/
 bindings/go/lib/
+scratch_test*

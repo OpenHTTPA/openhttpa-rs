@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// Copyright 2026 The OpenHTTPA Foundation (AIQL.org)
+// Copyright 2026 The OpenHTTPA Foundation (openhttpa.org)
 
 // Package openhttpa provides Go bindings for the OpenHTTPA Rust library via cgo.
 // # Building
@@ -18,7 +18,7 @@ package openhttpa
 
 /*
 #cgo LDFLAGS: -L${SRCDIR}/lib -lopenhttpa_c -Wl,-rpath,${SRCDIR}/lib -ldl -lm
-#cgo darwin LDFLAGS: -framework CoreFoundation -framework Security
+#cgo darwin LDFLAGS: -laws_lc_fips_0_13_14_crypto -framework CoreFoundation -framework Security
 #include "openhttpa.h"
 #include <stdlib.h>
 */

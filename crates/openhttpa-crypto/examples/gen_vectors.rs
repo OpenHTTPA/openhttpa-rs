@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// Copyright 2026 The `OpenHTTPA` Foundation (AIQL.org)
+// Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
 use openhttpa_crypto::hkdf::SessionKeys;
 use openhttpa_crypto::key_exchange::HybridKemPair;

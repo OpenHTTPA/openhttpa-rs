@@ -2,11 +2,11 @@
 
 | Metadata           | Value                                                |
 | :----------------- | :--------------------------------------------------- |
-| **Document ID**    | AIQL-PIA-2026-001                                    |
+| **Document ID**    | OPENHTTPA-PIA-2026-001                               |
 | **Version**        | 1.0 (Official Release)                               |
 | **Status**         | Final                                                |
 | **Date**           | May 2026                                             |
-| **Authors**        | The `OpenHTTPA` Foundation (AIQL.org)                |
+| **Authors**        | The `OpenHTTPA` Foundation (openhttpa.org)           |
 | **Classification** | UNCLASSIFIED // PUBLIC                               |
 | **Subject**        | Privacy Risk Analysis and Mitigation for `OpenHTTPA` |
 

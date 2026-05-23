@@ -1,7 +1,7 @@
 # openhttpa-go — Go bindings
 
 <!-- SPDX-License-Identifier: Apache-2.0 OR MIT -->
-<!-- Copyright 2026 The `OpenHTTPA` Foundation (AIQL.org) -->
+<!-- Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org) -->
 
 Go bindings for [OpenHTTPA](../../README.md) via cgo. The Go package wraps
 the C shared library produced by `bindings/c`.

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
-# Copyright 2026 The OpenHTTPA Foundation (AIQL.org)
+# Copyright 2026 The OpenHTTPA Foundation (openhttpa.org)
 
 # OpenHTTPA Workspace Makefile
 
@@ -26,6 +26,10 @@ export RISC0_SKIP_BUILD_KERNELS := 1
 # OP-TEE build requirement (optee-teec-sys)
 # On non-hardware runners, we provide a dummy export path to allow compilation
 export OPTEE_CLIENT_EXPORT ?= /tmp
+
+# Paths and Commands
+DEMO_DIR := demo/multiparty-webapp
+DEMO_MAKE := $(MAKE) -C $(DEMO_DIR)
 
 .PHONY: all build build-release test test-release clean demo clippy fmt format check check-bindings audit test-web check-examples e2e test-all-examples example-resumption example-ohttpa example-attestation example-oblivious example-gpu example-hub example-orchestration example-oracle native-build native-demo native-test ci docs demo-stable-up demo-stable-down test-contracts build-contracts formal formal-verify formal-pv formal-tamarin test-zk-compression audit-zk-scalability status publish-python publish-npm publish-wasm publish-go publish-crates publish-github publish-all
 
@@ -57,7 +61,12 @@ ci: ## Run all standard CI checks
 	$(MAKE) -j4 ci-parallel
 	@echo "All CI checks passed locally!"
 
-verify-all: format clippy build build-release test test-release ci test-all-examples e2e ## Exhaustive formal validation and verification suite
+verify-all: format clippy build build-release test test-release ci ## Exhaustive formal validation and verification suite
+	@echo "Starting E2E stack for project: $(COMPOSE_PROJECT_NAME) for verify-all"
+	@trap '$(MAKE) demo-down' EXIT; \
+	$(MAKE) demo-up; \
+	$(DEMO_MAKE) e2e-run; \
+	$(MAKE) test-all-examples
 	@echo "--- ALL FORMAL VALIDATION AND VERIFICATION COMPLETED SUCCESSFULLY ---"
 	@echo "The OpenHTTPA project stack is verified for production readiness."
 
@@ -180,11 +189,11 @@ test-web: ## Run Playwright E2E tests (individual)
 	pnpm test
 
 # Run full E2E suite (starts demo stack + tests)
-e2e: build wasm ## Run full E2E suite (starts demo stack + tests)
+e2e: ## Run full E2E suite (starts demo stack + tests)
 	@echo "Starting E2E stack for project: $(COMPOSE_PROJECT_NAME)"
-	@trap '$(MAKE) -C demo/multiparty-webapp down' EXIT; \
-	$(MAKE) -C demo/multiparty-webapp up; \
-	$(MAKE) -C demo/multiparty-webapp e2e-run; \
+	@trap '$(MAKE) demo-down' EXIT; \
+	$(MAKE) demo-up; \
+	$(DEMO_MAKE) e2e-run; \
 	$(MAKE) test-bindings
 
 # Fast workspace check
@@ -233,7 +242,7 @@ check-bindings: check-python-bindings check-node-bindings check-go-bindings ## V
 
 check-python-bindings:
 	@echo "Checking Python bindings..."
-	@command -v uv >/dev/null 2>&1 && uvx maturin build -m bindings/python/Cargo.toml --release || { cd bindings/python && maturin build --release; }
+	@command -v uv >/dev/null 2>&1 && uvx maturin build -m bindings/python/Cargo.toml --release --auditwheel repair || { cd bindings/python && maturin build --release --auditwheel repair; }
 
 check-node-bindings:
 	@echo "Checking Node.js bindings..."
@@ -256,7 +265,7 @@ clean: ## Remove basic build artifacts
 deep-clean: clean ## Remove ALL artifacts (node_modules, wasm, etc.)
 	rm -rf node_modules/
 	rm -rf bindings/nodejs/node_modules/
-	rm -rf demo/multiparty-webapp/frontend/wasm/
+	rm -rf $(DEMO_DIR)/frontend/wasm/
 	rm -rf playwright-report/ test-results/
 	find . -name "dist" -type d -exec rm -rf {} +
 	find . -name ".turbo" -type d -exec rm -rf {} +
@@ -302,26 +311,26 @@ formal: ## Run formal verification models (ProVerif)
 
 # Start the full demo stack (backend + frontend)
 demo-up: build wasm ## Launch the MPC demo via Docker
-	make -C demo/multiparty-webapp up
+	$(DEMO_MAKE) up
 
 # Stop the demo stack
 demo-down: ## Stop the demo stack
-	make -C demo/multiparty-webapp down
+	$(DEMO_MAKE) down
 
 # Start the stable demo instance (port 3001, isolated)
 demo-stable-up: build wasm ## Start the stable demo instance (port 3001, isolated)
-	make -C demo/multiparty-webapp stable-up
+	$(DEMO_MAKE) stable-up
 
 # Stop the stable demo instance
 demo-stable-down: ## Stop the stable demo instance
-	make -C demo/multiparty-webapp stable-down
+	$(DEMO_MAKE) stable-down
 
 # Restart the stable demo instance (clean refresh)
 demo-stable-restart: demo-stable-down demo-stable-up ## Restart the stable demo instance (clean refresh)
 
 # Show status of the stable demo instance
 demo-stable-status: ## Show status of the stable demo instance
-	make -C demo/multiparty-webapp stable-status
+	$(DEMO_MAKE) stable-status
 
 status: ## Show complete status of project workspace, Git, Husky hooks, and stable docker stack
 	@echo "\033[1;34m=== OpenHTTPA Project Status ===\033[0m"
@@ -343,7 +352,7 @@ status: ## Show complete status of project workspace, Git, Husky hooks, and stab
 
 # Follow logs from the stable demo instance
 demo-stable-logs: ## Follow logs from the stable demo instance
-	COMPOSE_PROJECT_NAME=openhttpa-stable docker compose -f demo/multiparty-webapp/docker-compose.yml logs -f
+	COMPOSE_PROJECT_NAME=openhttpa-stable docker compose -f $(DEMO_DIR)/docker-compose.yml logs -f
 
 # Launch the native Nginx/Caddy module demo stack
 demo-native-up: native-build ## Launch the native module demo stack
@@ -444,7 +453,7 @@ bind-c: ## Build C bindings
 	cargo build -p openhttpa-c --release
 
 wasm: ## Build browser Wasm bindings
-	make -C demo/multiparty-webapp wasm
+	$(DEMO_MAKE) wasm
 
 ## -- Publish / Distribution --
 

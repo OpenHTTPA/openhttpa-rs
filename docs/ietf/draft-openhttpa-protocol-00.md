@@ -15,12 +15,12 @@ pi: [toc, sortrefs, symrefs, compact, subcompact]
 author:
   - ins: G. King
     name: Gordon King
-    organization: The `OpenHTTPA` Foundation (AIQL.org)
-    email: info@aiql.org
+    organization: The `OpenHTTPA` Foundation (openhttpa.org)
+    email: info@openhttpa.org
   - ins: H. Wang
     name: Hans Wang
-    organization: The `OpenHTTPA` Foundation (AIQL.org)
-    email: info@aiql.org
+    organization: The `OpenHTTPA` Foundation (openhttpa.org)
+    email: info@openhttpa.org
 ---
 
 abstract
@@ -212,7 +212,7 @@ the following schema:
 
 # Test Vectors
 
-[Note to RFC Editor: The following test vectors were generated from the AIQL reference implementation (`openhttpa-rs`).]
+[Note to RFC Editor: The following test vectors were generated from the OpenHTTPA reference implementation (`openhttpa-rs`).]
 
 ### Hybrid KEM Key Exchange
 
@@ -519,7 +519,7 @@ Implementations MUST ensure that provenance data is only transmitted within esta
 
 This section documents the current implementation status of `OpenHTTPA` as of May 2026.
 
-- **AIQL Reference Implementation**: A production-grade Rust implementation is available
+- **OpenHTTPA Reference Implementation**: A production-grade Rust implementation is available
   at `https://github.com/openhttpa/openhttpa-rs`. It supports Intel TDX, AMD SEV-SNP, and
   NVIDIA Hopper GPU attestation.
 - **Go/Python/Node Bindings**: Language bindings are provided for seamless integration
@@ -529,15 +529,15 @@ This section documents the current implementation status of `OpenHTTPA` as of Ma
 
 # Acknowledgements
 
-The authors would like to thank the contributors to the The `OpenHTTPA` Foundation (AIQL.org) and the IETF
+The authors would like to thank the contributors to the The `OpenHTTPA` Foundation (openhttpa.org) and the IETF
 Security area for their feedback on early iterations of this protocol.
 
 # Contributors
 
 The following individuals have contributed to the design and implementation of `OpenHTTPA`:
 
-- **Alice Dev**: AIQL Core Team
-- **Bob Sec**: AIQL Security Audit
+- **Alice Dev**: OpenHTTPA Core Team
+- **Bob Sec**: OpenHTTPA Security Audit
 - **Charlie Implementer**: Language Bindings
 
 # IANA Considerations

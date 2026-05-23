@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// Copyright 2026 The `OpenHTTPA` Foundation (AIQL.org)
+// Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
 //! Classical ECDHE key exchange via `aws-lc-rs`, and hybrid KEM
 //! (X25519 + ML-KEM-768) for post-quantum security.

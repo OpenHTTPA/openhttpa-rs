@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// Copyright 2026 The OpenHTTPA Foundation (AIQL.org)
+// Copyright 2026 The OpenHTTPA Foundation (openhttpa.org)
 
 /**
  * domain_check.spec.ts
  *
- * Verifies that the OpenHTTPA demo UX works correctly when deployed to openhttpa.aiql.org.
+ * Verifies that the OpenHTTPA demo UX works correctly when deployed to openhttpa.org.
  * This test simulates the production domain environment to ensure relative paths
  * and cross-origin policies are handled correctly.
  */
 
 import { test, expect } from '@playwright/test';
 
-test.describe('Production Domain Verification (openhttpa.aiql.org)', () => {
+test.describe('Production Domain Verification (openhttpa.org)', () => {
   test.beforeEach(async ({ page }) => {
     // We assume the test environment (e.g. 127.0.0.1:3001) is running.
     // The "production domain" behavior is mostly about how the frontend

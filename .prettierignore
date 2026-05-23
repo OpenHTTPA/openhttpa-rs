@@ -3,29 +3,60 @@ bindings/nodejs/index.js
 bindings/nodejs/index.d.ts
 
 # Build artifacts
-target/
-node_modules/
-dist/
+**/target/**
+**/node_modules/**
+**/dist/**
+**/pkg/**
+**/bindings/nodejs/build/**
 
 # Submodules (rely on upstream formatting)
 crates/openhttpa-contract/lib/
 demo/multiparty-webapp/frontend/wasm/
 
 # Test artifacts
-test-results/
-playwright-report/
-tests/web/test-results/
+**/test-results/**
+**/playwright-report/**
+**/tests/web/test-results/**
+**/coverage/**
+**/htmlcov/**
+
+# Package managers & caches
+**/.pnpm-store/**
+**/.pnpm-debug.log
+**/.eslintcache
 
 # Virtual environments
-.venv/
-env/
-venv/
+**/.venv/**
+**/env/**
+**/venv/**
 
 # Machine-generated CycloneDX SBOMs
 *.cdx.json
 **/*.cdx.json
 
 # Binding artifacts
-bindings/python/dist/
-bindings/nodejs/npm/
-bindings/go/lib/
+**/bindings/python/dist/**
+**/bindings/nodejs/npm/**
+**/bindings/go/lib/**
+**/*.node
+**/*.dylib
+**/*.a
+**/*.so
+**/*.whl
+**/*.wasm
+
+# Temp & IDE & Agents files
+**/.git/**
+**/.history/**
+**/.idea/**
+**/.vscode/**
+**/scratch/**
+**/.agents/**
+**/actions-runners/**
+**/runners/**
+**/*.log
+**/*.bak
+**/*.tmp
+**/*.pdf
+**/*.txt
+
