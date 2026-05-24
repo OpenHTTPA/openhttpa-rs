@@ -33,11 +33,11 @@ impl AgentRouter {
             sessions.get(target_url).cloned()
         };
 
-        if let Some(session) = existing {
-            if session.is_alive() {
-                debug!("Reusing active session for {}", target_url);
-                return Ok(session);
-            }
+        if let Some(session) = existing
+            && session.is_alive()
+        {
+            debug!("Reusing active session for {}", target_url);
+            return Ok(session);
         }
 
         info!("Establishing new session with {}", target_url);

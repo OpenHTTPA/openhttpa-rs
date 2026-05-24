@@ -437,9 +437,10 @@ mod tests {
         key.seal_in_place(&make_nonce(5), b"aad", &mut buf).unwrap();
         buf[0] ^= 0xFF; // tamper
         let key2 = AeadKey::new(AeadAlgorithm::Aes256Gcm, &key_bytes).unwrap();
-        assert!(key2
-            .open_in_place(&make_nonce(5), b"aad", &mut buf)
-            .is_err());
+        assert!(
+            key2.open_in_place(&make_nonce(5), b"aad", &mut buf)
+                .is_err()
+        );
     }
 
     // ─── BoundAeadKey tests ────────────────────────────────────────────────

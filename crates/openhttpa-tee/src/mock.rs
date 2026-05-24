@@ -119,22 +119,22 @@ impl MockTeeProvider {
                 "driver" => {
                     return Err(TeeProviderError::Driver(
                         "Simulated driver failure".to_owned(),
-                    ))
+                    ));
                 }
                 "enclave" => {
                     return Err(TeeProviderError::Enclave(
                         "Simulated enclave crash".to_owned(),
-                    ))
+                    ));
                 }
                 "config" => {
                     return Err(TeeProviderError::Config(
                         "Simulated platform misconfiguration".to_owned(),
-                    ))
+                    ));
                 }
                 "not_available" => {
                     return Err(TeeProviderError::NotAvailable(
                         "Simulated hardware missing".to_owned(),
-                    ))
+                    ));
                 }
                 _ => {}
             }
@@ -320,13 +320,15 @@ mod tests {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let provider = MockTeeProvider::default();
-        std::env::set_var("OPENHTTPA_MOCK_FAILURE", "driver");
+        // SAFETY: single-threaded test context, ENV_MUTEX held.
+        unsafe { std::env::set_var("OPENHTTPA_MOCK_FAILURE", "driver") };
         let req = QuoteRequest {
             report_data: [0x01u8; 64],
         };
         let res = provider.generate_quote(&req);
         assert!(matches!(res, Err(TeeProviderError::Driver(_))));
-        std::env::remove_var("OPENHTTPA_MOCK_FAILURE");
+        // SAFETY: single-threaded test context, ENV_MUTEX held.
+        unsafe { std::env::remove_var("OPENHTTPA_MOCK_FAILURE") };
     }
 
     #[test]
@@ -336,19 +338,22 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let provider = MockTeeProvider::default();
 
-        std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "tdx");
+        // SAFETY: single-threaded test context, ENV_MUTEX held.
+        unsafe { std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "tdx") };
         assert_eq!(
             <MockTeeProvider as TeeAdapter>::quote_type(&provider),
             QuoteType::Tdx
         );
 
-        std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "tpm");
+        // SAFETY: single-threaded test context, ENV_MUTEX held.
+        unsafe { std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "tpm") };
         assert_eq!(
             <MockTeeProvider as TeeAdapter>::quote_type(&provider),
             QuoteType::Tpm
         );
 
-        std::env::remove_var("OPENHTTPA_MOCK_TEE_TYPE");
+        // SAFETY: single-threaded test context, ENV_MUTEX held.
+        unsafe { std::env::remove_var("OPENHTTPA_MOCK_TEE_TYPE") };
     }
 
     /// SA-07: `is_real_hardware_type` must correctly classify all known types.
@@ -379,7 +384,8 @@ mod tests {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         // In test builds, a real TEE type via env var is accepted (CI use-case).
-        std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "tdx");
+        // SAFETY: single-threaded test context, ENV_MUTEX held.
+        unsafe { std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "tdx") };
         let provider = MockTeeProvider::default();
         // The call must NOT panic in test context, and must return the real type.
         let qt = <MockTeeProvider as TeeAdapter>::quote_type(&provider);
@@ -388,6 +394,7 @@ mod tests {
             QuoteType::Tdx,
             "mock must return the configured type in test builds"
         );
-        std::env::remove_var("OPENHTTPA_MOCK_TEE_TYPE");
+        // SAFETY: single-threaded test context, ENV_MUTEX held.
+        unsafe { std::env::remove_var("OPENHTTPA_MOCK_TEE_TYPE") };
     }
 }

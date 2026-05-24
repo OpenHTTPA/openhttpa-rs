@@ -17,8 +17,8 @@
 //! [`AtbRegistry`] uses a [`DashMap`] internally and is safe to share across
 //! async tasks without external locking.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use dashmap::DashMap;
 // Use tracing via absolute paths or import correctly.

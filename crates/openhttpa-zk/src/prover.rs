@@ -4,7 +4,7 @@
 use crate::{ZkError, ZkInput, ZkOutput};
 
 #[cfg(feature = "zk")]
-use risc0_zkvm::{default_prover, ExecutorEnv};
+use risc0_zkvm::{ExecutorEnv, default_prover};
 
 #[cfg(feature = "zk")]
 pub use risc0_zkvm::Receipt;

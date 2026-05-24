@@ -25,14 +25,18 @@ impl AttestTransport for DummyTransport {
 
             // VERIFY: The client sent TWO quotes (TDX + NVIDIA)
             assert_eq!(req_hdrs.client_quotes.len(), 2);
-            assert!(req_hdrs
-                .client_quotes
-                .iter()
-                .any(|q| q.quote_type == openhttpa_proto::QuoteType::Mock));
-            assert!(req_hdrs
-                .client_quotes
-                .iter()
-                .any(|q| q.quote_type == openhttpa_proto::QuoteType::NvidiaGpu));
+            assert!(
+                req_hdrs
+                    .client_quotes
+                    .iter()
+                    .any(|q| q.quote_type == openhttpa_proto::QuoteType::Mock)
+            );
+            assert!(
+                req_hdrs
+                    .client_quotes
+                    .iter()
+                    .any(|q| q.quote_type == openhttpa_proto::QuoteType::NvidiaGpu)
+            );
 
             // Respond with a dummy success
             let resp_hdrs = AtHsResponseHeaders {

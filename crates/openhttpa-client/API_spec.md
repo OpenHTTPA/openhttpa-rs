@@ -2,7 +2,7 @@
 
 **Crate**: `openhttpa-client`  
 **License**: Apache-2.0 OR MIT  
-**Edition**: Rust 2021  
+**Edition**: Rust 2024  
 **Repository**: [openhttpa-rs](file:///home/ub/tmp/openhttpa-rs)
 
 ---

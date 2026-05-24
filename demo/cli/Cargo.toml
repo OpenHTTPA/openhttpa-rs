@@ -3,7 +3,7 @@ name = "openhttpa-cli"
 license = "Apache-2.0"
 readme = "README.md"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["OpenHTTPA Team <info@openhttpa.org>"]
 publish = false
 

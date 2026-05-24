@@ -17,7 +17,7 @@ use openhttpa_crypto::aead::{AeadAlgorithm, AeadNonce, BoundAeadKey};
 use openhttpa_crypto::key_exchange::HybridKemPair;
 use openhttpa_headers::{HDR_ATTEST_BASE_ID, HDR_ATTEST_TICKET};
 use openhttpa_proto::{CipherSuite, ProtocolVersion};
-use openhttpa_tee::{provider::TeeProvider, QuoteRequest};
+use openhttpa_tee::{QuoteRequest, provider::TeeProvider};
 use openhttpa_transport::connection::{AttestTransport, TransportRequest};
 use sha2::{Digest, Sha384};
 

@@ -3,7 +3,7 @@
 
 use crate::types::{McpRequest, McpResponse};
 use openhttpa_client::OpenHttpaClient;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use thiserror::Error;
 
 // MED-06: non_exhaustive prevents breaking changes when new variants are added.

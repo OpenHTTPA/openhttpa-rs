@@ -2,10 +2,10 @@
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
 use axum::{
-    extract::{FromRef, FromRequest, FromRequestParts, OriginalUri, Request},
-    http::{request::Parts, StatusCode},
-    response::{IntoResponse, Response},
     Json,
+    extract::{FromRef, FromRequest, FromRequestParts, OriginalUri, Request},
+    http::{StatusCode, request::Parts},
+    response::{IntoResponse, Response},
 };
 use serde::de::DeserializeOwned;
 use std::str::FromStr;
@@ -364,7 +364,7 @@ where
                         Json(serde_json::json!({ "error": e.to_string() })),
                     )
                         .into_response(),
-                )
+                );
             }
         };
 
@@ -411,7 +411,7 @@ where
                         return Some((
                             Err(LlmError::Transport(e)),
                             (reader, session, aad, prev_hash),
-                        ))
+                        ));
                     }
                 };
 
@@ -533,7 +533,7 @@ pub enum LlmError {
 mod tests {
     use super::*;
     use ax_test::TestClient;
-    use axum::{routing::post, Router};
+    use axum::{Router, routing::post};
     use openhttpa_crypto::hkdf::SessionKeys;
     use openhttpa_proto::{CipherSuite, ProtocolVersion};
     use std::time::Instant;
@@ -630,7 +630,7 @@ mod tests {
     }
 
     mod ax_test {
-        use axum::{body::Body, response::Response, Router};
+        use axum::{Router, body::Body, response::Response};
         use tower::ServiceExt;
 
         pub struct TestClient {

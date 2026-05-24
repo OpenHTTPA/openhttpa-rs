@@ -241,10 +241,10 @@ impl DistributedReplayGuard for LocalReplayGuard {
         let nonce_bytes = nonce.to_be_bytes().to_vec();
 
         // Check overlap filter first (read-only, no insertion).
-        if let Some(ref prev) = *self.prev_bloom.lock().expect("prev_bloom mutex poisoned") {
-            if prev.check(&nonce_bytes) {
-                return Err(ReplayError::Replay(nonce));
-            }
+        if let Some(ref prev) = *self.prev_bloom.lock().expect("prev_bloom mutex poisoned")
+            && prev.check(&nonce_bytes)
+        {
+            return Err(ReplayError::Replay(nonce));
         }
 
         let mut bloom = self.bloom.lock().expect("bloom mutex poisoned");
@@ -267,10 +267,10 @@ impl DistributedReplayGuard for LocalReplayGuard {
 
     async fn check(&self, _key: &str, nonce: u64) -> Result<(), ReplayError> {
         let nonce_bytes = nonce.to_be_bytes().to_vec();
-        if let Some(ref prev) = *self.prev_bloom.lock().expect("prev_bloom mutex poisoned") {
-            if prev.check(&nonce_bytes) {
-                return Err(ReplayError::Replay(nonce));
-            }
+        if let Some(ref prev) = *self.prev_bloom.lock().expect("prev_bloom mutex poisoned")
+            && prev.check(&nonce_bytes)
+        {
+            return Err(ReplayError::Replay(nonce));
         }
         if self
             .bloom
@@ -367,49 +367,43 @@ where
         Box::pin(async move {
             let ticket_hdr = req.headers().get(&*HDR_ATTEST_TICKET_RESUMPTION);
 
-            if let Some(hdr_val) = ticket_hdr {
-                if let Ok(ticket_b64) = hdr_val.to_str() {
-                    if let Ok(ticket_raw) = hex::decode(ticket_b64) {
-                        if let Ok(mut durable_state) = engine.unseal_session(&ticket_raw) {
-                            // SEC-02: Check distributed replay guard using the ticket's internal nonce.
-                            // We use the AtbId as the key for the replay guard window.
-                            let nonce = durable_state.client_counter; // In 0-RTT, the nonce is bound to the state
-                            let atb_id_str = durable_state.id.to_string();
+            if let Some(hdr_val) = ticket_hdr
+                && let Ok(ticket_b64) = hdr_val.to_str()
+                && let Ok(ticket_raw) = hex::decode(ticket_b64)
+                && let Ok(mut durable_state) = engine.unseal_session(&ticket_raw)
+            {
+                // SEC-02: Check distributed replay guard using the ticket's internal nonce.
+                // We use the AtbId as the key for the replay guard window.
+                let nonce = durable_state.client_counter; // In 0-RTT, the nonce is bound to the state
+                let atb_id_str = durable_state.id.to_string();
 
-                            // SEC-03: Use the atomic check_and_accept to avoid
-                            // the TOCTOU window between a separate check + accept.
-                            if guard.check_and_accept(&atb_id_str, nonce).await.is_err() {
-                                tracing::warn!(base_id = %atb_id_str, nonce = nonce, "Blocked replayed 0-RTT ticket");
-                            } else {
-                                // SA-05: Handle 0-RTT key derivation if salt is present
-                                let rtt0_salt =
-                                    openhttpa_headers::decode_attest_ticket(req.headers())
-                                        .ok()
-                                        .and_then(|d| d.salt);
+                // SEC-03: Use the atomic check_and_accept to avoid
+                // the TOCTOU window between a separate check + accept.
+                if guard.check_and_accept(&atb_id_str, nonce).await.is_err() {
+                    tracing::warn!(base_id = %atb_id_str, nonce = nonce, "Blocked replayed 0-RTT ticket");
+                } else {
+                    // SA-05: Handle 0-RTT key derivation if salt is present
+                    let rtt0_salt = openhttpa_headers::decode_attest_ticket(req.headers())
+                        .ok()
+                        .and_then(|d| d.salt);
 
-                                if let Some(salt) = rtt0_salt {
-                                    tracing::info!("Deriving fresh 0-RTT keys");
-                                    if let Ok(k) =
-                                        openhttpa_core::handshake::SessionKeys::derive_0rtt(
-                                            &durable_state.resumption_secret,
-                                            &salt,
-                                        )
-                                    {
-                                        durable_state.keys =
-                                            openhttpa_core::session::SealedSessionKeys::new(k);
-                                    }
-                                }
-
-                                // Nonce was already committed atomically above by check_and_accept.
-
-                                let session = AttestSession::from_durable(durable_state);
-                                if let Err(e) = registry.insert(session.clone()) {
-                                    tracing::error!(error = %e, "Failed to insert resumed session");
-                                } else {
-                                    tracing::info!(base_id = %session.state().id, "0-RTT session resumed");
-                                }
-                            }
+                    if let Some(salt) = rtt0_salt {
+                        tracing::info!("Deriving fresh 0-RTT keys");
+                        if let Ok(k) = openhttpa_core::handshake::SessionKeys::derive_0rtt(
+                            &durable_state.resumption_secret,
+                            &salt,
+                        ) {
+                            durable_state.keys = openhttpa_core::session::SealedSessionKeys::new(k);
                         }
+                    }
+
+                    // Nonce was already committed atomically above by check_and_accept.
+
+                    let session = AttestSession::from_durable(durable_state);
+                    if let Err(e) = registry.insert(session.clone()) {
+                        tracing::error!(error = %e, "Failed to insert resumed session");
+                    } else {
+                        tracing::info!(base_id = %session.state().id, "0-RTT session resumed");
                     }
                 }
             }

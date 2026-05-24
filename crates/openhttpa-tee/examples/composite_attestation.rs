@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
-use openhttpa_tee::{detect_best_provider, QuoteRequest, TeeConfig, TeeProvider};
+use openhttpa_tee::{QuoteRequest, TeeConfig, TeeProvider, detect_best_provider};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Configure the environment to mock a TDX host with an NVIDIA H100 GPU
-    std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "tdx");
+    // SAFETY: single-threaded main; no other threads race on the environment.
+    unsafe { std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "tdx") };
 
     let config = TeeConfig {
         allow_mock: true,
@@ -19,7 +20,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tdx_provider = detect_best_provider(&config)?;
 
     // Switch mock type to GPU for the second provider
-    std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "nvidia_gpu");
+    // SAFETY: single-threaded main; no other threads race on the environment.
+    unsafe { std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "nvidia_gpu") };
     let gpu_provider = detect_best_provider(&config)?;
 
     // 3. Create a Composite Provider

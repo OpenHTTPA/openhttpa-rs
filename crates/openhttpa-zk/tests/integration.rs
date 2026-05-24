@@ -3,9 +3,9 @@
 
 #[cfg(test)]
 mod tests {
+    use openhttpa_zk::ZkInput;
     use openhttpa_zk::prover::ZkProver;
     use openhttpa_zk::verifier::ZkVerifier;
-    use openhttpa_zk::ZkInput;
 
     #[test]
     fn test_zk_roundtrip() {

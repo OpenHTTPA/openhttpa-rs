@@ -4,11 +4,11 @@
 use async_trait::async_trait;
 use axum::extract::ws::WebSocketUpgrade;
 use axum::{
+    Router,
     extract::{FromRef, Json, State},
-    http::{header::CONTENT_TYPE, HeaderMap, HeaderName, StatusCode},
+    http::{HeaderMap, HeaderName, StatusCode, header::CONTENT_TYPE},
     response::IntoResponse,
     routing::{get, post},
-    Router,
 };
 use http::HeaderValue;
 use openhttpa_attestation::MockVerifier;
@@ -17,14 +17,13 @@ use openhttpa_core::session::{AttestSession, ReplayStrategy};
 use openhttpa_mcp::server::{McpTool, OpenHttpaMcpServer};
 use openhttpa_proto::ProtocolVersion;
 use openhttpa_server::{
-    attested_ws_upgrade,
-    handlers::{
-        aths_handler, preflight_handler, AtHsHandlerState, ChallengeKey, PreflightHandlerState,
-    },
     AtbRegistry, AttestWsHandler, AttestWsSession, AttestWsState, EncryptedJson, OpenHttpaSession,
-    WsPayload,
+    WsPayload, attested_ws_upgrade,
+    handlers::{
+        AtHsHandlerState, ChallengeKey, PreflightHandlerState, aths_handler, preflight_handler,
+    },
 };
-use openhttpa_tee::{detect_best_provider, TeeConfig, TeeProvider};
+use openhttpa_tee::{TeeConfig, TeeProvider, detect_best_provider};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -953,7 +952,11 @@ async fn ws_upgrade_handler(
                         warn!("Session {} exists but is NOT alive (expired)", atb_id);
                     }
                 } else {
-                    warn!("WebSocket upgrade failed: Session {} not found in registry (total sessions: {})", atb_id, state.registry.len());
+                    warn!(
+                        "WebSocket upgrade failed: Session {} not found in registry (total sessions: {})",
+                        atb_id,
+                        state.registry.len()
+                    );
                 }
             } else {
                 warn!(
@@ -968,7 +971,9 @@ async fn ws_upgrade_handler(
             );
         }
     } else {
-        warn!("WebSocket upgrade attempted without AtB ID (missing both query 'atb-id' and Sec-WebSocket-Protocol header)");
+        warn!(
+            "WebSocket upgrade attempted without AtB ID (missing both query 'atb-id' and Sec-WebSocket-Protocol header)"
+        );
     }
 
     let ws = match selected_proto {
@@ -1045,7 +1050,9 @@ async fn main() {
         .map(|v| v.to_lowercase() == "production")
         .unwrap_or(false);
     if is_prod {
-        warn!("CRITICAL: Using MockTeeProvider in PRODUCTION mode. Attestation is NOT hardware-enforced!");
+        warn!(
+            "CRITICAL: Using MockTeeProvider in PRODUCTION mode. Attestation is NOT hardware-enforced!"
+        );
     } else {
         info!("Running with MockTeeProvider (Development mode)");
     }
@@ -1130,7 +1137,8 @@ mod tests {
 
     async fn make_app() -> Router {
         // SEC-09: Allow hardware impersonation for these tests.
-        std::env::set_var("OPENHTTPA_ALLOW_MOCK_HARDWARE", "1");
+        // SAFETY: single-threaded test context.
+        unsafe { std::env::set_var("OPENHTTPA_ALLOW_MOCK_HARDWARE", "1") };
         let state = AppState(Arc::new(DemoState::default()));
         Router::new()
             .route("/health", get(health))
@@ -1156,7 +1164,8 @@ mod tests {
 
     #[tokio::test]
     async fn submit_and_result() {
-        std::env::set_var("OPENHTTPA_ALLOW_MOCK_HARDWARE", "1");
+        // SAFETY: single-threaded test context.
+        unsafe { std::env::set_var("OPENHTTPA_ALLOW_MOCK_HARDWARE", "1") };
         let state = AppState(Arc::new(DemoState::default()));
         let app = Router::new()
             .route("/api/submit", post(submit))
@@ -1243,7 +1252,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_counter_desync_behavior() {
-        std::env::set_var("OPENHTTPA_ALLOW_MOCK_HARDWARE", "1");
+        // SAFETY: single-threaded test context.
+        unsafe { std::env::set_var("OPENHTTPA_ALLOW_MOCK_HARDWARE", "1") };
         let state = AppState(Arc::new(DemoState::default()));
         let app = Router::new()
             .route("/api/submit", post(submit))
@@ -1365,7 +1375,10 @@ mod tests {
             &aad,
             &mut ciphertext,
         );
-        assert!(res.is_err(), "Decryption with nonce 1 should fail because server incremented counter to 2 after /api/submit response");
+        assert!(
+            res.is_err(),
+            "Decryption with nonce 1 should fail because server incremented counter to 2 after /api/submit response"
+        );
 
         // Counter 2 should work
         let mut ciphertext = hex::decode(ciphertext_hex).unwrap();
@@ -1382,7 +1395,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_mcp_tool_execution() {
-        std::env::set_var("OPENHTTPA_ALLOW_MOCK_HARDWARE", "1");
+        // SAFETY: single-threaded test context.
+        unsafe { std::env::set_var("OPENHTTPA_ALLOW_MOCK_HARDWARE", "1") };
         let state = AppState(Arc::new(DemoState::default()));
         state.mcp_server.add_tool(Box::new(SecureSum)).await;
 
@@ -1471,7 +1485,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_oracle_fetch_endpoint() {
-        std::env::set_var("OPENHTTPA_ALLOW_MOCK_HARDWARE", "1");
+        // SAFETY: single-threaded test context.
+        unsafe { std::env::set_var("OPENHTTPA_ALLOW_MOCK_HARDWARE", "1") };
         let state = AppState(Arc::new(DemoState::default()));
         let app = Router::new()
             .route("/api/oracle/fetch", post(oracle_fetch))

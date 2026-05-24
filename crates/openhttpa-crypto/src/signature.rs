@@ -6,8 +6,8 @@
 use aws_lc_rs::{
     rand::SystemRandom,
     signature::{
-        self, EcdsaKeyPair as AwsEcdsaKP, EcdsaSigningAlgorithm, KeyPair,
-        ECDSA_P256_SHA256_FIXED_SIGNING, ECDSA_P384_SHA384_FIXED_SIGNING,
+        self, ECDSA_P256_SHA256_FIXED_SIGNING, ECDSA_P384_SHA384_FIXED_SIGNING,
+        EcdsaKeyPair as AwsEcdsaKP, EcdsaSigningAlgorithm, KeyPair,
     },
 };
 use thiserror::Error;

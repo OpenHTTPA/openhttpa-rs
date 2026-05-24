@@ -169,11 +169,11 @@ impl PolicyEngine for RegoPolicyEngine {
         let mut allow = false;
         if !results.result.is_empty() {
             for res in results.result {
-                if let Some(val) = res.expressions.first() {
-                    if val.value == Value::from(true) {
-                        allow = true;
-                        break;
-                    }
+                if let Some(val) = res.expressions.first()
+                    && val.value == Value::from(true)
+                {
+                    allow = true;
+                    break;
                 }
             }
         }

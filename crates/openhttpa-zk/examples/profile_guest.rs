@@ -6,7 +6,7 @@
 //! This example runs the `OpenHTTPA` ZK guest program and extracts the total
 //! cycle counts to audit the performance of different attestation modes.
 
-use openhttpa_zk::{DcapCollateral, ZkInput, ZkMode, OPENHTTPA_GUEST_ELF};
+use openhttpa_zk::{DcapCollateral, OPENHTTPA_GUEST_ELF, ZkInput, ZkMode};
 use risc0_zkvm::{ExecutorEnv, ExecutorImpl};
 
 fn main() {

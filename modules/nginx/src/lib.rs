@@ -29,7 +29,7 @@ struct HandshakeRequestBody {
     mlkem_public: String,
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn openhttpa_init_process(_cycle: *mut ffi::ngx_cycle_t) -> ffi::ngx_int_t {
     ffi::NGX_OK as ffi::ngx_int_t
 }
@@ -162,20 +162,24 @@ extern "C" fn openhttpa_body_filter(
 }
 
 unsafe fn read_request_body(r: *mut ffi::ngx_http_request_t) -> Option<Vec<u8>> {
-    let rb = (*r).request_body;
-    if rb.is_null() || (*rb).bufs.is_null() {
-        return None;
+    unsafe {
+        let rb = (*r).request_body;
+        if rb.is_null() || (*rb).bufs.is_null() {
+            return None;
+        }
+        let mut body = Vec::new();
+        let mut chain = (*rb).bufs;
+        while !chain.is_null() {
+            let buf = (*chain).buf;
+            let data = std::slice::from_raw_parts(
+                (*buf).pos,
+                ((*buf).last as usize) - ((*buf).pos as usize),
+            );
+            body.extend_from_slice(data);
+            chain = (*chain).next;
+        }
+        Some(body)
     }
-    let mut body = Vec::new();
-    let mut chain = (*rb).bufs;
-    while !chain.is_null() {
-        let buf = (*chain).buf;
-        let data =
-            std::slice::from_raw_parts((*buf).pos, ((*buf).last as usize) - ((*buf).pos as usize));
-        body.extend_from_slice(data);
-        chain = (*chain).next;
-    }
-    Some(body)
 }
 
 fn decode_hex(s: &str) -> Option<[u8; 32]> {
@@ -215,7 +219,7 @@ unsafe extern "C" fn openhttpa_set(
     std::ptr::null_mut()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub static mut openhttpa_commands: [ffi::ngx_command_t; 2] = [
     ffi::ngx_command_t {
         name: ffi::ngx_str_t {
@@ -234,7 +238,7 @@ pub static mut openhttpa_commands: [ffi::ngx_command_t; 2] = [
     ffi::ngx_command_t::empty(),
 ];
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub static mut openhttpa_module_ctx: ffi::ngx_http_module_t = ffi::ngx_http_module_t {
     preconfiguration: None,
     postconfiguration: Some(openhttpa_post_config),
@@ -253,7 +257,7 @@ extern "C" fn openhttpa_post_config(_cf: *mut ffi::ngx_conf_t) -> ffi::ngx_int_t
     ffi::NGX_OK as ffi::ngx_int_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub static mut openhttpa_module: ffi::ngx_module_t = ffi::ngx_module_t {
     ctx_index: ffi::ngx_uint_t::MAX,
     index: ffi::ngx_uint_t::MAX,
@@ -282,17 +286,17 @@ pub static mut openhttpa_module: ffi::ngx_module_t = ffi::ngx_module_t {
     spare_hook7: 0,
 };
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub static mut ngx_modules: [*mut ffi::ngx_module_t; 2] = [
     &raw mut openhttpa_module as *mut ffi::ngx_module_t,
     std::ptr::null_mut(),
 ];
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub static mut ngx_module_names: [*const std::os::raw::c_char; 2] = [
     c"openhttpa_module".as_ptr() as *const std::os::raw::c_char,
     std::ptr::null(),
 ];
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub static mut ngx_module_order: [*const std::os::raw::c_char; 1] = [std::ptr::null()];

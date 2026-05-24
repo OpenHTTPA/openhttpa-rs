@@ -33,8 +33,8 @@ use std::cell::{Cell, RefCell};
 use std::str::FromStr;
 
 use aes_gcm::{
-    aead::{Aead, KeyInit, Payload},
     Aes256Gcm, Nonce as GcmNonce,
+    aead::{Aead, KeyInit, Payload},
 };
 use ml_kem::{Ciphertext, EncodedSizeUser, KemCore, MlKem768};
 use rand_core::OsRng;

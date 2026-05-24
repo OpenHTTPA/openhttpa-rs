@@ -9,13 +9,12 @@ use crate::mock_verifier::MockVerifier;
 use crate::verifier::QuoteVerifier;
 use bytes::Bytes;
 use openhttpa_proto::{AttestQuote, QuoteType};
-use openhttpa_tee::{mock::MockTeeProvider, provider::TeeProvider, QuoteRequest};
+use openhttpa_tee::{QuoteRequest, mock::MockTeeProvider, provider::TeeProvider};
 
 /// Test helper to create a mock composite quote bundle.
 fn create_mock_bundle(rd: &[u8; 64]) -> Vec<AttestQuote> {
-    // SEC-09: Allow hardware impersonation for these tests.
-    // This is required when tests run in optimized/release profiles.
-    std::env::set_var("OPENHTTPA_ALLOW_MOCK_HARDWARE", "1");
+    // SAFETY: single-threaded test context.
+    unsafe { std::env::set_var("OPENHTTPA_ALLOW_MOCK_HARDWARE", "1") };
 
     let provider = MockTeeProvider::with_override(QuoteType::Tdx);
 

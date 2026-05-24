@@ -115,11 +115,11 @@ impl CollateralFetcher {
         }
 
         // Check Content-Length header early
-        if let Some(len) = response.content_length() {
-            if len > MAX_COLLATERAL_SIZE as u64 {
-                #[allow(clippy::cast_possible_truncation)]
-                return Err(FetchError::TooLarge(len as usize));
-            }
+        if let Some(len) = response.content_length()
+            && len > MAX_COLLATERAL_SIZE as u64
+        {
+            #[allow(clippy::cast_possible_truncation)]
+            return Err(FetchError::TooLarge(len as usize));
         }
 
         // 3. Accumulate bytes with size guard

@@ -3,7 +3,7 @@
 
 #[cfg(feature = "zk")]
 use crate::OPENHTTPA_GUEST_ID;
-use crate::{prover::Receipt, ZkError, ZkOutput};
+use crate::{ZkError, ZkOutput, prover::Receipt};
 
 pub struct ZkVerifier;
 

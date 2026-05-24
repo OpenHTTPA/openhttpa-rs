@@ -18,7 +18,7 @@ use tracing::debug;
 use zeroize::Zeroizing;
 
 #[cfg(feature = "ita")]
-use jsonwebtoken::{decode_header, Algorithm, DecodingKey, Header, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, Header, Validation, decode_header};
 
 use crate::verifier::{EatClaims, QuoteVerifier, VerificationError, VerificationResult};
 

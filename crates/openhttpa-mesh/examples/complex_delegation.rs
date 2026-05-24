@@ -11,10 +11,10 @@
 
 use async_trait::async_trait;
 use dashmap::DashMap;
-use openhttpa_attestation::verifier::{QuoteVerifier, VerificationError, VerificationResult};
 use openhttpa_attestation::EatClaims;
+use openhttpa_attestation::verifier::{QuoteVerifier, VerificationError, VerificationResult};
 use openhttpa_mcp::server::{McpTool, OpenHttpaMcpServer};
-use openhttpa_mesh::{registry::ShardedRegistry, AgentNode, AgentRegistry, RegoPolicyEngine};
+use openhttpa_mesh::{AgentNode, AgentRegistry, RegoPolicyEngine, registry::ShardedRegistry};
 use openhttpa_proto::AttestQuote;
 use openhttpa_tee::mock::MockTeeProvider;
 use serde_json::json;

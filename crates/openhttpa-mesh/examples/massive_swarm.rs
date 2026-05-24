@@ -11,9 +11,9 @@
 //! 4. **Cryptographic Isolation**: Each session uses unique, transcript-bound keys derived from TEE quotes.
 
 use async_trait::async_trait;
-use openhttpa_attestation::verifier::{QuoteVerifier, VerificationError, VerificationResult};
 use openhttpa_attestation::EatClaims;
-use openhttpa_mesh::{registry::ShardedRegistry, AgentNode, AgentRegistry, RegoPolicyEngine};
+use openhttpa_attestation::verifier::{QuoteVerifier, VerificationError, VerificationResult};
+use openhttpa_mesh::{AgentNode, AgentRegistry, RegoPolicyEngine, registry::ShardedRegistry};
 use openhttpa_proto::AttestQuote;
 use openhttpa_tee::mock::MockTeeProvider;
 use std::sync::Arc;

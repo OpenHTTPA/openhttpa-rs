@@ -244,10 +244,10 @@ impl ConfidentialLlmClient {
                     if json_part == "[DONE]" {
                         return Ok(String::new());
                     }
-                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(json_part) {
-                        if let Some(content) = val["choices"][0]["delta"]["content"].as_str() {
-                            return Ok(content.to_owned());
-                        }
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(json_part)
+                        && let Some(content) = val["choices"][0]["delta"]["content"].as_str()
+                    {
+                        return Ok(content.to_owned());
                     }
                 }
                 Ok(String::new())
@@ -258,10 +258,10 @@ impl ConfidentialLlmClient {
     async fn ensure_session(&self) -> Result<AttestSession, LlmError> {
         {
             let read = self.session.read().await;
-            if let Some(s) = read.as_ref() {
-                if s.is_alive() {
-                    return Ok(s.clone());
-                }
+            if let Some(s) = read.as_ref()
+                && s.is_alive()
+            {
+                return Ok(s.clone());
             }
         }
         // Re-attest.

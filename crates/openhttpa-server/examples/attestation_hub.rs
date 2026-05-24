@@ -7,15 +7,15 @@
 //! that uses `OpenHTTPA` for secure transport.
 
 use axum::{
+    Json, Router,
     extract::FromRef,
     routing::{any, post},
-    Json, Router,
 };
 use openhttpa_attestation::{MockVerifier, QuoteVerifier, VerificationResult};
 use openhttpa_proto::{AttestQuote, CipherSuite, ProtocolVersion};
 use openhttpa_server::{
-    handlers::{aths_handler, AtHsHandlerState},
     AtbRegistry, OpenHttpaSession, TrRequestLayer,
+    handlers::{AtHsHandlerState, aths_handler},
 };
 use openhttpa_tee::mock::MockTeeProvider;
 use serde::{Deserialize, Serialize};

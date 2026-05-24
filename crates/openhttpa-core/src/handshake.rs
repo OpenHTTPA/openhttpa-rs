@@ -358,7 +358,7 @@ impl AtHsExecutor {
             match tee.generate_quotes(&req) {
                 Ok(qs) => qs,
                 Err(e) if self.strict_attestation => {
-                    return Err(HandshakeError::Attestation(e.to_string()))
+                    return Err(HandshakeError::Attestation(e.to_string()));
                 }
                 Err(_) => vec![],
             }

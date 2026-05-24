@@ -34,5 +34,5 @@ pub use handlers::{AtHsHandler, ChallengeKey};
 pub use middleware::{LocalReplayGuard, TrRequestLayer};
 pub use rate_limit::RateLimitLayer;
 pub use ws::{
-    attested_ws_upgrade, AttestWsHandler, AttestWsSession, AttestWsState, WsError, WsPayload,
+    AttestWsHandler, AttestWsSession, AttestWsState, WsError, WsPayload, attested_ws_upgrade,
 };

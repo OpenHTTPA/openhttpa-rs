@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
-use openhttpa_crypto::aead::{FileNonceSequence, NonceSequence, NONCE_LEN};
+use openhttpa_crypto::aead::{FileNonceSequence, NONCE_LEN, NonceSequence};
 use tempfile::tempdir;
 
 #[test]

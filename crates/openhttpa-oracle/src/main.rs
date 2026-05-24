@@ -2,20 +2,20 @@
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
 use axum::{
+    Router,
     extract::{FromRef, State},
     response::IntoResponse,
     routing::{get, post},
-    Router,
 };
 use openhttpa_attestation::MockVerifier;
 use openhttpa_core::handshake::AtHsExecutor;
 use openhttpa_oracle::{OracleNode, OracleRequest};
 use openhttpa_proto::ProtocolVersion;
 use openhttpa_server::{
-    handlers::{aths_handler, AtHsHandlerState},
     AtbRegistry, EncryptedJson, OpenHttpaSession,
+    handlers::{AtHsHandlerState, aths_handler},
 };
-use openhttpa_tee::{detect_best_provider, TeeConfig};
+use openhttpa_tee::{TeeConfig, detect_best_provider};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -30,7 +30,7 @@ fn random_challenge_key() -> [u8; 32] {
     key
 }
 use tokio::net::TcpListener;
-use tracing::{info, Level};
+use tracing::{Level, info};
 use tracing_subscriber::FmtSubscriber;
 
 #[derive(Clone)]

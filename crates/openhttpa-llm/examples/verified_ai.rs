@@ -113,7 +113,10 @@ async fn main() {
 
     println!("\n[2] Response Received and Verified!");
     println!("Assistant Reply: {}", reply);
-    println!("\nSuccess: The response has been cryptographically proven to originate from model '{}' running in a secure TEE.", model);
+    println!(
+        "\nSuccess: The response has been cryptographically proven to originate from model '{}' running in a secure TEE.",
+        model
+    );
 }
 
 // Legacy mock transport removed.

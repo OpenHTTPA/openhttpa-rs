@@ -24,16 +24,14 @@ impl<const W: usize> FileReplayGuard<W> {
     #[must_use]
     pub fn new(path: PathBuf) -> Self {
         let guard = ReplayGuard::new();
-        if path.exists() {
-            if let Ok(data) = fs::read(&path) {
-                if let Ok(state) = serde_json::from_slice::<ReplayState>(&data) {
-                    if state.window.len() == W {
-                        let mut window = [0u64; W];
-                        window.copy_from_slice(&state.window);
-                        guard.import_state(state.highest, window);
-                    }
-                }
-            }
+        if path.exists()
+            && let Ok(data) = fs::read(&path)
+            && let Ok(state) = serde_json::from_slice::<ReplayState>(&data)
+            && state.window.len() == W
+        {
+            let mut window = [0u64; W];
+            window.copy_from_slice(&state.window);
+            guard.import_state(state.highest, window);
         }
         Self { guard, path }
     }

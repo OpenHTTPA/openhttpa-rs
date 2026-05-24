@@ -5,7 +5,7 @@
 
 #[cfg(test)]
 use crate::provider::{
-    detect_best_provider, QuoteRequest, TeeConfig, TeeProvider, TeeProviderError,
+    QuoteRequest, TeeConfig, TeeProvider, TeeProviderError, detect_best_provider,
 };
 use openhttpa_proto::QuoteType;
 use std::sync::Arc;
@@ -29,8 +29,10 @@ fn test_detect_best_provider() {
     let _guard = ENV_MUTEX
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    std::env::remove_var("OPENHTTPA_TEE_PROVIDER");
-    std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "mock");
+    // SAFETY: ENV_MUTEX is held, ensuring exclusive env access for this test.
+    unsafe { std::env::remove_var("OPENHTTPA_TEE_PROVIDER") };
+    // SAFETY: ENV_MUTEX is held, ensuring exclusive env access for this test.
+    unsafe { std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "mock") };
 
     let config = test_config();
 
@@ -39,11 +41,13 @@ fn test_detect_best_provider() {
     assert!(provider.is_available());
 
     // Force specific type via environment
-    std::env::set_var("OPENHTTPA_TEE_PROVIDER", "mock");
+    // SAFETY: ENV_MUTEX is held, ensuring exclusive env access for this test.
+    unsafe { std::env::set_var("OPENHTTPA_TEE_PROVIDER", "mock") };
     let provider = detect_best_provider(&config).expect("Force Mock failed");
     assert_eq!(provider.quote_type(), QuoteType::Mock);
 
-    std::env::remove_var("OPENHTTPA_TEE_PROVIDER");
+    // SAFETY: ENV_MUTEX is held, ensuring exclusive env access for this test.
+    unsafe { std::env::remove_var("OPENHTTPA_TEE_PROVIDER") };
 }
 
 /// Test failure to detect hardware when Mock is disabled.
@@ -52,8 +56,10 @@ fn test_fail_when_mock_disabled() {
     let _guard = ENV_MUTEX
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    std::env::remove_var("OPENHTTPA_TEE_PROVIDER");
-    std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "mock");
+    // SAFETY: ENV_MUTEX is held, ensuring exclusive env access for this test.
+    unsafe { std::env::remove_var("OPENHTTPA_TEE_PROVIDER") };
+    // SAFETY: ENV_MUTEX is held, ensuring exclusive env access for this test.
+    unsafe { std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "mock") };
 
     let config = TeeConfig {
         allow_mock: false,
@@ -62,7 +68,8 @@ fn test_fail_when_mock_disabled() {
 
     // Ensure no hardware features are enabled for this test to pass reliably in any environment
     // OR ensure OPENHTTPA_TEE_PROVIDER is not set.
-    std::env::remove_var("OPENHTTPA_TEE_PROVIDER");
+    // SAFETY: ENV_MUTEX is held, ensuring exclusive env access for this test.
+    unsafe { std::env::remove_var("OPENHTTPA_TEE_PROVIDER") };
 
     let res = detect_best_provider(&config);
 
@@ -81,8 +88,10 @@ fn test_composite_provider() {
     let _guard = ENV_MUTEX
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    std::env::remove_var("OPENHTTPA_MOCK_TEE_TYPE");
-    std::env::remove_var("OPENHTTPA_MOCK_FAILURE");
+    // SAFETY: ENV_MUTEX is held, ensuring exclusive env access for this test.
+    unsafe { std::env::remove_var("OPENHTTPA_MOCK_TEE_TYPE") };
+    // SAFETY: ENV_MUTEX is held, ensuring exclusive env access for this test.
+    unsafe { std::env::remove_var("OPENHTTPA_MOCK_FAILURE") };
 
     let p1 = Arc::new(MockTeeProvider::default());
     let p2 = Arc::new(MockTeeProvider::default());
@@ -117,7 +126,8 @@ fn test_preferred_type_mismatch() {
     let _guard = ENV_MUTEX
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    std::env::remove_var("OPENHTTPA_TEE_PROVIDER");
+    // SAFETY: ENV_MUTEX is held, ensuring exclusive env access for this test.
+    unsafe { std::env::remove_var("OPENHTTPA_TEE_PROVIDER") };
 
     let config = TeeConfig {
         allow_mock: true,

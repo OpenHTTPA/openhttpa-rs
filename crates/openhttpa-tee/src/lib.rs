@@ -12,12 +12,15 @@
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 // TEE modules contain necessary unsafe FFI; they are individually audited.
 #![cfg_attr(
-    not(any(
-        feature = "sgx",
-        feature = "tdx",
-        feature = "sev_snp",
-        feature = "trustzone"
-    )),
+    all(
+        not(test),
+        not(any(
+            feature = "sgx",
+            feature = "tdx",
+            feature = "sev_snp",
+            feature = "trustzone"
+        ))
+    ),
     forbid(unsafe_code)
 )]
 
@@ -50,4 +53,4 @@ pub(crate) static ENV_MUTEX: std::sync::LazyLock<std::sync::Mutex<()>> =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
 
 pub use evidence::{AttestationEvidence, EvidenceBundle};
-pub use provider::{detect_best_provider, QuoteRequest, TeeAdapter, TeeConfig, TeeProvider};
+pub use provider::{QuoteRequest, TeeAdapter, TeeConfig, TeeProvider, detect_best_provider};

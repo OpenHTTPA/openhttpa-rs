@@ -43,7 +43,7 @@ use thiserror::Error;
 
 use crate::{
     replay_guard::ReplayGuard,
-    state::{transition, ProtocolPhase, TransitionError},
+    state::{ProtocolPhase, TransitionError, transition},
 };
 use serde::{Deserialize, Serialize};
 

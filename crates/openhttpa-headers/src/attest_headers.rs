@@ -424,37 +424,37 @@ fn decode_quotes_sfv(map: &HeaderMap, name: &HeaderName) -> Result<Vec<AttestQuo
     let mut quotes = vec![];
 
     for entry in list {
-        if let ListEntry::InnerList(il) = entry {
-            if il.items.len() >= 2 {
-                let type_str = il.items[0]
-                    .bare_item
-                    .as_token()
-                    .map_or("unknown", |t| t.as_str());
-                let bytes = il.items[1]
-                    .bare_item
-                    .as_byte_sequence()
-                    .map_or_else(Vec::new, <[u8]>::to_vec);
+        if let ListEntry::InnerList(il) = entry
+            && il.items.len() >= 2
+        {
+            let type_str = il.items[0]
+                .bare_item
+                .as_token()
+                .map_or("unknown", |t| t.as_str());
+            let bytes = il.items[1]
+                .bare_item
+                .as_byte_sequence()
+                .map_or_else(Vec::new, <[u8]>::to_vec);
 
-                let quote_type = type_str
-                    .parse::<QuoteType>()
-                    .unwrap_or_else(|_| QuoteType::Unknown(type_str.to_owned()));
+            let quote_type = type_str
+                .parse::<QuoteType>()
+                .unwrap_or_else(|_| QuoteType::Unknown(type_str.to_owned()));
 
-                let mut collateral_uris = vec![];
-                if il.items.len() > 2 {
-                    for i in 2..il.items.len() {
-                        if let Some(s) = il.items[i].bare_item.as_string() {
-                            collateral_uris.push(s.as_str().to_owned());
-                        }
+            let mut collateral_uris = vec![];
+            if il.items.len() > 2 {
+                for i in 2..il.items.len() {
+                    if let Some(s) = il.items[i].bare_item.as_string() {
+                        collateral_uris.push(s.as_str().to_owned());
                     }
                 }
-
-                quotes.push(AttestQuote {
-                    quote_type,
-                    raw: bytes.into(),
-                    qudd: bytes::Bytes::new(),
-                    collateral_uris,
-                });
             }
+
+            quotes.push(AttestQuote {
+                quote_type,
+                raw: bytes.into(),
+                qudd: bytes::Bytes::new(),
+                collateral_uris,
+            });
         }
     }
     Ok(quotes)
@@ -473,15 +473,15 @@ fn decode_policies_sfv(map: &HeaderMap, name: &HeaderName) -> (bool, bool) {
     if !values.is_empty() {
         let val = values.join(",");
         if let Ok(dict) = Parser::new(&val).parse::<Dictionary>() {
-            if let Some(ListEntry::Item(i)) = dict.get("direct") {
-                if let Some(b) = i.bare_item.as_boolean() {
-                    direct = b;
-                }
+            if let Some(ListEntry::Item(i)) = dict.get("direct")
+                && let Some(b) = i.bare_item.as_boolean()
+            {
+                direct = b;
             }
-            if let Some(ListEntry::Item(i)) = dict.get("allow-untrusted") {
-                if let Some(b) = i.bare_item.as_boolean() {
-                    allow_untrusted = b;
-                }
+            if let Some(ListEntry::Item(i)) = dict.get("allow-untrusted")
+                && let Some(b) = i.bare_item.as_boolean()
+            {
+                allow_untrusted = b;
             }
         }
     }
@@ -618,10 +618,10 @@ impl AtHsRequestHeaders {
                     ListEntry::InnerList(sfv::InnerList::new(il_items))
                 })
                 .collect();
-            if let Some(s) = list.serialize() {
-                if let Ok(hv) = HeaderValue::from_str(&s) {
-                    map.insert(HDR_ATTEST_QUOTES.clone(), hv);
-                }
+            if let Some(s) = list.serialize()
+                && let Ok(hv) = HeaderValue::from_str(&s)
+            {
+                map.insert(HDR_ATTEST_QUOTES.clone(), hv);
             }
         }
 
@@ -629,19 +629,19 @@ impl AtHsRequestHeaders {
             map.insert(HDR_ATTEST_CHALLENGE.clone(), encode_bytes_sfv(c));
         }
 
-        if let Some(ref t) = self.ticket {
-            if let Ok(json) = serde_json::to_vec(t) {
-                map.insert(HDR_ATTEST_TICKET.clone(), encode_bytes_sfv(&json));
-            }
+        if let Some(ref t) = self.ticket
+            && let Ok(json) = serde_json::to_vec(t)
+        {
+            map.insert(HDR_ATTEST_TICKET.clone(), encode_bytes_sfv(&json));
         }
 
-        if let Some(ref p) = self.provenance {
-            if let Ok(json) = serde_json::to_vec(p) {
-                map.insert(
-                    HeaderName::from_static("attest-provenance"),
-                    encode_bytes_sfv(&json),
-                );
-            }
+        if let Some(ref p) = self.provenance
+            && let Ok(json) = serde_json::to_vec(p)
+        {
+            map.insert(
+                HeaderName::from_static("attest-provenance"),
+                encode_bytes_sfv(&json),
+            );
         }
 
         map
@@ -822,20 +822,20 @@ impl AtHsResponseHeaders {
                     ListEntry::InnerList(sfv::InnerList::new(il_items))
                 })
                 .collect();
-            if let Some(s) = list.serialize() {
-                if let Ok(hv) = HeaderValue::from_str(&s) {
-                    map.insert(HDR_ATTEST_QUOTES.clone(), hv);
-                }
+            if let Some(s) = list.serialize()
+                && let Ok(hv) = HeaderValue::from_str(&s)
+            {
+                map.insert(HDR_ATTEST_QUOTES.clone(), hv);
             }
         }
 
-        if let Some(ref t) = self.ticket_resumption {
-            if let Ok(json) = serde_json::to_vec(t) {
-                map.insert(
-                    HeaderName::from_static("attest-ticket-resumption"),
-                    encode_bytes_sfv(&json),
-                );
-            }
+        if let Some(ref t) = self.ticket_resumption
+            && let Ok(json) = serde_json::to_vec(t)
+        {
+            map.insert(
+                HeaderName::from_static("attest-ticket-resumption"),
+                encode_bytes_sfv(&json),
+            );
         }
 
         if !self.server_signatures.is_empty() {
@@ -844,10 +844,10 @@ impl AtHsResponseHeaders {
                 .iter()
                 .map(|sig| ListEntry::Item(Item::new(BareItem::ByteSequence(sig.clone()))))
                 .collect();
-            if let Some(s) = list.serialize() {
-                if let Ok(hv) = HeaderValue::from_str(&s) {
-                    map.insert(HDR_ATTEST_SERVER_SIGNATURES.clone(), hv);
-                }
+            if let Some(s) = list.serialize()
+                && let Ok(hv) = HeaderValue::from_str(&s)
+            {
+                map.insert(HDR_ATTEST_SERVER_SIGNATURES.clone(), hv);
             }
         }
 
@@ -939,14 +939,13 @@ impl AtHsResponseHeaders {
         if let Some(val) = map
             .get(&*HDR_ATTEST_SERVER_SIGNATURES)
             .and_then(|v| v.to_str().ok())
+            && let Ok(list) = Parser::new(val).parse::<List>()
         {
-            if let Ok(list) = Parser::new(val).parse::<List>() {
-                for entry in list {
-                    if let ListEntry::Item(item) = entry {
-                        if let Some(bytes) = item.bare_item.as_byte_sequence() {
-                            server_signatures.push(bytes.to_vec());
-                        }
-                    }
+            for entry in list {
+                if let ListEntry::Item(item) = entry
+                    && let Some(bytes) = item.bare_item.as_byte_sequence()
+                {
+                    server_signatures.push(bytes.to_vec());
                 }
             }
         }

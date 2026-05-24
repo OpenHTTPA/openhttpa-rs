@@ -8,7 +8,7 @@ use std::sync::Arc;
 use http::Uri;
 
 use openhttpa_attestation::verifier::QuoteVerifier;
-use openhttpa_tee::{detect_best_provider, provider::TeeProvider, TeeConfig};
+use openhttpa_tee::{TeeConfig, detect_best_provider, provider::TeeProvider};
 use openhttpa_transport::connection::AttestTransport;
 
 use crate::client::OpenHttpaClient;

@@ -2,16 +2,16 @@
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
 use axum::{
+    Router,
     response::IntoResponse,
     routing::{get, post},
-    Router,
 };
 use clap::{Parser, Subcommand};
 use openhttpa_client::OpenHttpaClient;
 use openhttpa_core::handshake::AtHsExecutor;
 use openhttpa_server::{
-    handlers::{aths_handler, AtHsHandlerState},
     AtbRegistry, EncryptedJson, OpenHttpaSession,
+    handlers::{AtHsHandlerState, aths_handler},
 };
 use openhttpa_tee::mock::MockTeeProvider;
 use openhttpa_transport::reqwest_adapter::ReqwestTransport;

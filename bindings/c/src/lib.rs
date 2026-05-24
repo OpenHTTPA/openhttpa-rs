@@ -54,7 +54,7 @@ fn tee() -> &'static dyn openhttpa_tee::TeeProvider {
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn openhttpa_version() -> *mut c_char {
     let ver = env!("CARGO_PKG_VERSION");
     CString::new(ver)
@@ -67,7 +67,7 @@ pub extern "C" fn openhttpa_version() -> *mut c_char {
 /// # Safety
 ///
 /// The `atb_id` pointer must be a valid, null-terminated C string.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn openhttpa_parse_atb_id(atb_id: *const c_char) -> *mut c_char {
     if atb_id.is_null() {
         return std::ptr::null_mut();
@@ -88,7 +88,7 @@ pub unsafe extern "C" fn openhttpa_parse_atb_id(atb_id: *const c_char) -> *mut c
 /// # Safety
 ///
 /// The `server_uri` pointer must be a valid, null-terminated C string.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn openhttpa_attest_handshake(server_uri: *const c_char) -> *mut c_char {
     if server_uri.is_null() {
         return std::ptr::null_mut();
@@ -118,7 +118,7 @@ pub unsafe extern "C" fn openhttpa_attest_handshake(server_uri: *const c_char) -
 /// # Safety
 ///
 /// All input pointers must be valid, null-terminated C strings.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn openhttpa_confidential_chat(
     server_uri: *const c_char,
     model: *const c_char,
@@ -182,7 +182,7 @@ pub unsafe extern "C" fn openhttpa_confidential_chat(
 /// # Safety
 ///
 /// The `request_json` pointer must be a valid, null-terminated C string.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn openhttpa_server_handshake(request_json: *const c_char) -> *mut c_char {
     if request_json.is_null() {
         return std::ptr::null_mut();
@@ -272,7 +272,7 @@ pub unsafe extern "C" fn openhttpa_server_handshake(request_json: *const c_char)
 /// # Safety
 ///
 /// Both `atb_id_str` and `ciphertext_hex` must be valid, null-terminated C strings.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn openhttpa_server_decrypt(
     atb_id_str: *const c_char,
     nonce_val: u64,
@@ -333,7 +333,7 @@ pub unsafe extern "C" fn openhttpa_server_decrypt(
 /// # Safety
 ///
 /// Both `atb_id_str` and `plaintext_hex` must be valid, null-terminated C strings.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn openhttpa_server_encrypt(
     atb_id_str: *const c_char,
     plaintext_hex: *const c_char,
@@ -399,7 +399,7 @@ pub unsafe extern "C" fn openhttpa_server_encrypt(
 /// # Safety
 ///
 /// The `ptr` must have been returned by an `openhttpa_*` function and not yet freed.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn openhttpa_free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
         unsafe { drop(CString::from_raw(ptr)) };

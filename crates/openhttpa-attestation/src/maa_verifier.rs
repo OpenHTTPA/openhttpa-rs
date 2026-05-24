@@ -17,7 +17,7 @@ use tokio::sync::RwLock;
 use tracing::debug;
 
 #[cfg(feature = "maa")]
-use jsonwebtoken::{decode_header, Algorithm, DecodingKey, Header, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, Header, Validation, decode_header};
 
 use crate::verifier::{EatClaims, QuoteVerifier, VerificationError, VerificationResult};
 
@@ -242,7 +242,7 @@ impl QuoteVerifier for MaaVerifier {
                 return Err(VerificationError::PolicyViolation(format!(
                     "MAA verifier does not support quote type: {:?}",
                     quote.quote_type
-                )))
+                )));
             }
         };
 

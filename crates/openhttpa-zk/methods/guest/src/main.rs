@@ -307,10 +307,8 @@ fn main() {
         );
 
         // 4. Perform TCB Policy Check
-        if dcap_verified {
-            if let Some(ref collateral) = input.dcap_collateral {
-                dcap_verified = verify_tcb_status(&input.quote_bytes, &collateral.tcb_info);
-            }
+        if dcap_verified && let Some(ref collateral) = input.dcap_collateral {
+            dcap_verified = verify_tcb_status(&input.quote_bytes, &collateral.tcb_info);
         }
     }
 

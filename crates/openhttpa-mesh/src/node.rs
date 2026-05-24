@@ -13,7 +13,7 @@ use openhttpa_tee::provider::TeeProvider;
 use openhttpa_transport::connection::AttestTransport;
 
 use crate::{
-    policy::PolicyEngine, registry::AgentRegistry, AgentMetadata, AgentSession, MeshError,
+    AgentMetadata, AgentSession, MeshError, policy::PolicyEngine, registry::AgentRegistry,
 };
 
 /// An attested AI agent node in the mesh.
@@ -82,10 +82,10 @@ impl AgentNode {
     /// # Errors
     /// Returns [`MeshError`] if the peer is not found or handshake fails.
     pub async fn connect_to_peer(&self, peer_id: Uuid) -> Result<Arc<AgentSession>, MeshError> {
-        if let Some(session) = self.sessions.get(&peer_id) {
-            if session.session.is_alive() {
-                return Ok(session.clone());
-            }
+        if let Some(session) = self.sessions.get(&peer_id)
+            && session.session.is_alive()
+        {
+            return Ok(session.clone());
         }
 
         let peer_metadata = self

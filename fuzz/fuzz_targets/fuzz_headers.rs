@@ -8,8 +8,8 @@
 //! and are NOT treated as failures.
 #![no_main]
 
-use http::header::HeaderName;
 use http::HeaderMap;
+use http::header::HeaderName;
 use libfuzzer_sys::fuzz_target;
 
 use openhttpa_headers::attest_headers::{

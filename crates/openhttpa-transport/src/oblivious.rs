@@ -5,9 +5,9 @@
 //!
 //! Based on RFC 9458 (Oblivious HTTP).
 
-use aes_gcm::{aead::Aead as _, Aes256Gcm, KeyInit};
+use aes_gcm::{Aes256Gcm, KeyInit, aead::Aead as _};
 use async_trait::async_trait;
-use hpke::{aead::AeadCtxR, kem::Kem as KemTrait, Deserializable, OpModeR, OpModeS, Serializable};
+use hpke::{Deserializable, OpModeR, OpModeS, Serializable, aead::AeadCtxR, kem::Kem as KemTrait};
 use rand::thread_rng;
 use std::sync::Arc;
 use thiserror::Error;

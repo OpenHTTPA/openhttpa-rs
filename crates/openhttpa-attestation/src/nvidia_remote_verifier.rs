@@ -17,7 +17,7 @@ use tokio::sync::RwLock;
 use tracing::debug;
 
 #[cfg(feature = "ita")] // We use the same JWT/JWKS logic as ITA/MAA
-use jsonwebtoken::{decode_header, Algorithm, DecodingKey, Header, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, Header, Validation, decode_header};
 
 use crate::verifier::{EatClaims, QuoteVerifier, VerificationError, VerificationResult};
 
@@ -161,12 +161,11 @@ impl NvidiaRemoteVerifier {
         if let Some(rim_res) = claims
             .get("rim_result")
             .and_then(serde_json::Value::as_bool)
+            && !rim_res
         {
-            if !rim_res {
-                return Err(VerificationError::PolicyViolation(
-                    "NVIDIA GPU RIM check failed".to_owned(),
-                ));
-            }
+            return Err(VerificationError::PolicyViolation(
+                "NVIDIA GPU RIM check failed".to_owned(),
+            ));
         }
 
         Ok(serde_json::to_string(claims).unwrap_or_default())

@@ -79,7 +79,7 @@ impl QuoteVerifier for MockVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use openhttpa_tee::{mock::MockTeeProvider, provider::TeeProvider, QuoteRequest};
+    use openhttpa_tee::{QuoteRequest, mock::MockTeeProvider, provider::TeeProvider};
 
     #[tokio::test]
     async fn mock_verifier_round_trip() {

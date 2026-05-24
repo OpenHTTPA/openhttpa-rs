@@ -51,14 +51,13 @@ impl PolicyEngine for SimplePolicy {
         }
 
         // 3. Check hardware version (TCB)
-        if let Some(ref min_v) = self.min_hwversion {
-            if let Some(ref v) = result.claims.hwversion {
-                if !is_version_at_least(v, min_v) {
-                    return Err(VerificationError::PolicyViolation(format!(
-                        "hardware version {v} is below minimum {min_v}"
-                    )));
-                }
-            }
+        if let Some(ref min_v) = self.min_hwversion
+            && let Some(ref v) = result.claims.hwversion
+            && !is_version_at_least(v, min_v)
+        {
+            return Err(VerificationError::PolicyViolation(format!(
+                "hardware version {v} is below minimum {min_v}"
+            )));
         }
 
         // 4. Check Security Version

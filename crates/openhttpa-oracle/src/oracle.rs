@@ -2,7 +2,7 @@
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
 use openhttpa_tee::{QuoteRequest, TeeProvider};
-use openhttpa_zk::{prover::ZkProver, ZkInput};
+use openhttpa_zk::{ZkInput, prover::ZkProver};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;

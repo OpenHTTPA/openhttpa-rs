@@ -1,7 +1,7 @@
 [package]
 name = "openhttpa-fuzz"
 version = "0.0.0"
-edition = "2021"
+edition = "2024"
 publish = false
 # Same dual-license as the rest of the workspace.
 # cargo-deny requires a license field to avoid an `unlicensed` error, even for
