@@ -90,6 +90,7 @@ services:
       - BASE_URL=http://frontend:8080
       - OPENHTTPA_ALLOW_MOCK_HARDWARE=1
       - PLAYWRIGHT_WORKERS=${PLAYWRIGHT_WORKERS:-1}
+      - CI=true
     depends_on:
       frontend:
         condition: service_healthy

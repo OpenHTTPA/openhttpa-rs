@@ -28,9 +28,8 @@ der = { version = "0.7", default-features = false, features = ["alloc"] }
 serde-big-array = { version = "0.5", default-features = false }
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
 
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-panic = "abort"
-debug = false
+# NOTE: [profile.*] sections are ignored in workspace member Cargo.toml files.
+# All profile configuration for this guest crate lives in the workspace root
+# Cargo.toml under [profile.release-zk-guest] and must be selected with
+# `cargo build --profile release-zk-guest` by the RISC Zero build toolchain.
+# See: https://doc.rust-lang.org/cargo/reference/profiles.html

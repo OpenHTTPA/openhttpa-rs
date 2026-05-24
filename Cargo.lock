@@ -2926,6 +2926,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
+name = "libfuzzer-sys"
+version = "0.4.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f12a681b7dd8ce12bff52488013ba614b869148d54dd79836ab85aafdd53f08d"
+dependencies = [
+ "arbitrary",
+ "cc",
+]
+
+[[package]]
 name = "libloading"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3718,6 +3728,18 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "zeroize",
+]
+
+[[package]]
+name = "openhttpa-fuzz"
+version = "0.0.0"
+dependencies = [
+ "bytes",
+ "http",
+ "libfuzzer-sys",
+ "openhttpa-headers",
+ "openhttpa-proto",
+ "serde_json",
 ]
 
 [[package]]

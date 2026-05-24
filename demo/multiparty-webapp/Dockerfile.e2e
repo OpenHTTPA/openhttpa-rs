@@ -1,16 +1,40 @@
+# Stage 1: Build the Wasm binary.
+FROM rust:1.91-slim-bookworm AS wasm-builder
+
+# Install wasm-pack and the wasm32 target.
+RUN rustup target add wasm32-unknown-unknown \
+    && cargo install wasm-pack --locked
+
+WORKDIR /build
+COPY . .
+
+# Build the Wasm binary.
+RUN wasm-pack build bindings/wasm \
+      --target web \
+      --out-dir /wasm-out \
+      --release
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 2: Playwright test runner (slim image, no Rust toolchain).
 FROM mcr.microsoft.com/playwright:v1.59.1-jammy
 
 # Install pnpm
 RUN npm install -g pnpm
+
+ENV CI=true
 
 WORKDIR /src
 
 # Copy the entire workspace (honoring .dockerignore)
 COPY . .
 
-# Install dependencies
+# Overwrite pre-built pkg/ artifacts with the correctly-flagged binary from
+# Stage 1.  The frontend nginx serves from demo/multiparty-webapp/frontend/wasm/.
+COPY --from=wasm-builder /wasm-out/ /src/demo/multiparty-webapp/frontend/wasm/
+
+# Install JS/TS dependencies
 RUN pnpm install
 
-# Playwright browsers are already in the image.
+# Playwright browsers are already in the base image.
 
 ENTRYPOINT ["pnpm", "exec", "playwright", "test"]

@@ -1,3 +1,5 @@
+export CI ?= true
+
 .PHONY: up down logs reset build clean open wasm dev e2e status help stable-up stable-down stable-status
 
 COMPOSE      = docker compose
@@ -79,16 +81,10 @@ wasm:
 	}
 	@echo "Building Wasm bindings..."
 	@mkdir -p $(WASM_OUTDIR)
-	wasm-pack build "$(WASM_PKGDIR)" \
+	+wasm-pack build "$(WASM_PKGDIR)" \
 		--target web \
 		--out-dir "$(CURDIR)/$(WASM_OUTDIR)" \
 		--release
-	@if command -v wasm-opt >/dev/null 2>&1; then \
-		echo "Optimizing Wasm binary with wasm-opt..."; \
-		wasm-opt -O3 "$(CURDIR)/$(WASM_OUTDIR)/openhttpa_wasm_bg.wasm" -o "$(CURDIR)/$(WASM_OUTDIR)/openhttpa_wasm_bg.wasm"; \
-	else \
-		echo "Warning: wasm-opt not found. Skipping additional optimizations."; \
-	fi
 	@echo "Wasm build complete → $(WASM_OUTDIR)/"
 	@echo "Fixing permissions for generated assets (Wasm/JS)..."
 	@chmod -R a+rX $(CURDIR)/$(WASM_OUTDIR) || true

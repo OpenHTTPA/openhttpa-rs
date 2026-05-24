@@ -25,6 +25,11 @@ members = [
     "demo/cli",
     "modules/nginx", "crates/openhttpa-oracle",
     "crates/openhttpa-zk/methods/guest",
+    # cargo-fuzz harness: included in members so the workspace-root
+    # [profile.release.package.openhttpa-fuzz] override is resolved without
+    # the "did not match any packages" warning.  NOT in default-members —
+    # this crate must only be compiled via `cargo fuzz run <target>`.
+    "fuzz",
 ]
 # bindings/python must be built with `maturin` (not plain `cargo build`).
 # Exclude it from the default workspace build so `cargo build --workspace`
@@ -191,3 +196,36 @@ opt-level = 1
 codegen-units = 256
 debug = 2
 incremental = true
+
+# ── Per-package profile overrides ─────────────────────────────────────────────
+#
+# These replace [profile.*] sections that were previously (and incorrectly)
+# placed in non-root workspace member Cargo.toml files. Cargo silently ignores
+# member-level profiles and emits the warning:
+#   "profiles for the non root package will be ignored"
+# All profile customisation MUST live here in the workspace root.
+#
+# References:
+#   https://doc.rust-lang.org/cargo/reference/profiles.html#overrides
+
+# R-06: RISC Zero ZK guest binary profile.
+# The guest runs inside a zkVM and must be compiled with maximum inlining and
+# LTO to eliminate cross-CGU leakage and minimise cycle count.
+# Select with: `cargo build --profile release-zk-guest -p openhttpa-zk-guest`
+# RISC Zero's build infrastructure (build.rs / cargo-risczero) automatically
+# selects this profile when building the guest ELF.
+[profile.release-zk-guest]
+inherits        = "release"
+opt-level       = 3
+lto             = true   # fat LTO: required for single-binary guest ELF
+codegen-units   = 1      # single CGU: maximum inlining across the entire guest
+panic           = "abort"
+debug           = false  # no DWARF in the guest ELF (reduces cycle count)
+
+# R-07: cargo-fuzz harness profile override.
+# cargo-fuzz builds fuzz targets in release mode but requires debug symbols to
+# be present so that coverage maps and sanitiser stack traces are useful.
+# This per-package override applies only to openhttpa-fuzz in release builds.
+# It replaces the [profile.release] that was previously in fuzz/Cargo.toml.
+[profile.release.package.openhttpa-fuzz]
+debug = true   # retain DWARF for sanitiser / coverage instrumentation

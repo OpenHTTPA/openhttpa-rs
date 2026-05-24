@@ -3,6 +3,10 @@ name = "openhttpa-fuzz"
 version = "0.0.0"
 edition = "2021"
 publish = false
+# Same dual-license as the rest of the workspace.
+# cargo-deny requires a license field to avoid an `unlicensed` error, even for
+# internal crates that are never published.
+license = "Apache-2.0 OR MIT"
 
 [package.metadata]
 cargo-fuzz = true
@@ -15,9 +19,12 @@ bytes      = "1"
 http       = "1"
 serde_json = "1"
 
-# Prevent optimising away the fuzz harness in release mode.
-[profile.release]
-debug = true
+# NOTE: [profile.*] sections in workspace members are ignored by Cargo.
+# The debug=true setting needed for cargo-fuzz is applied via a per-package
+# profile override at the workspace root:
+#   [profile.release.package.openhttpa-fuzz]
+#   debug = true
+# See: https://doc.rust-lang.org/cargo/reference/profiles.html#overrides
 
 [[bin]]
 name = "fuzz_headers"

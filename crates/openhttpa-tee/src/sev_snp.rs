@@ -25,8 +25,14 @@ impl TeeAdapter for SevSnpTeeProvider {
 
     fn generate_evidence(
         &self,
-        _request: &QuoteRequest,
+        request: &QuoteRequest,
     ) -> Result<AttestationEvidence, TeeProviderError> {
+        // Suppress the unused-variable warning on platforms where the
+        // sev_snp feature is disabled or the target OS is not Linux.
+        // The binding is genuinely used inside the cfg-gated block below.
+        #[cfg(not(all(feature = "sev_snp", target_os = "linux")))]
+        let _ = &request;
+
         #[cfg(all(feature = "sev_snp", target_os = "linux"))]
         {
             use crate::evidence::SevSnpEvidence;
@@ -36,7 +42,7 @@ impl TeeAdapter for SevSnpTeeProvider {
                 Firmware::open().map_err(|e| TeeProviderError::NotAvailable(format!("{e:?}")))?;
 
             let mut user_data = [0u8; 64];
-            user_data.copy_from_slice(&_request.report_data);
+            user_data.copy_from_slice(&request.report_data);
 
             let report_bytes = fw
                 .get_report(None, Some(user_data), Some(0))

@@ -40,25 +40,140 @@ allow = [
     "LGPL-3.0-or-later", # downloader (build-tool for risc0)
     "Zlib",           # konst_macro_rules (regorus dependency)
     "MIT-0",          # borrow-or-share (regorus dependency)
+    # L-01: NCSA (University of Illinois/NCSA Open Source License).
+    # OSI-approved, FSF Free/Libre.  Required by libfuzzer-sys which bundles
+    # LLVM's libFuzzer runtime under the NCSA license.
+    # Scope: only reachable from the fuzz/ workspace member (not production).
+    "NCSA",
 ]
 confidence-threshold = 0.8
 
+# L-02: Per-crate license exceptions for packages that specify a license file
+# rather than an SPDX expression.  cargo-deny cannot synthesise the SPDX id
+# from a `license-file` field, so the crate appears unlicensed without an
+# explicit exception.  Each exception is audited manually and documented here.
+[[licenses.exceptions]]
+# regorus v0.2.8 (Microsoft OPA/Rego interpreter) — MIT per LICENSE file:
+#   https://github.com/microsoft/regorus/blob/main/LICENSE
+# The crate uses `license-file = "LICENSE"` instead of `license = "MIT"`.
+allow  = ["MIT"]
+name   = "regorus"
+version = "=0.2.8"
+
 [bans]
 multiple-versions = "warn"
+# ── Duplicate-version skip list ────────────────────────────────────────────────
+#
+# POLICY: Every entry here is a version that CANNOT be removed without an
+# upstream crate changing its dependency.  We accept the old copy and suppress
+# the warning to keep CI clean.  Each group names the root cause and links to
+# the upstream issue tracker for follow-up.
+#
+# When an upstream crate drops the old version, delete the corresponding skip
+# entry and run `cargo deny check bans` to confirm the warning is gone.
+#
+# ── Group A: risc0 transitive tree ────────────────────────────────────────────
+# risc0-zkvm 1.2.6 pulls a large ZK dependency tree (ark-*, cargo_metadata,
+# metal, etc.) that has not yet migrated to the current versions of common
+# crates.  None of these old versions are reachable from production code paths
+# that are not gated on the `mock` or `nvidia_gpu` features.
+# Resolution: remove each entry once risc0 updates to the matching crate's
+# current major version.
 skip = [
-    { name = "winnow", version = "0.7" },
-    { name = "untrusted", version = "0.7" },
-    { name = "rand_core", version = "0.6" },
-    { name = "rand_chacha", version = "0.3" },
-    { name = "rand", version = "0.8" },
-    { name = "libloading", version = "0.8" },
-    { name = "bindgen", version = "0.71" },
-    { name = "bindgen", version = "0.72" },
-    { name = "getrandom", version = "0.2" },
-    { name = "getrandom", version = "0.3" },
-    { name = "getrandom", version = "0.4" },
-    { name = "itertools", version = "0.13" },
-    { name = "tracing-subscriber", version = "0.2" }, # risc0 transitive
+    # ── Previously existing entries ────────────────────────────────────────────
+    { name = "winnow",             version = "0.7"  }, # cbindgen 0.29 (risc0 build-dep)
+    { name = "untrusted",          version = "0.7"  }, # ring 0.17 (risc0 crypto)
+    { name = "libloading",         version = "0.8"  }, # risc0-build-kernel 1.x
+    { name = "bindgen",            version = "0.71" }, # risc0 build scripts
+    { name = "bindgen",            version = "0.72" }, # risc0 build scripts
+    { name = "getrandom",          version = "0.2"  }, # risc0 / rand 0.8 transitive
+    { name = "getrandom",          version = "0.3"  }, # risc0 / rand 0.9 transitive
+    { name = "getrandom",          version = "0.4"  }, # rand 0.10 (latest)
+    { name = "tracing-subscriber", version = "0.2"  }, # risc0 transitive (RUSTSEC-2025-0055, see advisories)
+
+    # ── Group A-1: rand / rand_core / rand_chacha ──────────────────────────────
+    # risc0 pulls rand 0.8 → rand_core 0.6 → rand_chacha 0.3.
+    # Our own crates use rand 0.9 / 0.10.  Three parallel major version trees.
+    { name = "rand",               version = "0.8"  }, # risc0 transitive
+    { name = "rand",               version = "0.9"  }, # intermediate; some crates not yet on 0.10
+    { name = "rand_core",          version = "0.6"  }, # rand 0.8 companion (risc0)
+    { name = "rand_core",          version = "0.9"  }, # rand 0.9 companion
+    { name = "rand_chacha",        version = "0.3"  }, # rand 0.8 companion (risc0)
+
+    # ── Group A-2: thiserror 1.x ───────────────────────────────────────────────
+    # cargo_metadata 0.18 (pulled by risc0-build 1.2.6) requires thiserror 1.x.
+    # Our workspace uses thiserror 2.x.
+    { name = "thiserror",          version = "1"    },
+    { name = "thiserror-impl",     version = "1"    },
+
+    # ── Group A-3: syn 1.x ────────────────────────────────────────────────────
+    # ark-ff-asm (proc-macro) inside the risc0-groth16 / ark-bn254 tree
+    # requires syn 1.x.  Our workspace proc-macros use syn 2.x.
+    { name = "syn",                version = "1"    },
+
+    # ── Group A-4: prost 0.13 ─────────────────────────────────────────────────
+    # risc0-zkvm 1.2.6 depends on prost 0.13 / prost-derive 0.13.
+    # tonic 0.14 (our gRPC layer) uses prost 0.14.
+    { name = "prost",              version = "0.13" },
+    { name = "prost-derive",       version = "0.13" },
+
+    # ── Group A-5: bitflags 1.x ───────────────────────────────────────────────
+    # metal 0.29 (macOS GPU backend, risc0-circuit-recursion) requires
+    # core-graphics-types 0.1 which pins bitflags 1.x.
+    { name = "bitflags",           version = "1"    },
+
+    # ── Group A-6: hashbrown 0.13 ─────────────────────────────────────────────
+    # ark-ec 0.4 (risc0-groth16 / ark-bn254) uses hashbrown 0.13.
+    # Current ecosystem is on 0.14 / 0.17.
+    { name = "hashbrown",          version = "0.13" },
+    { name = "hashbrown",          version = "0.14" }, # transitional; 0.17 is latest
+
+    # ── Group A-7: itertools ──────────────────────────────────────────────────
+    # Multiple risc0 sub-crates pin different itertools majors (0.10, 0.11, 0.13).
+    { name = "itertools",          version = "0.10" },
+    { name = "itertools",          version = "0.11" },
+    { name = "itertools",          version = "0.13" },
+
+    # ── Group A-8: num-bigint 0.3 ─────────────────────────────────────────────
+    # ark-ff 0.4 uses num-bigint 0.3; current ecosystem is on 0.4.
+    { name = "num-bigint",         version = "0.3"  },
+
+    # ── Group A-9: chacha20 0.9 ───────────────────────────────────────────────
+    # chacha20poly1305 0.10 (risc0 crypto path) requires chacha20 0.9.
+    { name = "chacha20",           version = "0.9"  },
+
+    # ── Group A-10: risc0-build-kernel dual version ────────────────────────────
+    # risc0-build 1.2.6 pulls risc0-build-kernel 1.2.6; our nvidia_gpu feature
+    # also pulls 2.0.1.  Both are required simultaneously.
+    { name = "risc0-build-kernel", version = "1"    },
+
+    # ── Group A-11: toml_datetime 0.7 ─────────────────────────────────────────
+    # cbindgen 0.29 (risc0 build-dep) depends on toml 0.9 → toml_datetime 0.7.
+    # The wider ecosystem uses toml_edit 0.25 → toml_datetime 1.x.
+    { name = "toml_datetime",      version = "0.7"  },
+
+    # ── Group A-12: derive_more 0.99 ──────────────────────────────────────────
+    # Older risc0 transitive deps still use derive_more 0.99 (proc-macro).
+    { name = "derive_more",        version = "0.99" },
+
+    # ── Group A-13: directories / dirs-sys ────────────────────────────────────
+    # risc0-build-kernel 1.x pulls directories 5 → dirs-sys 0.4.
+    # risc0-build-kernel 2.x uses directories 6 → dirs-sys 0.5.
+    { name = "directories",        version = "5"    },
+    { name = "dirs-sys",           version = "0.4"  },
+
+    # ── Group A-14: bit-vec 0.7 ───────────────────────────────────────────────
+    # Some ark-* crates use bit-vec 0.7; current is 0.8.
+    { name = "bit-vec",            version = "0.7"  },
+
+    # ── Group A-15: cpufeatures 0.2 ───────────────────────────────────────────
+    # Older sha2 / aes crates in the risc0 tree use cpufeatures 0.2.
+    { name = "cpufeatures",        version = "0.2"  },
+
+    # ── Group B: redis 0.27 ───────────────────────────────────────────────────
+    # redis 0.27 has not yet updated to socket2 0.6 / tokio 1.x socket2.
+    # Resolution: remove once redis releases a version depending on socket2 >=0.6.
+    { name = "socket2",            version = "0.5"  },
 ]
 wildcards = "allow"
 deny = [

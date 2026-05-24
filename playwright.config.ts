@@ -19,6 +19,13 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     headless: true,
+    launchOptions: {
+      args: [
+        // Required for headless Chromium to load Wasm in Docker without GPU
+        '--disable-dev-shm-usage',
+        '--no-sandbox',
+      ],
+    },
   },
   projects: [
     {

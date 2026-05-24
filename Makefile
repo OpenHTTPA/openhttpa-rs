@@ -17,6 +17,7 @@ export CARGO_NET_RETRY := 10
 export RUSTUP_MAX_RETRIES := 10
 export CARGO_TERM_COLOR := always
 export OPENHTTPA_ALLOW_MOCK_HARDWARE := 1
+export CI ?= true
 
 # Default to skipping expensive ZK method builds and kernels to avoid toolchain dependencies.
 # This ensures stability on standard runners without full RISC Zero toolchains.
@@ -63,7 +64,8 @@ ci: ## Run all standard CI checks
 
 verify-all: format clippy build build-release test test-release ci ## Exhaustive formal validation and verification suite
 	@echo "Starting E2E stack for project: $(COMPOSE_PROJECT_NAME) for verify-all"
-	@trap '$(MAKE) demo-down' EXIT; \
+	@set -e; \
+	trap '$(MAKE) demo-down' EXIT; \
 	$(MAKE) demo-up; \
 	$(DEMO_MAKE) e2e-run; \
 	$(MAKE) test-all-examples
@@ -155,7 +157,7 @@ endif
 # Autonomous ZK-Compression Verification (ZAA)
 test-zk-compression: ## Verify ZK-DCAP compression ratio and guest logic
 	@echo "--- Verifying ZK-DCAP Compression (ZAA) ---"
-	OPENHTTPA_SKIP_ZK_BUILD=1 RISC0_SKIP_BUILD_KERNELS=1 cargo test -p openhttpa-zk --test integration -- test_zk_dcap_compression
+	+OPENHTTPA_SKIP_ZK_BUILD=1 RISC0_SKIP_BUILD_KERNELS=1 cargo test -p openhttpa-zk --test integration -- test_zk_dcap_compression
 	@echo "ZAA autonomous verification passed!"
 
 audit-zk-scalability: ## Profile ZK guest cycle counts for scalability audit
@@ -164,25 +166,25 @@ audit-zk-scalability: ## Profile ZK guest cycle counts for scalability audit
 		echo "Error: audit-zk-scalability requires OPENHTTPA_SKIP_ZK_BUILD=0"; \
 		exit 1; \
 	fi
-	cargo run --example profile_guest -p openhttpa-zk -- --mode dcap-compression
+	+cargo run --example profile_guest -p openhttpa-zk -- --mode dcap-compression
 
 # Build all Rust crates (excluding those that require special toolchains like wasm/python).
 # RISC0_SKIP_BUILD_KERNELS is set automatically above by the Metal/CUDA probe.
 # It is forwarded explicitly here so all child cargo invocations see the same value,
 # even when invoked via recursive make or with a different environment.
 build: ## Build all Rust crates (debug)
-	RISC0_SKIP_BUILD_KERNELS=$(RISC0_SKIP_BUILD_KERNELS) cargo build --workspace --features $(FEATURES)
+	+RISC0_SKIP_BUILD_KERNELS=$(RISC0_SKIP_BUILD_KERNELS) cargo build --workspace --features $(FEATURES)
 
 build-release: ## Build all Rust crates (release)
-	RISC0_SKIP_BUILD_KERNELS=$(RISC0_SKIP_BUILD_KERNELS) cargo build --workspace --features $(FEATURES) --release
+	+RISC0_SKIP_BUILD_KERNELS=$(RISC0_SKIP_BUILD_KERNELS) cargo build --workspace --features $(FEATURES) --release
 
 # Run all Rust tests.
 # Forwards RISC0_SKIP_BUILD_KERNELS so test compilation is consistent with the build.
 test: ## Run all Rust tests (debug)
-	RISC0_SKIP_BUILD_KERNELS=$(RISC0_SKIP_BUILD_KERNELS) cargo test --workspace --features $(FEATURES)
+	+RISC0_SKIP_BUILD_KERNELS=$(RISC0_SKIP_BUILD_KERNELS) cargo test --workspace --features $(FEATURES)
 
 test-release: ## Run all Rust tests (release)
-	RISC0_SKIP_BUILD_KERNELS=$(RISC0_SKIP_BUILD_KERNELS) cargo test --workspace --features $(FEATURES) --release
+	+RISC0_SKIP_BUILD_KERNELS=$(RISC0_SKIP_BUILD_KERNELS) cargo test --workspace --features $(FEATURES) --release
 
 # Run all Playwright E2E tests (requires running stack)
 test-web: ## Run Playwright E2E tests (individual)
@@ -191,36 +193,37 @@ test-web: ## Run Playwright E2E tests (individual)
 # Run full E2E suite (starts demo stack + tests)
 e2e: ## Run full E2E suite (starts demo stack + tests)
 	@echo "Starting E2E stack for project: $(COMPOSE_PROJECT_NAME)"
-	@trap '$(MAKE) demo-down' EXIT; \
+	@set -e; \
+	trap '$(MAKE) demo-down' EXIT; \
 	$(MAKE) demo-up; \
 	$(DEMO_MAKE) e2e-run; \
 	$(MAKE) test-bindings
 
 # Fast workspace check
 check: ## Run cargo check on workspace
-	cargo check --workspace
+	+cargo check --workspace
 
 # Verify all examples compile (software-safe features)
 check-examples: ## Verify all examples compile
-	cargo check --examples --workspace --features openhttpa-attestation/ita,openhttpa-attestation/maa,openhttpa-tee/mock,openhttpa-tee/nvidia_gpu
+	+cargo check --examples --workspace --features openhttpa-attestation/ita,openhttpa-attestation/maa,openhttpa-tee/mock,openhttpa-tee/nvidia_gpu
 
 clippy: ## Run clippy lints (all features)
 	@mkdir -p /tmp/usr/lib
-	OPENHTTPA_SKIP_ZK_BUILD=$(OPENHTTPA_SKIP_ZK_BUILD) RISC0_SKIP_BUILD=1 RISC0_SKIP_BUILD_KERNELS=1 rustup run stable cargo clippy --workspace --all-targets $(CLIPPY_FEATURES) -- -D warnings
+	+OPENHTTPA_SKIP_ZK_BUILD=$(OPENHTTPA_SKIP_ZK_BUILD) RISC0_SKIP_BUILD=1 RISC0_SKIP_BUILD_KERNELS=1 rustup run stable cargo clippy --workspace --all-targets $(CLIPPY_FEATURES) -- -D warnings
 
 node_modules: package.json pnpm-lock.yaml ## Ensure Node.js dependencies are installed
 	pnpm install
 	@touch node_modules
 
 fmt: node_modules ## Check code formatting
-	rustup run stable cargo fmt --all -- --check
+	+rustup run stable cargo fmt --all -- --check
 	@if command -v forge >/dev/null 2>&1; then \
 		cd crates/openhttpa-contract && forge fmt --check; \
 	fi
 	pnpm run fmt:check
 
 format: node_modules ## Apply code formatting
-	rustup run stable cargo fmt --all
+	+rustup run stable cargo fmt --all
 	@if command -v forge >/dev/null 2>&1; then \
 		cd crates/openhttpa-contract && forge fmt; \
 	fi
@@ -242,21 +245,25 @@ check-bindings: check-python-bindings check-node-bindings check-go-bindings ## V
 
 check-python-bindings:
 	@echo "Checking Python bindings..."
-	@command -v uv >/dev/null 2>&1 && uvx maturin build -m bindings/python/Cargo.toml --release --auditwheel repair || { cd bindings/python && maturin build --release --auditwheel repair; }
+	+@command -v uv >/dev/null 2>&1 && uvx maturin build -m bindings/python/Cargo.toml --release --auditwheel repair || { cd bindings/python && maturin build --release --auditwheel repair; }
 
 check-node-bindings:
 	@echo "Checking Node.js bindings..."
-	cd bindings/nodejs && pnpm install && pnpm build
+	# bindings/nodejs is a pnpm workspace member; deps are managed by the root pnpm-lock.yaml.
+	# Use --filter to install/sync only this workspace package without triggering an interactive
+	# "recreate node_modules?" prompt that occurs when pnpm install is run inside the subdirectory.
+	pnpm install --frozen-lockfile --filter @openhttpa/core
+	cd bindings/nodejs && pnpm build
 
 check-go-bindings:
 	@echo "Checking Go bindings..."
-	cargo build -p openhttpa-c --release
+	+cargo build -p openhttpa-c --release
 	cd bindings/go && go build ./...
 
 # Generate documentation and check for broken links
 docs: ## Generate workspace documentation
 	@mkdir -p /tmp/usr/lib
-	OPENHTTPA_SKIP_ZK_BUILD=$(OPENHTTPA_SKIP_ZK_BUILD) RUSTDOCFLAGS="-D warnings" cargo doc --workspace $(CLIPPY_FEATURES) --no-deps
+	+OPENHTTPA_SKIP_ZK_BUILD=$(OPENHTTPA_SKIP_ZK_BUILD) RUSTDOCFLAGS="-D warnings" cargo doc --workspace $(CLIPPY_FEATURES) --no-deps
 
 # Clean build artifacts
 clean: ## Remove basic build artifacts
@@ -388,39 +395,39 @@ test-rust-examples: example-resumption example-ohttpa example-attestation exampl
 
 # Individual Rust examples (root moved to crates)
 example-resumption: ## Run the session resumption example
-	cargo run --example resumption_example -p openhttpa-core
+	+cargo run --example resumption_example -p openhttpa-core
 
 example-ohttpa: ## Run the O-HTTPA oblivious example
-	cargo run --example o-httpa_example -p openhttpa-transport
+	+cargo run --example o-httpa_example -p openhttpa-transport
 
 example-attestation: ## Run the remote attestation config example
-	OpenHTTPA_ITA_API_KEY=mock cargo run --example remote_attestation -p openhttpa-server --features ita
+	+OpenHTTPA_ITA_API_KEY=mock cargo run --example remote_attestation -p openhttpa-server --features ita
 
 example-oblivious: ## Run the full oblivious client example
-	cargo run --example full_oblivious_client -p openhttpa-client
+	+cargo run --example full_oblivious_client -p openhttpa-client
 
 # Individual Rust examples (crates)
 example-gpu: ## Run the NVIDIA GPU attestation example
-	cargo run --example nvidia_gpu_attestation -p openhttpa-client --features nvidia_gpu
+	+cargo run --example nvidia_gpu_attestation -p openhttpa-client --features nvidia_gpu
 
 example-hub: ## Run the attestation hub server example (timeout 5s)
 	@echo "Starting Hub (will stop after 5s)..."
-	-timeout 5 cargo run --example attestation_hub -p openhttpa-server || true
+	+-timeout 5 cargo run --example attestation_hub -p openhttpa-server || true
 
 example-orchestration: ## Run the agent orchestration example
-	cargo run --example orchestration -p openhttpa-a2a
+	+cargo run --example orchestration -p openhttpa-a2a
 
 example-oracle: ## Run the Web3 Oracle integration tests
-	RISC0_SKIP_BUILD_KERNELS=1 cargo test -p openhttpa-oracle
+	+RISC0_SKIP_BUILD_KERNELS=1 cargo test -p openhttpa-oracle
 
 example-swarm: ## Run basic swarm simulation
-	cargo run --example basic_swarm -p openhttpa-mesh
+	+cargo run --example basic_swarm -p openhttpa-mesh
 
 example-llm: ## Run verified AI chat example
-	cargo run --example verified_ai -p openhttpa-llm
+	+cargo run --example verified_ai -p openhttpa-llm
 
 example-crypto: ## Run crypto test vector generation example
-	cargo run --example gen_vectors -p openhttpa-crypto
+	+cargo run --example gen_vectors -p openhttpa-crypto
 
 build-contracts: ## Build Solidity contracts
 	@if command -v forge >/dev/null 2>&1; then \
@@ -444,13 +451,16 @@ bind-python: ## Build Python bindings
 	cd bindings/python && maturin develop
 
 bind-nodejs: ## Build Node.js bindings
-	cd bindings/nodejs && pnpm install && pnpm run build
+	# bindings/nodejs is a pnpm workspace member; use --filter from workspace root to avoid
+	# interactive "recreate node_modules?" prompts caused by running pnpm install inside the subdir.
+	pnpm install --filter @openhttpa/core
+	cd bindings/nodejs && pnpm run build
 
 bind-go: ## Build Go bindings
 	cd bindings/go && go build ./...
 
 bind-c: ## Build C bindings
-	cargo build -p openhttpa-c --release
+	+cargo build -p openhttpa-c --release
 
 wasm: ## Build browser Wasm bindings
 	$(DEMO_MAKE) wasm
@@ -480,7 +490,7 @@ publish-all: publish-crates publish-python publish-npm publish-wasm publish-go p
 ## -- Native Infrastructure --
 
 native-build: bind-c bind-go ## Build native Nginx and Caddy modules
-	cd modules/nginx && cargo build --release
+	+cd modules/nginx && cargo build --release
 	cd modules/caddy && go build -o openhttpa-caddy main.go
 
 native-demo: demo-native-up ## Alias for demo-native-up

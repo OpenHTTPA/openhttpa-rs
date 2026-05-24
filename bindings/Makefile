@@ -1,5 +1,7 @@
 # OpenHTTPA Bindings Examples Makefile
 
+export CI ?= true
+
 .PHONY: all python node go c wasm clean help
 
 help:
@@ -33,7 +35,7 @@ wasm:
 
 prebuild:
 	@echo "--- Pre-building Workspace (Release) ---"
-	cargo build --release --workspace
+	+cargo build --release --workspace
 
 all: prebuild
 	@echo "--- Running all binding examples in parallel ---"
@@ -45,4 +47,4 @@ clean:
 	rm -rf nodejs/node_modules nodejs/build nodejs/index.js nodejs/index.d.ts nodejs/*.node
 	rm -rf c/examples/example
 	rm -rf wasm/examples/pkg
-	cargo clean
+	+cargo clean
