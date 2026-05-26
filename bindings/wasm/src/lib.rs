@@ -30,7 +30,6 @@
 //!   write key are returned to JavaScript for display — never the full secret.
 
 use std::cell::{Cell, RefCell};
-use std::str::FromStr;
 
 use aes_gcm::{
     Aes256Gcm, Nonce as GcmNonce,
@@ -184,10 +183,10 @@ pub fn openhttpa_seal_ws(base_id: &str, plaintext: &str) -> Result<Vec<u8>, JsVa
             return Err(JsValue::from_str("base_id mismatch"));
         }
 
-        // AAD = raw AtbId bytes (16 bytes)
-        let atb_id_obj = openhttpa_proto::AtbId::from_str(base_id)
-            .map_err(|e| JsValue::from_str(&format!("invalid base_id: {e}")))?;
-        let aad = *atb_id_obj.as_uuid().as_bytes();
+        // Normalized AAD: "openhttpa:" + base_id_string (same as HTTP path)
+        // WB2/CB2 fix: must match the server-side AAD construction.
+        let mut aad = b"openhttpa:".to_vec();
+        aad.extend_from_slice(base_id.as_bytes());
 
         // 1. Get current counter and increment.
         let count = s.ws_client_counter.get();
@@ -242,9 +241,10 @@ pub fn openhttpa_seal_ws_binary(base_id: &str, plaintext: &[u8]) -> Result<Vec<u
             return Err(JsValue::from_str("base_id mismatch"));
         }
 
-        let atb_id_obj = openhttpa_proto::AtbId::from_str(base_id)
-            .map_err(|e| JsValue::from_str(&format!("invalid base_id: {e}")))?;
-        let aad = *atb_id_obj.as_uuid().as_bytes();
+        // Normalized AAD: "openhttpa:" + base_id_string (same as HTTP path)
+        // WB2/CB2 fix: must match the server-side AAD construction.
+        let mut aad = b"openhttpa:".to_vec();
+        aad.extend_from_slice(base_id.as_bytes());
 
         let count = s.ws_client_counter.get();
         if count == u64::MAX {
@@ -301,9 +301,10 @@ pub fn openhttpa_unseal_ws(base_id: &str, frame: &[u8]) -> Result<String, JsValu
             return Err(JsValue::from_str("frame too short"));
         }
 
-        let atb_id_obj = openhttpa_proto::AtbId::from_str(base_id)
-            .map_err(|e| JsValue::from_str(&format!("invalid base_id: {e}")))?;
-        let aad = *atb_id_obj.as_uuid().as_bytes();
+        // Normalized AAD: "openhttpa:" + base_id_string (same as HTTP path)
+        // WB2/CB2 fix: must match the server-side AAD construction.
+        let mut aad = b"openhttpa:".to_vec();
+        aad.extend_from_slice(base_id.as_bytes());
 
         let (nonce_bytes, ciphertext) = frame.split_at(12);
 
@@ -601,8 +602,32 @@ pub fn openhttpa_compute_ticket(
 ///
 /// Implements TLS 1.3 §5.3 nonce construction:
 /// `nonce = write_iv ^ (counter as 96-bit BE, right-aligned)`
+///
+/// The returned JSON contains:
+/// - `nonce`: hex-encoded 12-byte IV
+/// - `counter`: monotonic counter value
+/// - `ciphertext`: hex-encoded AEAD ciphertext (includes GCM authentication tag)
+/// - `ticket`: base64-encoded `Attest-Ticket` trailer — `BE_u64(counter) || 0x00 || HMAC-SHA384(AHL)`
+///   This is computed via `openhttpa_compute_ticket` and provides AHL authentication.
+///   Callers MUST include this value in the `Attest-Ticket` trailer or header of the request.
 #[wasm_bindgen]
 pub fn openhttpa_seal(base_id: &str, plaintext: &str) -> Result<String, JsValue> {
+    openhttpa_seal_with_ahl(base_id, plaintext, "GET", "/", None, "{}")
+}
+
+/// Encrypt a JSON payload and compute a real `Attest-Ticket` binder over the AHL.
+///
+/// This is the full form of `openhttpa_seal`; the short form calls this with
+/// default method/path values for backward-compatibility.
+#[wasm_bindgen]
+pub fn openhttpa_seal_with_ahl(
+    base_id: &str,
+    plaintext: &str,
+    method: &str,
+    path: &str,
+    query: Option<String>,
+    headers_json: &str,
+) -> Result<String, JsValue> {
     SESSION.with(|s_ref| {
         let mut s_opt = s_ref.borrow_mut();
         let s = s_opt
@@ -648,15 +673,44 @@ pub fn openhttpa_seal(base_id: &str, plaintext: &str) -> Result<String, JsValue>
             )
             .map_err(|e| JsValue::from_str(&format!("encryption failed: {e}")))?;
 
-        // 4. Binder (MAC over headers). For now, we'll use a placeholder or
-        // simple MAC. `OpenHTTPA` uses HMAC-SHA384 or AEAD tag.
-        // We'll return the ciphertext's tag as the "binder" for demo purposes
-        // if we want to show it in the UI.
+        // 4. Compute a real Attest-Ticket binder (WB1 fix).
+        // Parse headers for AHL canonicalization.
+        let headers: std::collections::HashMap<String, String> = serde_json::from_str(headers_json)
+            .map_err(|e| JsValue::from_str(&format!("invalid headers JSON: {e}")))?;
+        let mut map = http::HeaderMap::new();
+        for (k, v) in headers {
+            if let (Ok(name), Ok(val)) = (
+                http::HeaderName::try_from(k),
+                http::HeaderValue::try_from(v),
+            ) {
+                map.insert(name, val);
+            }
+        }
+        let ahl = openhttpa_headers::canonicalize_ahl(method, path, query.as_deref(), &map)
+            .map_err(|e| JsValue::from_str(&format!("AHL error: {e}")))?;
+
+        use hmac::{Hmac, Mac};
+        use sha2::Sha384;
+        type HmacSha384 = Hmac<Sha384>;
+
+        let mut mac = <HmacSha384 as Mac>::new_from_slice(&s.keys.client_mac_key)
+            .map_err(|_| JsValue::from_str("HMAC init failed"))?;
+        mac.update(&count.to_be_bytes());
+        mac.update(&ahl);
+        let hmac_result = mac.finalize().into_bytes();
+
+        // Attest-Ticket binary trailer: BE_u64(counter) || 0x00 (1-RTT) || HMAC-SHA384
+        let mut ticket_payload = count.to_be_bytes().to_vec();
+        ticket_payload.push(0u8); // 1-RTT mode
+        ticket_payload.extend_from_slice(&hmac_result);
+        use base64ct::{Base64, Encoding};
+        let ticket_b64 = Base64::encode_string(&ticket_payload);
+
         let res = serde_json::json!({
             "nonce": hex::encode(nonce_bytes),
             "counter": count,
             "ciphertext": hex::encode(ciphertext),
-            "binder": hex::encode(&nonce_bytes[..8]),
+            "ticket": ticket_b64,
         });
 
         serde_json::to_string(&res).map_err(|e| JsValue::from_str(&format!("serialise: {e}")))

@@ -50,6 +50,8 @@ impl AgentNode {
             endpoint,
             public_key: vec![], // In a real impl, this would be generated in TEE
             last_quote: None,
+            signature: vec![], // Set when signing a provenance entry
+            prev_hash: None,   // Set when chaining provenance hops
         };
 
         Self {

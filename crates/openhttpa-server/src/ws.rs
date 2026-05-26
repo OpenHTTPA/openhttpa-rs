@@ -288,7 +288,7 @@ pub async fn attested_ws_upgrade<H: AttestWsHandler>(
 
     // 3. Derive the per-WebSocket AEAD keys from session keys.
     //    We clone the key material here so the handler closure is 'static.
-    let (outbound_key, inbound_key, inbound_iv, algorithm, atb_id_bytes) = {
+    let (outbound_key, inbound_key, inbound_iv, algorithm) = {
         let sess_state = session.state();
         let algorithm = cipher_suite_to_aead(sess_state.cipher_suite);
 
@@ -324,8 +324,7 @@ pub async fn attested_ws_upgrade<H: AttestWsHandler>(
                         .into_response();
                 };
 
-                let atb_bytes = *atb_id.as_uuid().as_bytes();
-                (out_key, in_key, cwiv_arr, algorithm, atb_bytes)
+                (out_key, in_key, cwiv_arr, algorithm)
             }
             Err(e) => {
                 warn!(%atb_id, error = %e, "failed to access session keys for WS upgrade");
@@ -347,7 +346,7 @@ pub async fn attested_ws_upgrade<H: AttestWsHandler>(
             inbound_key,
             inbound_iv,
             algorithm,
-            atb_id_bytes,
+            &atb_id_clone,
         );
         handler.handle(ws_session).await;
     })
@@ -384,6 +383,8 @@ pub struct AttestWsSession {
     algorithm: AeadAlgorithm,
     /// AAD = raw `AtbId` bytes, binding every frame to the session.
     atb_id_bytes: [u8; 16],
+    /// Hardened AAD = "openhttpa:" + `base_id_string`.
+    aad: Vec<u8>,
     /// Last seen inbound counter.  Frames must arrive with strictly
     /// incrementing counters to prevent replay.
     last_inbound_counter: u64,
@@ -394,14 +395,17 @@ impl AttestWsSession {
     ///
     /// Normally called internally by [`attested_ws_upgrade`].
     #[must_use]
-    pub const fn new(
+    pub fn new(
         ws: WebSocket,
         outbound: BoundAeadKey,
         inbound: BoundAeadKey,
         inbound_iv: [u8; 12],
         algorithm: AeadAlgorithm,
-        atb_id_bytes: [u8; 16],
+        atb_id: &AtbId,
     ) -> Self {
+        let atb_id_bytes = *atb_id.as_uuid().as_bytes();
+        let mut aad = b"openhttpa:".to_vec();
+        aad.extend_from_slice(atb_id.to_string().as_bytes());
         Self {
             ws,
             outbound,
@@ -409,6 +413,7 @@ impl AttestWsSession {
             inbound_iv,
             algorithm,
             atb_id_bytes,
+            aad,
             last_inbound_counter: 0,
         }
     }
@@ -425,7 +430,7 @@ impl AttestWsSession {
 
         let nonce = self
             .outbound
-            .seal(&self.atb_id_bytes, &mut plaintext)
+            .seal(&self.aad, &mut plaintext)
             .map_err(|e| WsError::AeadSeal(e.to_string()))?;
 
         let mut frame = Vec::with_capacity(12 + plaintext.len());
@@ -457,9 +462,7 @@ impl AttestWsSession {
 
         // Decrypt in place.
         let mut ciphertext = frame[12..].to_vec();
-        let plaintext = self
-            .inbound
-            .open(&nonce, &self.atb_id_bytes, &mut ciphertext)?;
+        let plaintext = self.inbound.open(&nonce, &self.aad, &mut ciphertext)?;
 
         // First byte is the message type tag.
         match plaintext.first().copied() {

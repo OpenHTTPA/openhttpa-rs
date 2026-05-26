@@ -45,6 +45,13 @@ pub enum ClientError {
 }
 
 /// The `OpenHTTPA` async client.
+///
+/// # Security defaults
+///
+/// - `strict_attestation` defaults to `false` (development mode). **Set to
+///   `true` in production** to reject sessions with no server attestation quotes.
+/// - `max_response_size` defaults to [`DEFAULT_MAX_RESPONSE_SIZE`] (16 MiB).
+///   Increase only for known bulk-data endpoints.
 #[allow(dead_code)]
 pub struct OpenHttpaClient {
     server_uri: Uri,
@@ -54,6 +61,8 @@ pub struct OpenHttpaClient {
     strict_attestation: bool,
     require_preflight: bool,
     server_identity_pub: Option<Vec<u8>>,
+    /// Maximum bytes to buffer for non-streaming response bodies.
+    max_response_size: usize,
 }
 
 impl OpenHttpaClient {
@@ -65,6 +74,7 @@ impl OpenHttpaClient {
         strict_attestation: bool,
         require_preflight: bool,
         server_identity_pub: Option<Vec<u8>>,
+        max_response_size: usize,
     ) -> Self {
         Self {
             server_uri,
@@ -74,6 +84,7 @@ impl OpenHttpaClient {
             strict_attestation,
             require_preflight,
             server_identity_pub,
+            max_response_size,
         }
     }
 
@@ -764,8 +775,8 @@ impl OpenHttpaClient {
             )));
         }
 
-        // 3. Unseal response body.
-        let resp_bytes = axum::body::to_bytes(resp.body, 100 * 1024 * 1024) // 100MB limit for non-streaming
+        // 3. Unseal response body (bounded by max_response_size to prevent DoS).
+        let resp_bytes = axum::body::to_bytes(resp.body, self.max_response_size)
             .await
             .map_err(|e| ClientError::Transport(e.to_string()))?;
 

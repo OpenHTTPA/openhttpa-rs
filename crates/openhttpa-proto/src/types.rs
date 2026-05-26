@@ -569,14 +569,43 @@ mod tests {
 }
 
 /// Metadata for an agent in the mesh.
+///
+/// # Provenance signing (P-01)
+///
+/// When appended to a [`ProvenanceChain`], each agent MUST sign the entry
+/// with its identity key (the secret corresponding to `public_key`).  The
+/// signature covers `SHA-384(transcript_hash ‖ prev_hash_or_zeros)` using
+/// ML-DSA-44 (ML-DSA post-quantum signature scheme):
+///
+/// ```text
+/// sig = ML-DSA-Sign(identity_secret, SHA-384(transcript_hash ‖ prev_hash))
+/// ```
+///
+/// Receivers MUST verify `signature` over that input before trusting
+/// any claim in this entry.  An empty `signature` is valid only for the
+/// first hop in a chain that was not yet signed (e.g. in unit tests with
+/// `MockTeeProvider`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentMetadata {
     pub id: Uuid,
     pub name: String,
     pub capabilities: Vec<String>,
     pub endpoint: String,
+    /// Agent's ML-DSA post-quantum public key (raw bytes).  Used to verify
+    /// `signature` in the provenance chain.
     pub public_key: Vec<u8>,
+    /// Most recent TEE attestation quote.
     pub last_quote: Option<AttestQuote>,
+    /// ML-DSA signature over `SHA-384(transcript_hash ‖ prev_hash)`,
+    /// produced by this agent's identity key.  Empty for unsigned entries
+    /// (e.g. mock/test environments).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signature: Vec<u8>,
+    /// SHA-384 hash (48 bytes) of the previous provenance entry, or all-zeros
+    /// for the first hop.  Chains entries together to prevent insertion/reordering.
+    /// Serialised as a base64url byte string.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prev_hash: Option<Vec<u8>>,
 }
 
 /// A chain of agents that have handled a request.
@@ -614,6 +643,9 @@ impl ProvenanceChain {
 // ─── Attestation Results (EAT-aligned) ──────────────────────────────────────
 
 /// Standard EAT (Entity Attestation Token) claims as per RFC 9334.
+///
+/// All fields are optional to allow partial claims from diverse TEE backends.
+/// Verifiers SHOULD enforce `exp` when token lifetime is bounded.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EatClaims {
     /// Unique Entity ID (e.g. MRENCLAVE + MRSIGNER).
@@ -630,8 +662,12 @@ pub struct EatClaims {
     pub boot_progress: Option<String>,
     /// Security Version of the TCB (maps to platform-specific SVN).
     pub security_version: Option<u16>,
-    /// Issued At (Unix timestamp).
+    /// Issued At (Unix timestamp). RFC 9334 §4.2.1.
     pub iat: Option<u64>,
+    /// Expiry (Unix timestamp). RFC 9334 §4.2.1 — REQUIRED when token
+    /// lifetime is bounded. Verifiers MUST reject tokens where
+    /// `exp <= now()` unless operating in a time-insensitive context.
+    pub exp: Option<u64>,
 }
 
 /// The result of a successful quote verification, now EAT-aligned.

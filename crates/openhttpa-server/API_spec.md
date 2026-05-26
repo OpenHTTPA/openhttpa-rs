@@ -66,7 +66,27 @@ Axum extractor that decrypts and parses JSON request bodies.
 
 Axum extractor that yields decrypted chunks from a streaming request.
 
-- Unfolds and decrypts framed streaming payloads sequentially using AES-256-GCM.
+Unfolds and decrypts framed streaming payloads sequentially using AES-256-GCM.
+
+#### Binary Frame Format
+
+Each frame in a streaming request or response uses the following wire layout:
+
+```
++------------------+------------------+-------------------------------+
+| Length (4 bytes) | Counter (8 bytes) | Ciphertext (Length bytes)    |
+| big-endian u32   | big-endian u64    | AES-256-GCM output + 16B tag |
++------------------+------------------+-------------------------------+
+```
+
+- **Length**: Number of bytes in `Ciphertext` (includes the 16-byte GCM authentication tag).
+- **Counter**: Monotonic counter value used for nonce construction via `write_iv XOR counter`.
+- **Ciphertext**: AEAD-encrypted plaintext including the authentication tag.
+- **AAD**: `SHA-384(prev_ciphertext_frame)` chained with the session base AAD (`"openhttpa:" + base_id`). Provides chain authentication: modifying any prior frame invalidates all subsequent frames.
+- **Content-Type**: `application/x-openhttpa-stream`
+
+The frame format is identical for `EncryptedStream` (server-side decode) and
+`trusted_request_streaming` (client-side encode).
 
 ---
 

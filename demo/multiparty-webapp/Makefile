@@ -108,7 +108,7 @@ e2e: wasm
 ##          This assumes the stack is already running (e.g. via 'make up').
 e2e-run:
 	@echo "Running containerized E2E tests for project: $(COMPOSE_PROJECT_NAME)"
-	-$(COMPOSE) run --rm --build e2e-runner
+	$(COMPOSE) run --rm --build e2e-runner
 	@$(MAKE) fix-permissions
 	@echo "Tests complete."
 

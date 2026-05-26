@@ -9,7 +9,12 @@
 //! * **Mock** — verifies SHA-384 pseudo-quotes from `openhttpa-tee::mock`.
 //! * **Intel DCAP** — calls `libsgx_dcap_quoteverify.so` via FFI (feature `dcap`).
 //! * **Azure MAA** — submits quotes to the MAA REST endpoint (feature `maa`).
-//! * **AMD SNP** — verifies VCEK-signed SNP reports (feature `amd_snp`).
+//! * **AMD SNP** — **planned** (feature `amd_snp`); `SevSnpVerifier` is not yet
+//!   implemented. The feature flag has no effect. Do not rely on it for production.
+//! * **TPM 2.0** — [`TpmVerifier`] compiles and runs but the AIK signature
+//!   verification step (step 2) is **not yet implemented**. Only QUDD nonce
+//!   comparison is performed. **Do not use in production without completing the
+//!   implementation.** Track in issue #TBD.
 //! * **Pluggable** — implement [`QuoteVerifier`] for any other backend.
 //!
 //! The verifier must be hardened against SSRF, `DoS`, and slow-loris attacks.
@@ -45,6 +50,13 @@ pub use mock_verifier::MockVerifier;
 pub use nvidia_remote_verifier::NvidiaRemoteVerifier;
 pub use nvidia_verifier::NvidiaGpuVerifier;
 pub use policy::SimplePolicy;
+/// TPM 2.0 PCR quote verifier.
+///
+/// # ⚠️ Production stub
+///
+/// Only QUDD nonce comparison is implemented.  The AIK signature
+/// verification step is pending.  **Do not use in production.**
+pub use tpm_verifier::TpmVerifier;
 pub use verifier::{
     EatClaims, PolicyEngine, QuoteVerifier, RevocationProvider, VerificationError,
     VerificationResult,

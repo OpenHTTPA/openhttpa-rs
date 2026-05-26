@@ -175,47 +175,66 @@ Source: [client.rs](file:///home/ub/tmp/openhttpa-rs/crates/openhttpa-mcp/src/cl
 
 ### `OpenHttpaMcpClient` (Struct)
 
-An MCP client that calls remote tools via an established `AttestSession`.
+An MCP client that performs the full `AtHS` handshake and tool call lifecycle internally. It does **not** accept a pre-existing `AttestSession` — a fresh handshake is performed on each `call()`.
+
+> **Design note**: This client is intentionally simple (stateless between calls) for ease of integration. For session-reuse across multiple calls, use `OpenHttpaClient` directly and cache the `AttestSession`, then call `trusted_request_ext` with a serialised `McpRequest`.
 
 ```rust
 pub use client::OpenHttpaMcpClient;
 ```
 
+#### Constructors
+
+```rust
+/// Create a new MCP client targeting a server URL.
+///
+/// Errors if `server_url` is not a valid URI.
+pub fn new(server_url: &str) -> Result<Self, McpClientError>
+```
+
+Builds an `OpenHttpaClient` internally with `require_preflight = true`.
+
+```rust
+/// Create a new MCP client from a pre-configured `OpenHttpaClient`.
+#[must_use]
+pub const fn new_from_client(client: OpenHttpaClient) -> Self
+```
+
+Use this variant when you need to customise attestation, verifier, or transport settings.
+
 #### Methods
 
 ```rust
-pub fn new(client: OpenHttpaClient, endpoint: String) -> Self
+pub async fn call(
+    &self,
+    method: &str,
+    params: Option<serde_json::Value>,
+) -> Result<serde_json::Value, McpClientError>
 ```
 
-Creates an MCP client backed by an `OpenHttpaClient`.
-
-- `client`: The underlying OpenHTTPA client (handles handshake and encryption).
-- `endpoint`: The full path of the remote MCP endpoint (e.g. `"/api/mcp"`).
+Performs AtHS handshake + trusted request in one call. Sends the JSON-RPC method and returns the parsed result.
 
 ```rust
-pub async fn list_tools(
-    &self,
-    session: &AttestSession,
-) -> Result<Vec<serde_json::Value>, String>
+pub async fn list_tools(&self) -> Result<serde_json::Value, McpClientError>
 ```
 
-Sends a `tools/list` JSON-RPC request and returns the array of tool descriptors.
+Sends a `tools/list` request. Equivalent to `call("tools/list", None)`.
 
 ```rust
 pub async fn call_tool(
     &self,
-    session: &AttestSession,
-    tool_name: &str,
+    name: &str,
     arguments: serde_json::Value,
-) -> Result<serde_json::Value, String>
+) -> Result<serde_json::Value, McpClientError>
 ```
 
-Sends a `tools/call` JSON-RPC request and returns the tool's result.
+Sends a `tools/call` request. Equivalent to `call("tools/call", Some(json!({"name": name, "arguments": arguments})))`.
 
 **Returns**:
 
 - `Ok(serde_json::Value)` — the tool's successful result.
-- `Err(String)` — JSON-RPC error message from the server, or transport/encryption failure.
+- `Err(McpClientError::Protocol(...))` — JSON-RPC error message from the server.
+- `Err(McpClientError::OpenHttpa(...))` — handshake or transport failure.
 
 ---
 
@@ -272,12 +291,24 @@ server.add_tool(Box::new(CalculatorTool)).await;
 ```rust
 use openhttpa_mcp::OpenHttpaMcpClient;
 
-let mcp_client = OpenHttpaMcpClient::new(openhttpa_client, "/api/mcp".to_string());
+// Simple form: supply only the server URL.
+let mcp_client = OpenHttpaMcpClient::new("https://agent.example.com").unwrap();
+let tools = mcp_client.list_tools().await.unwrap();
 let result = mcp_client
-    .call_tool(&session, "calculator", serde_json::json!({"a": 3, "b": 4, "op": "mul"}))
+    .call_tool("calculator", serde_json::json!({"a": 3, "b": 4, "op": "mul"}))
     .await
     .unwrap();
 // result == {"result": 12.0}
+
+// Advanced form: supply a pre-configured OpenHttpaClient.
+use openhttpa_client::OpenHttpaClient;
+use std::sync::Arc;
+let custom_client = OpenHttpaClient::builder()
+    .server_uri("https://agent.example.com".parse().unwrap())
+    .strict_attestation(true)
+    .max_response_size(4 * 1024 * 1024)
+    .build();
+let mcp_client = OpenHttpaMcpClient::new_from_client(custom_client);
 ```
 
 ---

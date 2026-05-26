@@ -215,6 +215,7 @@ mod tests {
             boot_progress: Some("booted".to_owned()),
             security_version: Some(3),
             iat: Some(1_716_681_600),
+            exp: Some(1_716_681_600 + 3600), // 1-hour validity
         };
 
         let cbor = serialize_claims(&claims).unwrap();
@@ -228,6 +229,7 @@ mod tests {
         assert_eq!(claims.boot_progress, claims2.boot_progress);
         assert_eq!(claims.security_version, claims2.security_version);
         assert_eq!(claims.iat, claims2.iat);
+        assert_eq!(claims.exp, claims2.exp);
     }
 
     #[test]

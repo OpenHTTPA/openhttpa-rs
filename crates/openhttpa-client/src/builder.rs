@@ -25,16 +25,37 @@ pub struct OpenHttpaClientBuilder {
     require_preflight: bool,
     oblivious_config: Option<ObliviousConfig>,
     server_identity_pub: Option<Vec<u8>>,
+    /// Maximum bytes to buffer for a non-streaming response body.
+    /// Defaults to [`DEFAULT_MAX_RESPONSE_SIZE`].
+    max_response_size: Option<usize>,
 }
 
+/// Default maximum response size for non-streaming trusted requests (16 MiB).
+/// Override with [`OpenHttpaClientBuilder::max_response_size`].
+pub const DEFAULT_MAX_RESPONSE_SIZE: usize = 16 * 1024 * 1024;
+
 /// Configuration for Oblivious `OpenHTTPA` (O-HTTPA).
+///
+/// Enables HPKE-encapsulation of all requests through an oblivious gateway,
+/// so the gateway cannot correlate requests to clients.
 #[derive(Clone, Debug)]
 pub struct ObliviousConfig {
     /// URI of the oblivious gateway/relay.
     pub gateway_uri: Uri,
-    /// Public key of the target TEE server for HPKE.
+    /// Raw X25519 public key of the target TEE server for HPKE encapsulation,
+    /// encoded as 32 raw bytes (RFC 9180 §5.1 encapsulation key format).
+    ///
+    /// # Key format
+    ///
+    /// This MUST be the server's Diffie-Hellman public key in the X25519
+    /// representation: 32 bytes in the format described by RFC 7748 §6.1
+    /// (little-endian Montgomery-form u-coordinate). This is the format
+    /// produced by `x25519_dalek::PublicKey::to_bytes()` and
+    /// `openssl pkey -outform DER -pubout | tail -c 32`.
+    ///
+    /// Do NOT use SPKI DER or any other wrapped format here.
     pub server_public_key: Vec<u8>,
-    /// Key ID for the HPKE public key.
+    /// Key ID for the HPKE public key (for server-side key rotation).
     pub key_id: u8,
 }
 
@@ -113,6 +134,23 @@ impl OpenHttpaClientBuilder {
         self
     }
 
+    /// Override the maximum response body size for non-streaming trusted requests.
+    ///
+    /// The default is [`DEFAULT_MAX_RESPONSE_SIZE`] (16 MiB).  Set a smaller
+    /// value for latency-sensitive APIs or a larger value for bulk-data
+    /// endpoints.  For arbitrarily large responses use
+    /// [`OpenHttpaClient::trusted_request_streaming`] instead.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `bytes` is zero.
+    #[must_use]
+    pub fn max_response_size(mut self, bytes: usize) -> Self {
+        assert!(bytes > 0, "max_response_size must be > 0");
+        self.max_response_size = Some(bytes);
+        self
+    }
+
     /// Build the client.
     ///
     /// # Panics
@@ -161,6 +199,7 @@ impl OpenHttpaClientBuilder {
             self.strict_attestation,
             self.require_preflight,
             self.server_identity_pub,
+            self.max_response_size.unwrap_or(DEFAULT_MAX_RESPONSE_SIZE),
         )
     }
 }

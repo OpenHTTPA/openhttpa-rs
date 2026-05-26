@@ -106,6 +106,32 @@ Confidential MCP client for tool execution.
 | ------ | -------------------------------------------- | ------------------------------------------------------------- |
 | `call` | `(method: str, params: Optional[str]) → str` | Send a JSON-RPC call (method and optional JSON string params) |
 
+### `PyA2AAgent(agent_id: str)`
+
+Secure agent-to-agent (A2A) communication client. Wraps `openhttpa_a2a::A2AAgent`
+and allows sending typed messages to remote agents over HTTP.
+
+> **⚠️ Development status**: `send_message` currently sets `timestamp = 0` (hardcoded).
+> In production deployments the caller should use the UNIX timestamp at call time.
+> The A2A message format is based on the Google A2A proposal; full OpenHTTPA
+> encrypted transport integration is planned.
+
+| Method         | Signature                                                        | Description         |
+| -------------- | ---------------------------------------------------------------- | ------------------- |
+| `send_message` | `(target_url: str, message_type: str, payload_json: str) → None` | Send an A2A message |
+
+```python
+import openhttpa
+
+agent = openhttpa.PyA2AAgent("agent-alpha")
+# Send a JSON-encoded task message to a remote agent
+agent.send_message(
+    "http://agent-beta:9000/a2a",
+    "task_request",
+    '{"task": "summarise", "input": "Hello world"}',
+)
+```
+
 ## Running the demo
 
 See [demo/multiparty-webapp](../../demo/multiparty-webapp) for a full end-to-end
