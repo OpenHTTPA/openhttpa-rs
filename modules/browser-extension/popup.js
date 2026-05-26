@@ -5,22 +5,35 @@ function updateUI() {
   chrome.runtime.sendMessage({ type: 'GET_SESSIONS' }, (sessions) => {
     const list = document.getElementById('session-list');
     if (sessions && sessions.length > 0) {
-      list.innerHTML = sessions
-        .map(
-          (s) => `
-                <div class="session-card">
-                    <div class="origin">${s.origin}</div>
-                    <div class="status">
-                        <span class="dot"></span>
-                        Attested Session Active
-                    </div>
-                    <div style="font-size: 10px; color: #64748b; margin-top: 8px;">
-                        Base ID: ${s.baseId}
-                    </div>
-                </div>
-            `,
-        )
-        .join('');
+      list.replaceChildren();
+      sessions.forEach((s) => {
+        const card = document.createElement('div');
+        card.className = 'session-card';
+
+        const originDiv = document.createElement('div');
+        originDiv.className = 'origin';
+        originDiv.textContent = s.origin;
+
+        const statusDiv = document.createElement('div');
+        statusDiv.className = 'status';
+
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        statusDiv.appendChild(dot);
+        statusDiv.appendChild(document.createTextNode(' Attested Session Active'));
+
+        const idDiv = document.createElement('div');
+        idDiv.style.fontSize = '10px';
+        idDiv.style.color = '#64748b';
+        idDiv.style.marginTop = '8px';
+        idDiv.textContent = `Base ID: ${s.baseId}`;
+
+        card.appendChild(originDiv);
+        card.appendChild(statusDiv);
+        card.appendChild(idDiv);
+
+        list.appendChild(card);
+      });
     }
   });
 }
