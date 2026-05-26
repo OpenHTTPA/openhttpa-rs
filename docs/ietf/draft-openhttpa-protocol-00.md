@@ -425,14 +425,16 @@ evidence before being transmitted to an on-chain verifier.
 ## Protocol Binding
 
 When an Oracle fetch is performed, the TEE MUST bind the resulting data to the current
-AtHS session transcript. This is achieved by including the `transcript_hash` in the
-hardware report data (e.g., the 64-byte `REPORT_DATA` field in Intel TDX).
+AtHS session transcript. This is achieved by including a truncated version of the `transcript_hash` in the 64-byte hardware report data (e.g., the `REPORT_DATA` field in Intel TDX or `REPORT_DATA` in Intel SGX).
+
+The 64-byte `ReportData` structure is defined as follows:
 
 ```text
-ReportData = len(Domain_Prefix) ‖ Domain_Prefix ‖ Transcript_Hash
+ReportData[0..32]  = Domain_Prefix (padded with trailing zeros to 32 bytes)
+ReportData[32..64] = Transcript_Hash[0..32] (truncated to 256 bits)
 ```
 
-The `Domain_Prefix` MUST be `b"openhttpa hs server"`.
+The `Domain_Prefix` MUST be the ASCII string `"openhttpa hs server"`. Since TEE hardware report registers are limited to 64 bytes, the 384-bit (48-byte) SHA-384 `transcript_hash` is truncated to its first 32 bytes (256 bits). Truncating the SHA-384 digest to 256 bits maintains 256 bits of preimage resistance and 128 bits of collision resistance, which is cryptographically sufficient to securely bind the session.
 
 ## On-Chain Verification
 

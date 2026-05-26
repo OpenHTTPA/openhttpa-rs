@@ -221,7 +221,9 @@ impl QuoteVerifier for NvidiaRemoteVerifier {
             .await?;
 
         #[cfg(not(feature = "ita"))]
-        let _claims_json = "ita-feature-disabled".to_owned();
+        return Err(VerificationError::PolicyViolation(
+            "NVIDIA remote verification failed: 'ita' feature is disabled".to_owned(),
+        ));
 
         Ok(VerificationResult {
             claims: EatClaims {

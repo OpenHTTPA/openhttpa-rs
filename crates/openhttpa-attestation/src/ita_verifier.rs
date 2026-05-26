@@ -220,7 +220,9 @@ impl QuoteVerifier for ItaVerifier {
             .await?;
 
         #[cfg(not(feature = "ita"))]
-        let _claims_json = "ita-feature-disabled".to_owned();
+        return Err(VerificationError::PolicyViolation(
+            "Intel Trust Authority verification failed: 'ita' feature is disabled".to_owned(),
+        ));
 
         Ok(VerificationResult {
             claims: EatClaims {
