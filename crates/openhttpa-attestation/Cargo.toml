@@ -21,9 +21,12 @@ ita       = ["jsonwebtoken"] # Intel Trust Authority REST API
 amd_snp   = []          # AMD SNP VCEK chain via system library
 
 [dependencies]
-openhttpa-proto = { workspace = true }
-openhttpa-tee   = { workspace = true }
-openhttpa-zk    = { workspace = true }
+openhttpa-proto  = { workspace = true }
+openhttpa-crypto = { workspace = true }
+openhttpa-tee    = { workspace = true }
+openhttpa-zk     = { workspace = true }
+aws-lc-rs        = { workspace = true }
+oqs              = { workspace = true }
 bytes        = { workspace = true }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
@@ -32,6 +35,7 @@ tracing      = { workspace = true }
 async-trait  = { workspace = true }
 ciborium     = { workspace = true }
 coset        = { workspace = true }
+futures      = { workspace = true }
 reqwest      = { workspace = true, features = ["json", "rustls-tls"] }
 jsonwebtoken = { version = "9", optional = true }
 base64ct     = { workspace = true }

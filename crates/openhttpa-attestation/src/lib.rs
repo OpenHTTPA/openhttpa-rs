@@ -21,6 +21,7 @@
 pub mod collateral_fetcher;
 pub mod composite;
 pub mod dcap_zk_verifier;
+pub mod eat;
 #[cfg(feature = "ita")]
 pub mod ita_verifier;
 #[cfg(feature = "maa")]
@@ -36,6 +37,7 @@ pub mod tpm_verifier;
 pub mod verifier;
 
 pub use dcap_zk_verifier::DcapZkVerifier;
+pub use eat::{EatSignAlgorithm, create_signed_eat, verify_signed_eat};
 #[cfg(feature = "ita")]
 pub use ita_verifier::ItaVerifier;
 pub use mock_verifier::MockVerifier;

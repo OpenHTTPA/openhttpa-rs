@@ -66,7 +66,7 @@ pub enum AeadError {
 }
 
 /// A 12-byte AEAD nonce. Zeroized on drop.
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct AeadNonce(pub [u8; NONCE_LEN]);
 
 impl AeadNonce {
@@ -376,6 +376,50 @@ impl BoundAeadKey {
     ) -> Result<&'a [u8], AeadError> {
         self.key.open_in_place(nonce, aad, data)
     }
+
+    /// Decrypt a batch of payloads in place.
+    ///
+    /// This iterates through the batch, decrypting each ciphertext.
+    /// Any individual failure is captured in `payloads[i].error`, allowing the
+    /// caller to safely process the rest of the batch.
+    ///
+    /// # Errors
+    /// Never returns [`Err`] directly; individual failures are reported via
+    /// the `error` field in each [`BatchPayload`].
+    pub fn open_batch(&self, payloads: &mut [BatchPayload<'_>]) -> Result<(), AeadError> {
+        for p in payloads {
+            let data = std::mem::take(&mut p.ciphertext_with_tag);
+            match self.open(p.nonce, p.aad, data) {
+                Ok(pt) => {
+                    p.plaintext = Some(pt);
+                    p.error = None;
+                }
+                Err(e) => {
+                    p.plaintext = None;
+                    p.error = Some(e);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A single payload in a decryption batch.
+///
+/// Refers to sub-slices of a contiguous memory block, allowing zero-copy
+/// in-place bulk decryption.
+#[derive(Debug)]
+pub struct BatchPayload<'a> {
+    /// Nonce for this payload.
+    pub nonce: &'a AeadNonce,
+    /// Associated data.
+    pub aad: &'a [u8],
+    /// Ciphertext buffer (decrypted in-place).
+    pub ciphertext_with_tag: &'a mut [u8],
+    /// Resulting plaintext slice populated on success.
+    pub plaintext: Option<&'a [u8]>,
+    /// Error populated if this specific decryption fails.
+    pub error: Option<AeadError>,
 }
 
 impl Zeroize for BoundAeadKey {
@@ -528,6 +572,67 @@ mod tests {
             key.seal(b"", &mut buf),
             Err(BoundAeadError::NonceOverflow)
         ));
+    }
+
+    #[test]
+    fn bound_key_open_batch_success_and_failure() {
+        let key_bytes = [0x66u8; 32];
+        let iv = make_write_iv(0xDD);
+        let sealer = BoundAeadKey::new(AeadAlgorithm::Aes256Gcm, &key_bytes, iv).unwrap();
+        let opener = BoundAeadKey::new(AeadAlgorithm::Aes256Gcm, &key_bytes, iv).unwrap();
+
+        let pt1 = b"first message payload";
+        let pt2 = b"second payload";
+        let pt3 = b"third payload";
+
+        let mut buf1 = pt1.to_vec();
+        let mut buf2 = pt2.to_vec();
+        let mut buf3 = pt3.to_vec();
+
+        let n1 = sealer.seal(b"aad1", &mut buf1).unwrap();
+        let n2 = sealer.seal(b"aad2", &mut buf2).unwrap();
+        let n3 = sealer.seal(b"aad3", &mut buf3).unwrap();
+
+        // Let's corrupt the second ciphertext
+        buf2[0] ^= 0xFF;
+
+        let mut payloads = [
+            BatchPayload {
+                nonce: &n1,
+                aad: b"aad1",
+                ciphertext_with_tag: &mut buf1,
+                plaintext: None,
+                error: None,
+            },
+            BatchPayload {
+                nonce: &n2,
+                aad: b"aad2",
+                ciphertext_with_tag: &mut buf2,
+                plaintext: None,
+                error: None,
+            },
+            BatchPayload {
+                nonce: &n3,
+                aad: b"aad3",
+                ciphertext_with_tag: &mut buf3,
+                plaintext: None,
+                error: None,
+            },
+        ];
+
+        opener.open_batch(&mut payloads).unwrap();
+
+        // First payload: success
+        assert!(payloads[0].error.is_none());
+        assert_eq!(payloads[0].plaintext.unwrap(), pt1);
+
+        // Second payload: failed (corrupted)
+        assert!(payloads[1].error.is_some());
+        assert!(payloads[1].plaintext.is_none());
+
+        // Third payload: success (isolated failure of second payload)
+        assert!(payloads[2].error.is_none());
+        assert_eq!(payloads[2].plaintext.unwrap(), pt3);
     }
 }
 

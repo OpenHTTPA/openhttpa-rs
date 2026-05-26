@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 
-pub use openhttpa_proto::{AttestQuote, EatClaims, VerificationResult};
+pub use openhttpa_proto::{AttestQuote, EatClaims, QuoteType, VerificationResult};
 
 pub use openhttpa_proto::AttestError as VerificationError;
 
@@ -67,6 +67,33 @@ pub trait QuoteVerifier: Send + Sync {
         }
 
         Ok(primary_res)
+    }
+
+    /// Verify multiple quotes independently and concurrently.
+    ///
+    /// The default implementation uses futures to verify all quotes concurrently.
+    /// Any failure is returned immediately.
+    ///
+    /// # Errors
+    /// Returns [`Err`] if any verification fails or if input lengths do not match.
+    async fn verify_batch(
+        &self,
+        quotes: &[AttestQuote],
+        report_data: &[[u8; 64]],
+    ) -> Result<Vec<VerificationResult>, VerificationError> {
+        if quotes.len() != report_data.len() {
+            return Err(VerificationError::MalformedQuote(
+                "quotes and report_data slices must have the same length for batch verification"
+                    .to_owned(),
+            ));
+        }
+
+        let mut futures = Vec::with_capacity(quotes.len());
+        for (quote, rd) in quotes.iter().zip(report_data.iter()) {
+            futures.push(self.verify(quote, rd));
+        }
+
+        futures::future::try_join_all(futures).await
     }
 }
 
@@ -236,5 +263,67 @@ mod tests {
         };
 
         assert!(policy.evaluate(&res).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_verify_batch() {
+        struct DummyVerifier;
+        #[async_trait]
+        impl QuoteVerifier for DummyVerifier {
+            async fn verify(
+                &self,
+                quote: &AttestQuote,
+                report_data: &[u8; 64],
+            ) -> Result<VerificationResult, VerificationError> {
+                if quote.raw.as_ref() == b"fail" {
+                    return Err(VerificationError::SignatureInvalid);
+                }
+                Ok(VerificationResult {
+                    tcb_status: format!("verified-{}", report_data[0]),
+                    ..Default::default()
+                })
+            }
+        }
+
+        let verifier = DummyVerifier;
+        let quotes = vec![
+            AttestQuote {
+                quote_type: QuoteType::Mock,
+                raw: bytes::Bytes::from_static(b"ok1"),
+                qudd: bytes::Bytes::new(),
+                collateral_uris: vec![],
+            },
+            AttestQuote {
+                quote_type: QuoteType::Mock,
+                raw: bytes::Bytes::from_static(b"ok2"),
+                qudd: bytes::Bytes::new(),
+                collateral_uris: vec![],
+            },
+        ];
+        let mut rd1 = [0u8; 64];
+        rd1[0] = 10;
+        let mut rd2 = [0u8; 64];
+        rd2[0] = 20;
+        let report_data = vec![rd1, rd2];
+
+        let results = verifier.verify_batch(&quotes, &report_data).await.unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].tcb_status, "verified-10");
+        assert_eq!(results[1].tcb_status, "verified-20");
+
+        // Test length mismatch
+        let bad_report_data = vec![rd1];
+        let result = verifier.verify_batch(&quotes, &bad_report_data).await;
+        assert!(result.is_err());
+
+        // Test individual failure
+        let failed_quotes = vec![AttestQuote {
+            quote_type: QuoteType::Mock,
+            raw: bytes::Bytes::from_static(b"fail"),
+            qudd: bytes::Bytes::new(),
+            collateral_uris: vec![],
+        }];
+        let result = verifier.verify_batch(&failed_quotes, &[rd1]).await;
+        assert!(result.is_err());
     }
 }
