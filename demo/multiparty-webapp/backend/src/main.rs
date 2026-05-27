@@ -1055,12 +1055,10 @@ fn demo_challenge_key(env_var: &str) -> [u8; 32] {
         key.copy_from_slice(&bytes);
         return key;
     }
-    // DEMO ONLY: fall back to random key when env var is absent.
-    // In release builds this prints a loud warning; do NOT rely on this in production.
     #[cfg(not(debug_assertions))]
-    tracing::warn!(
-        "{env_var} not set — using random challenge key. Set this env var in production.",
-        env_var = env_var
+    tracing::error!(
+        "{} not set — Generating ephemeral secret. Instance-isolated! Severe warning regarding horizontal scalability.",
+        env_var
     );
     let mut key = [0u8; 32];
     getrandom::getrandom(&mut key).expect("OS CSPRNG unavailable");
