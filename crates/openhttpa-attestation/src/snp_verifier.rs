@@ -27,8 +27,6 @@
 //! rotate the root.  AMD has committed to a stable root CA for SEV-SNP, so
 //! rotation is a rare event.
 
-use async_trait::async_trait;
-
 use crate::collateral_fetcher::CollateralFetcher;
 use crate::verifier::{QuoteVerifier, VerificationError, VerificationResult};
 use openhttpa_proto::{AttestQuote, QuoteType};
@@ -153,37 +151,44 @@ impl std::fmt::Debug for SevSnpVerifier {
 
 // ─── Core verification ────────────────────────────────────────────────────────
 
-#[async_trait]
 impl QuoteVerifier for SevSnpVerifier {
-    async fn verify(
-        &self,
-        quote: &AttestQuote,
-        report_data: &[u8; 64],
-    ) -> Result<VerificationResult, VerificationError> {
-        // Reject anything that isn't an SNP report.
-        if quote.quote_type != QuoteType::SevSnp {
-            return Err(VerificationError::PolicyViolation(format!(
-                "SevSnpVerifier: unexpected quote type '{:?}'; expected SevSnp",
-                quote.quote_type
-            )));
-        }
+    fn verify<'a>(
+        &'a self,
+        quote: &'a AttestQuote,
+        report_data: &'a [u8; 64],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            // Reject anything that isn't an SNP report.
+            if quote.quote_type != QuoteType::SevSnp {
+                return Err(VerificationError::PolicyViolation(format!(
+                    "SevSnpVerifier: unexpected quote type '{:?}'; expected SevSnp",
+                    quote.quote_type
+                )));
+            }
 
-        #[cfg(feature = "amd_snp")]
-        {
-            self.verify_snp_report(quote, report_data).await
-        }
+            #[cfg(feature = "amd_snp")]
+            {
+                self.verify_snp_report(quote, report_data).await
+            }
 
-        #[cfg(not(feature = "amd_snp"))]
-        {
-            // Feature not compiled in — return a policy error rather than a
-            // silent pass that would be a security hole.
-            let _ = (quote, report_data);
-            Err(VerificationError::PolicyViolation(
-                "SevSnpVerifier: the 'amd_snp' feature is not enabled in this build. \
+            #[cfg(not(feature = "amd_snp"))]
+            {
+                // Feature not compiled in — return a policy error rather than a
+                // silent pass that would be a security hole.
+                let _ = (quote, report_data);
+                Err(VerificationError::PolicyViolation(
+                    "SevSnpVerifier: the 'amd_snp' feature is not enabled in this build. \
                  Recompile with --features amd_snp to enable AMD SEV-SNP verification."
-                    .to_owned(),
-            ))
-        }
+                        .to_owned(),
+                ))
+            }
+        })
     }
 }
 

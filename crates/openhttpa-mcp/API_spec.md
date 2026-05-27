@@ -101,22 +101,12 @@ Source: [server.rs](file:///home/ub/tmp/openhttpa-rs/crates/openhttpa-mcp/src/se
 The extension point for hosting tools in the MCP server.
 
 ```rust
-#[async_trait]
 pub trait McpTool: Send + Sync {
-    /// Unique name for this tool (used as the dispatch key).
-    fn name(&self) -> &'static str;
-
-    /// Optional human-readable description (returned in tools/list responses).
+    fn name(&self) -> &str;
     fn description(&self) -> Option<&str>;
-
-    /// JSON Schema describing the tool's input arguments.
     fn input_schema(&self) -> serde_json::Value;
 
-    /// Execute the tool with the provided arguments.
-    ///
-    /// # Errors
-    /// Returns `Err(String)` with a human-readable error message on failure.
-    async fn call(&self, args: serde_json::Value) -> Result<serde_json::Value, String>;
+    fn call<'a>(&'a self, arguments: serde_json::Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'a>>;
 }
 ```
 
@@ -127,7 +117,8 @@ Implementations must be `Send + Sync` for use in async handlers behind `Arc`.
 An MCP server capable of hosting multiple tools and dispatching JSON-RPC 2.0 calls.
 
 ```rust
-pub struct OpenHttpaMcpServer { /* private: Arc<tokio::sync::RwLock<Vec<Box<dyn McpTool>>>> */ }
+#[derive(Clone)]
+pub struct OpenHttpaMcpServer { /* private: Arc<RwLock<HashMap<String, Arc<dyn McpTool>>>> */ }
 ```
 
 #### Methods
@@ -180,6 +171,7 @@ An MCP client that performs the full `AtHS` handshake and tool call lifecycle in
 > **Design note**: This client is intentionally simple (stateless between calls) for ease of integration. For session-reuse across multiple calls, use `OpenHttpaClient` directly and cache the `AttestSession`, then call `trusted_request_ext` with a serialised `McpRequest`.
 
 ```rust
+#[derive(Clone)]
 pub use client::OpenHttpaMcpClient;
 ```
 
@@ -253,12 +245,10 @@ pub use types::*;  // McpRequest, McpResponse, McpError
 ### Server Side (Inside a TEE)
 
 ```rust
-use openhttpa_mcp::{OpenHttpaMcpServer, McpTool};
-use async_trait::async_trait;
+use openhttpa_mcp::McpTool;
+use serde_json::Value;
 
 struct CalculatorTool;
-
-#[async_trait]
 impl McpTool for CalculatorTool {
     fn name(&self) -> &'static str { "calculator" }
     fn description(&self) -> Option<&str> { Some("Performs arithmetic") }
@@ -272,13 +262,12 @@ impl McpTool for CalculatorTool {
             }
         })
     }
-    async fn call(&self, args: serde_json::Value) -> Result<serde_json::Value, String> {
-        let a = args["a"].as_f64().unwrap_or(0.0);
-        let b = args["b"].as_f64().unwrap_or(0.0);
-        match args["op"].as_str().unwrap_or("add") {
-            "mul" => Ok(serde_json::json!({"result": a * b})),
-            _     => Ok(serde_json::json!({"result": a + b})),
-        }
+    fn call<'a>(&'a self, arguments: Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value, String>> + Send + 'a>> {
+        Box::pin(async move {
+            let a = arguments["a"].as_f64().unwrap_or(0.0);
+            let b = arguments["b"].as_f64().unwrap_or(0.0);
+            Ok(serde_json::json!({ "result": a + b }))
+        })
     }
 }
 
@@ -318,7 +307,7 @@ let mcp_client = OpenHttpaMcpClient::new_from_client(custom_client);
 ```
 openhttpa-mcp
 ├── openhttpa-client     (OpenHttpaClient, AttestSession, trusted_request)
-├── async-trait
+├── tokio
 ├── serde + serde_json   (JSON-RPC 2.0 serialisation)
 └── tokio                (async RwLock for tool registry)
 ```

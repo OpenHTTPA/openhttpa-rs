@@ -23,13 +23,13 @@ serde        = { workspace = true }
 serde_json   = { workspace = true }
 thiserror    = { workspace = true }
 tracing      = { workspace = true }
-async-trait  = { workspace = true }
 dashmap      = { workspace = true }
 uuid         = { workspace = true, features = ["v4", "serde"] }
 tokio        = { workspace = true }
 regorus      = "0.2"
 hex          = { workspace = true }
 postcard     = { workspace = true }
+async-trait = "0.1.89"
 
 [dev-dependencies]
 openhttpa-tee = { workspace = true }

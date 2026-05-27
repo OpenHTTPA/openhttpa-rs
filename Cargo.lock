@@ -3573,7 +3573,6 @@ dependencies = [
 name = "openhttpa-attestation"
 version = "0.1.1"
 dependencies = [
- "async-trait",
  "aws-lc-rs",
  "base64ct",
  "bincode",
@@ -3628,7 +3627,6 @@ name = "openhttpa-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "axum",
  "bytes",
  "clap",
@@ -3751,7 +3749,6 @@ dependencies = [
 name = "openhttpa-grpc"
 version = "0.1.1"
 dependencies = [
- "async-trait",
  "bytes",
  "openhttpa-attestation",
  "openhttpa-core",
@@ -3819,7 +3816,6 @@ dependencies = [
 name = "openhttpa-mcp"
 version = "0.1.1"
 dependencies = [
- "async-trait",
  "http",
  "openhttpa-client",
  "openhttpa-core",
@@ -4086,10 +4082,10 @@ dependencies = [
 name = "openhttpa-zk"
 version = "0.1.1"
 dependencies = [
- "async-trait",
  "bytes",
  "openhttpa-crypto",
  "openhttpa-proto",
+ "postcard",
  "risc0-build",
  "risc0-zkvm",
  "serde",
@@ -4109,6 +4105,7 @@ dependencies = [
  "der",
  "k256",
  "p256",
+ "postcard",
  "risc0-zkvm",
  "serde",
  "serde-big-array",

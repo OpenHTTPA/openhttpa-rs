@@ -523,6 +523,7 @@ where
 }
 
 // Mock LlmError for server side if not imported
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum LlmError {
     #[error("transport error: {0}")]

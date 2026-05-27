@@ -26,9 +26,9 @@ serde = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 bytes = { workspace = true }
-async-trait = { workspace = true }
 serde-big-array = "0.5"
 serde_json = { workspace = true }
+postcard = { workspace = true }
 
 [build-dependencies]
 risc0-build = { version = "1.2", default-features = false, optional = true }

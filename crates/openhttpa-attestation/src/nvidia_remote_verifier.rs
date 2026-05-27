@@ -9,7 +9,6 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use async_trait::async_trait;
 use base64ct::{Base64, Encoding as _};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -172,69 +171,76 @@ impl NvidiaRemoteVerifier {
     }
 }
 
-#[async_trait]
 impl QuoteVerifier for NvidiaRemoteVerifier {
-    async fn verify(
-        &self,
-        quote: &openhttpa_proto::AttestQuote,
-        report_data: &[u8; 64],
-    ) -> Result<VerificationResult, VerificationError> {
-        if quote.quote_type != openhttpa_proto::QuoteType::NvidiaGpu {
+    fn verify<'a>(
+        &'a self,
+        quote: &'a openhttpa_proto::AttestQuote,
+        report_data: &'a [u8; 64],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            if quote.quote_type != openhttpa_proto::QuoteType::NvidiaGpu {
+                return Err(VerificationError::PolicyViolation(
+                    "NvidiaRemoteVerifier only supports NvidiaGpu quotes".to_owned(),
+                ));
+            }
+
+            let quote_b64 = Base64::encode_string(quote.raw.as_ref());
+            let rd_b64 = Base64::encode_string(report_data);
+
+            let body = NvidiaAttestRequest {
+                quote: quote_b64,
+                nonce: rd_b64,
+            };
+
+            let url = format!("{}/attest", self.endpoint);
+            let resp = self
+                .client
+                .post(&url)
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| VerificationError::NetworkError(e.to_string()))?;
+
+            if !resp.status().is_success() {
+                return Err(VerificationError::ServiceError(format!(
+                    "NVIDIA NRAS returned {}: {}",
+                    resp.status(),
+                    resp.text().await.unwrap_or_default()
+                )));
+            }
+
+            let nras_resp: NvidiaAttestResponse = resp
+                .json()
+                .await
+                .map_err(|e| VerificationError::ServiceError(e.to_string()))?;
+
+            #[cfg(feature = "ita")]
+            let _claims_json = self
+                .verify_jws_signature(&nras_resp.jws, report_data)
+                .await?;
+
+            #[cfg(not(feature = "ita"))]
             return Err(VerificationError::PolicyViolation(
-                "NvidiaRemoteVerifier only supports NvidiaGpu quotes".to_owned(),
+                "NVIDIA remote verification failed: 'ita' feature is disabled".to_owned(),
             ));
-        }
 
-        let quote_b64 = Base64::encode_string(quote.raw.as_ref());
-        let rd_b64 = Base64::encode_string(report_data);
-
-        let body = NvidiaAttestRequest {
-            quote: quote_b64,
-            nonce: rd_b64,
-        };
-
-        let url = format!("{}/attest", self.endpoint);
-        let resp = self
-            .client
-            .post(&url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| VerificationError::NetworkError(e.to_string()))?;
-
-        if !resp.status().is_success() {
-            return Err(VerificationError::ServiceError(format!(
-                "NVIDIA NRAS returned {}: {}",
-                resp.status(),
-                resp.text().await.unwrap_or_default()
-            )));
-        }
-
-        let nras_resp: NvidiaAttestResponse = resp
-            .json()
-            .await
-            .map_err(|e| VerificationError::ServiceError(e.to_string()))?;
-
-        #[cfg(feature = "ita")]
-        let _claims_json = self
-            .verify_jws_signature(&nras_resp.jws, report_data)
-            .await?;
-
-        #[cfg(not(feature = "ita"))]
-        return Err(VerificationError::PolicyViolation(
-            "NVIDIA remote verification failed: 'ita' feature is disabled".to_owned(),
-        ));
-
-        Ok(VerificationResult {
-            claims: EatClaims {
-                hwmodel: Some("NVIDIA Hopper GPU".to_owned()),
-                hwversion: Some("nras-verified".to_owned()),
-                oemid: Some("NVIDIA".to_owned()),
-                dbgstat: Some(0),
+            Ok(VerificationResult {
+                claims: EatClaims {
+                    hwmodel: Some("NVIDIA Hopper GPU".to_owned()),
+                    hwversion: Some("nras-verified".to_owned()),
+                    oemid: Some("NVIDIA".to_owned()),
+                    dbgstat: Some(0),
+                    ..Default::default()
+                },
+                tcb_status: "UpToDate".to_owned(),
                 ..Default::default()
-            },
-            tcb_status: "UpToDate".to_owned(),
-            ..Default::default()
+            })
         })
     }
 }

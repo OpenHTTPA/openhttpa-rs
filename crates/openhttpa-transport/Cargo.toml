@@ -31,7 +31,6 @@ tokio          = { workspace = true }
 rand           = { workspace = true }
 hpke           = { workspace = true }
 aes-gcm        = { workspace = true }
-async-trait    = { workspace = true }
 rustls         = { workspace = true }
 reqwest        = { workspace = true }
 axum           = { workspace = true }
@@ -44,6 +43,7 @@ tower       = { workspace = true, optional = true }
 h3       = { workspace = true, optional = true }
 h3-quinn = { workspace = true, optional = true }
 quinn    = { workspace = true, optional = true }
+async-trait = "0.1.89"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

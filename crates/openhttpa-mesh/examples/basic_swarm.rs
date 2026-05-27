@@ -25,24 +25,31 @@ use tracing::info;
 
 /// A simple mock verifier for the example.
 struct ExampleVerifier;
-#[async_trait]
 impl QuoteVerifier for ExampleVerifier {
-    async fn verify(
-        &self,
-        _quote: &AttestQuote,
-        _report_data: &[u8; 64],
-    ) -> Result<VerificationResult, VerificationError> {
-        Ok(VerificationResult {
-            secondary: vec![],
-            eat_token: None,
-            claims: EatClaims {
-                hwmodel: Some("mock-measurement".to_string()),
-                dbgstat: Some(0),
-                ..Default::default()
-            },
-            tcb_status: "UpToDate".to_string(),
-            measurement: Some("mock-measurement".to_string()),
-            signer_id: Some("mock-signer".to_string()),
+    fn verify<'a>(
+        &'a self,
+        _quote: &'a AttestQuote,
+        _report_data: &'a [u8; 64],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            Ok(VerificationResult {
+                secondary: vec![],
+                eat_token: None,
+                claims: EatClaims {
+                    hwmodel: Some("mock-measurement".to_string()),
+                    dbgstat: Some(0),
+                    ..Default::default()
+                },
+                tcb_status: "UpToDate".to_string(),
+                measurement: Some("mock-measurement".to_string()),
+                signer_id: Some("mock-signer".to_string()),
+            })
         })
     }
 }
@@ -216,7 +223,6 @@ impl openhttpa_transport::connection::AttestTransport for ExampleTransport {
 }
 
 struct SecureSum;
-#[async_trait]
 impl McpTool for SecureSum {
     fn name(&self) -> &str {
         "secure_sum"
@@ -233,10 +239,17 @@ impl McpTool for SecureSum {
             }
         })
     }
-    async fn call(&self, args: serde_json::Value) -> Result<serde_json::Value, String> {
-        let a = args["a"].as_f64().ok_or("missing a")?;
-        let b = args["b"].as_f64().ok_or("missing b")?;
-        Ok(json!({ "sum": a + b }))
+    fn call<'a>(
+        &'a self,
+        args: serde_json::Value,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            let a = args["a"].as_f64().ok_or("missing a")?;
+            let b = args["b"].as_f64().ok_or("missing b")?;
+            Ok(json!({ "sum": a + b }))
+        })
     }
 }
 

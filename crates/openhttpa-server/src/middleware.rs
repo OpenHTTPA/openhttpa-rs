@@ -387,14 +387,14 @@ where
                         .ok()
                         .and_then(|d| d.salt);
 
-                    if let Some(salt) = rtt0_salt {
-                        tracing::info!("Deriving fresh 0-RTT keys");
-                        if let Ok(k) = openhttpa_core::handshake::SessionKeys::derive_0rtt(
+                    if let Some(salt) = rtt0_salt
+                        && let Ok(k) = openhttpa_core::handshake::SessionKeys::derive_0rtt(
                             &durable_state.resumption_secret,
                             &salt,
-                        ) {
-                            durable_state.keys = openhttpa_core::session::SealedSessionKeys::new(k);
-                        }
+                        )
+                    {
+                        tracing::info!("Deriving fresh 0-RTT keys");
+                        durable_state.keys = openhttpa_core::session::SealedSessionKeys::new(k);
                     }
 
                     // Nonce was already committed atomically above by check_and_accept.

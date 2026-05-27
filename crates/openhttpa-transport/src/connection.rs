@@ -8,6 +8,7 @@ use http::{HeaderMap, Method, StatusCode, Uri};
 use thiserror::Error;
 
 /// A transport-level error.
+#[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum SendError {
     #[error("connection error: {0}")]

@@ -199,7 +199,8 @@ impl SgxDcapVerifier {
 }
 
 fn main() {
-    let input: ZkInput = env::read();
+    let input_bytes: Vec<u8> = env::read();
+    let input: ZkInput = postcard::from_bytes(&input_bytes).expect("failed to deserialize input");
 
     // 1. Verify TEE Quote Signature (k256 Precompile)
     // In a production environment, we verify the ECDSA signature of the TEE quote
@@ -321,7 +322,8 @@ fn main() {
         dcap_verified,
     };
 
-    env::commit(&output);
+    let output_bytes = postcard::to_allocvec(&output).expect("failed to serialize output");
+    env::commit(&output_bytes);
 }
 
 /// Minimal TCB Info structures for JSON parsing in guest.

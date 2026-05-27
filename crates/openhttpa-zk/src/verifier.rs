@@ -22,13 +22,7 @@ impl ZkVerifier {
         }
 
         // 2. Extract and verify the journaled statement.
-        #[cfg(feature = "zk")]
-        let output: ZkOutput = risc0_zkvm::serde::from_slice(&receipt.journal.bytes)
-            .map_err(|e| ZkError::Serialization(e.to_string()))?;
-
-        #[cfg(not(feature = "zk"))]
-        let output: ZkOutput = serde_json::from_slice(&receipt.journal.bytes)
-            .map_err(|e| ZkError::Serialization(e.to_string()))?;
+        let output = crate::prover::ZkProver::extract_output(receipt)?;
 
         if !output.is_valid {
             return Err(ZkError::Verification(

@@ -47,6 +47,9 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+pub mod builder;
+pub use builder::SessionBuilder;
+
 pub mod sealed;
 pub use sealed::SealedSessionKeys;
 pub mod ticket;

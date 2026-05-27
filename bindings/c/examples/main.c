@@ -22,30 +22,40 @@ int main() {
         openhttpa_free_string(version);
     }
 
+    // Create FFI context
+    struct OpenHttpaCtx *ctx = openhttpa_ctx_new();
+    if (!ctx) {
+        fprintf(stderr, "Error: Failed to create OpenHTTPA context.\n");
+        return 1;
+    }
+
     // --- 2. Attestation Handshake ---
     printf("[1] Performing Attestation Handshake (AtHS) with %s...\n", server_uri);
-    char *atb_id = openhttpa_attest_handshake(server_uri);
+    char *atb_id = openhttpa_attest_handshake(ctx, server_uri);
     
     if (atb_id) {
         printf("    Handshake success! Attestation-Binding ID: %s\n", atb_id);
         openhttpa_free_string(atb_id);
     } else {
         fprintf(stderr, "    Error: Handshake failed. Is the backend running?\n");
+        openhttpa_ctx_free(ctx);
         return 1;
     }
 
     // --- 3. Confidential LLM Chat ---
     printf("\n[2] Sending confidential chat request...\n");
-    char *reply = openhttpa_confidential_chat(server_uri, model, messages_json);
+    char *reply = openhttpa_confidential_chat(ctx, server_uri, model, messages_json);
     
     if (reply) {
         printf("    Assistant Reply: %s\n", reply);
         openhttpa_free_string(reply);
     } else {
         fprintf(stderr, "    Error: Chat request failed.\n");
+        openhttpa_ctx_free(ctx);
         return 1;
     }
 
+    openhttpa_ctx_free(ctx);
     printf("\nSuccess: OpenHTTPA protocol verified via C/FFI.\n");
 
     return 0;

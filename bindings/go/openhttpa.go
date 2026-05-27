@@ -25,8 +25,24 @@ package openhttpa
 import "C"
 import (
 	"errors"
+	"sync"
 	"unsafe"
 )
+
+var (
+	globalCtx *C.struct_OpenHttpaCtx
+	ctxOnce   sync.Once
+)
+
+func getCtx() *C.struct_OpenHttpaCtx {
+	ctxOnce.Do(func() {
+		globalCtx = C.openhttpa_ctx_new()
+		if globalCtx == nil {
+			panic("openhttpa: failed to initialize FFI context")
+		}
+	})
+	return globalCtx
+}
 
 // ErrHandshakeFailed is returned when the attestation handshake fails.
 var ErrHandshakeFailed = errors.New("openhttpa: handshake failed")
@@ -40,7 +56,7 @@ func AttestHandshake(serverURI string) (string, error) {
 	cURI := C.CString(serverURI)
 	defer C.free(unsafe.Pointer(cURI))
 
-	result := C.openhttpa_attest_handshake(cURI)
+	result := C.openhttpa_attest_handshake(getCtx(), cURI)
 	if result == nil {
 		return "", ErrHandshakeFailed
 	}
@@ -66,7 +82,7 @@ func ConfidentialChat(serverURI, model string, messages [][2]string) (string, er
 	cMsgs := C.CString(msgsJSON)
 	defer C.free(unsafe.Pointer(cMsgs))
 
-	result := C.openhttpa_confidential_chat(cURI, cModel, cMsgs)
+	result := C.openhttpa_confidential_chat(getCtx(), cURI, cModel, cMsgs)
 	if result == nil {
 		return "", ErrChatFailed
 	}
@@ -81,7 +97,7 @@ func ServerHandshake(requestJSON string) (string, error) {
 	cReq := C.CString(requestJSON)
 	defer C.free(unsafe.Pointer(cReq))
 
-	result := C.openhttpa_server_handshake(cReq)
+	result := C.openhttpa_server_handshake(getCtx(), cReq)
 	if result == nil {
 		return "", ErrHandshakeFailed
 	}
@@ -96,7 +112,7 @@ func ServerDecrypt(atbID string, nonce uint64, ciphertextHex string) (string, er
 	cCipher := C.CString(ciphertextHex)
 	defer C.free(unsafe.Pointer(cCipher))
 
-	result := C.openhttpa_server_decrypt(cID, C.uint64_t(nonce), cCipher)
+	result := C.openhttpa_server_decrypt(getCtx(), cID, C.uint64_t(nonce), cCipher)
 	if result == nil {
 		return "", errors.New("openhttpa: decryption failed")
 	}
@@ -111,7 +127,7 @@ func ServerEncrypt(atbID string, plaintextHex string) (string, error) {
 	cPlain := C.CString(plaintextHex)
 	defer C.free(unsafe.Pointer(cPlain))
 
-	result := C.openhttpa_server_encrypt(cID, cPlain)
+	result := C.openhttpa_server_encrypt(getCtx(), cID, cPlain)
 	if result == nil {
 		return "", errors.New("openhttpa: encryption failed")
 	}

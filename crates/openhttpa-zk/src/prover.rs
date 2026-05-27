@@ -86,8 +86,8 @@ impl ZkProver {
                 dcap_verified: matches!(input.mode, crate::ZkMode::DcapCompression),
                 iat: 1_700_000_000, // Mock fixed timestamp for simulation
             };
-            let journal_bytes =
-                serde_json::to_vec(&output).map_err(|e| ZkError::Serialization(e.to_string()))?;
+            let journal_bytes = postcard::to_allocvec(&output)
+                .map_err(|e| ZkError::Serialization(e.to_string()))?;
             Ok(Receipt {
                 journal: Journal {
                     bytes: journal_bytes,
@@ -97,8 +97,10 @@ impl ZkProver {
 
         #[cfg(feature = "zk")]
         {
+            let input_bytes =
+                postcard::to_allocvec(input).map_err(|e| ZkError::Serialization(e.to_string()))?;
             let env = ExecutorEnv::builder()
-                .write(input)
+                .write(&input_bytes)
                 .map_err(|e| ZkError::Serialization(e.to_string()))?
                 .build()
                 .map_err(|e| ZkError::Prover(e.to_string()))?;
@@ -122,13 +124,14 @@ impl ZkProver {
     pub fn extract_output(receipt: &Receipt) -> Result<ZkOutput, ZkError> {
         #[cfg(not(feature = "zk"))]
         {
-            serde_json::from_slice(&receipt.journal.bytes)
+            postcard::from_bytes(&receipt.journal.bytes)
                 .map_err(|e| ZkError::Serialization(e.to_string()))
         }
         #[cfg(feature = "zk")]
         {
-            risc0_zkvm::serde::from_slice(&receipt.journal.bytes)
-                .map_err(|e| ZkError::Serialization(e.to_string()))
+            let out_bytes: Vec<u8> = risc0_zkvm::serde::from_slice(&receipt.journal.bytes)
+                .map_err(|e| ZkError::Serialization(e.to_string()))?;
+            postcard::from_bytes(&out_bytes).map_err(|e| ZkError::Serialization(e.to_string()))
         }
     }
 }

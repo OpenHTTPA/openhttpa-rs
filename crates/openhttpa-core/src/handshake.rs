@@ -71,21 +71,29 @@ impl From<HandshakeError> for OpenHttpaError {
     }
 }
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
 /// Key material that survives a successful `AtHS`.
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct AtHsResult {
+    #[zeroize(skip)]
     pub atb_id: AtbId,
     pub session_keys: SessionKeys,
+    #[zeroize(skip)]
     pub expires_at: std::time::Instant,
     /// TEE attestation quotes binding the transcript hash, if a provider was
     /// supplied.
+    #[zeroize(skip)]
     pub server_quotes: Vec<AttestQuote>,
     /// Server random used in the transcript hash.
     pub server_random: [u8; 32],
     /// The computed transcript hash (SHA-384).
     pub transcript_hash: [u8; 48],
     /// Optional ML-DSA signatures.
+    #[zeroize(skip)]
     pub server_signatures: Vec<Vec<u8>>,
     /// Verified attestation result from the client, if quotes were provided.
+    #[zeroize(skip)]
     pub client_attestation_result: Option<openhttpa_proto::VerificationResult>,
     /// Optional ZK proof (succinct receipt).
     #[cfg(feature = "zk")]

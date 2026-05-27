@@ -42,7 +42,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
@@ -356,16 +355,23 @@ impl std::fmt::Debug for FederatedVerifier {
     }
 }
 
-#[async_trait]
 impl QuoteVerifier for FederatedVerifier {
-    async fn verify(
-        &self,
-        quote: &AttestQuote,
-        report_data: &[u8; 64],
-    ) -> Result<VerificationResult, VerificationError> {
-        let result = self.route_and_verify(quote, report_data).await?;
-        self.check_manifest(&result).await?;
-        Ok(result)
+    fn verify<'a>(
+        &'a self,
+        quote: &'a AttestQuote,
+        report_data: &'a [u8; 64],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let result = self.route_and_verify(quote, report_data).await?;
+            self.check_manifest(&result).await?;
+            Ok(result)
+        })
     }
 
     /// Verify a composite bundle of quotes (e.g. TDX host + NVIDIA GPU).
@@ -374,31 +380,39 @@ impl QuoteVerifier for FederatedVerifier {
     /// manifest is then checked for every quote independently (all must pass).
     /// The first quote is designated the *primary* (host TEE); subsequent
     /// quotes are nested as `secondary` results.
-    async fn verify_bundle(
-        &self,
-        quotes: &[AttestQuote],
-        report_data: &[u8; 64],
-    ) -> Result<VerificationResult, VerificationError> {
-        if quotes.is_empty() {
-            return Err(VerificationError::MalformedQuote(
-                "FederatedVerifier: empty quote bundle".to_owned(),
-            ));
-        }
+    fn verify_bundle<'a>(
+        &'a self,
+        quotes: &'a [AttestQuote],
+        report_data: &'a [u8; 64],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            if quotes.is_empty() {
+                return Err(VerificationError::MalformedQuote(
+                    "FederatedVerifier: empty quote bundle".to_owned(),
+                ));
+            }
 
-        let mut results = Vec::with_capacity(quotes.len());
+            let mut results = Vec::with_capacity(quotes.len());
 
-        for quote in quotes {
-            let result = self.route_and_verify(quote, report_data).await?;
-            // Apply manifest to every quote in the bundle.
-            self.check_manifest(&result).await?;
-            results.push(result);
-        }
+            for quote in quotes {
+                let result = self.route_and_verify(quote, report_data).await?;
+                // Apply manifest to every quote in the bundle.
+                self.check_manifest(&result).await?;
+                results.push(result);
+            }
 
-        // Aggregate: primary is the first (host TEE), rest are secondary.
-        let mut primary = results.remove(0);
-        primary.secondary = results;
+            // Aggregate: primary is the first (host TEE), rest are secondary.
+            let mut primary = results.remove(0);
+            primary.secondary = results;
 
-        Ok(primary)
+            Ok(primary)
+        })
     }
 }
 

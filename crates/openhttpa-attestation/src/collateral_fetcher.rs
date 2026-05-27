@@ -16,6 +16,7 @@ pub const MAX_COLLATERAL_SIZE: usize = 1024 * 1024;
 /// Timeout for collateral fetching.
 pub const FETCH_TIMEOUT: Duration = Duration::from_secs(10);
 
+#[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum FetchError {
     #[error("network error: {0}")]

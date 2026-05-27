@@ -118,6 +118,7 @@ const MIN_FRAME: usize = 12 + 1 + 16;
 // ─── Public errors ─────────────────────────────────────────────────────────────
 
 /// Errors that can occur during an attested WebSocket session.
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum WsError {
     /// The incoming frame is too short to contain a valid nonce + ciphertext.

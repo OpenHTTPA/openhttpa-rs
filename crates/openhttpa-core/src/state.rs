@@ -9,6 +9,10 @@ use tokio::sync::RwLock;
 
 use serde::{Deserialize, Serialize};
 
+pub struct Init;
+pub struct AtHsInProgress;
+pub struct Attested;
+
 /// Each `OpenHTTPA` session progresses through these phases in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ProtocolPhase {

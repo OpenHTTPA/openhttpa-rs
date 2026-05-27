@@ -29,7 +29,6 @@ openhttpa-tee      = { workspace = true, optional = true }
 openhttpa-zk       = { workspace = true, optional = true }
 openhttpa-attestation = { workspace = true }
 bytes           = { workspace = true }
-async-trait     = "0.1"
 futures         = "0.3"
 http            = { workspace = true }
 serde           = { workspace = true }
@@ -42,6 +41,7 @@ tokio           = { workspace = true }
 zeroize         = { workspace = true }
 rand            = { workspace = true }
 sha2            = "0.10"
+async-trait = "0.1.89"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }

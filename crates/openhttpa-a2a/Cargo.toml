@@ -24,7 +24,6 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-async-trait = { workspace = true }
 axum = { workspace = true }
 
 [dev-dependencies]
@@ -39,3 +38,4 @@ openhttpa-transport = { workspace = true }
 openhttpa-crypto = { workspace = true }
 hex = { workspace = true }
 dashmap = { workspace = true }
+async-trait = "0.1.89"

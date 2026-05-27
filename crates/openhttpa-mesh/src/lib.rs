@@ -58,26 +58,33 @@ mod tests {
     use openhttpa_tee::mock::MockTeeProvider;
 
     struct MockVerifier;
-    #[async_trait]
     impl QuoteVerifier for MockVerifier {
-        async fn verify(
-            &self,
-            _quote: &AttestQuote,
-            _report_data: &[u8; 64],
-        ) -> Result<VerificationResult, VerificationError> {
-            Ok(VerificationResult {
-                secondary: vec![],
-                claims: openhttpa_attestation::verifier::EatClaims {
-                    hwmodel: Some("mock".to_string()),
-                    hwversion: Some("ok".to_string()),
-                    dbgstat: Some(1),
-                    boot_progress: Some("mock-measurement".to_string()),
+        fn verify<'a>(
+            &'a self,
+            _quote: &'a AttestQuote,
+            _report_data: &'a [u8; 64],
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                    + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async move {
+                Ok(VerificationResult {
+                    secondary: vec![],
+                    claims: openhttpa_attestation::verifier::EatClaims {
+                        hwmodel: Some("mock".to_string()),
+                        hwversion: Some("ok".to_string()),
+                        dbgstat: Some(1),
+                        boot_progress: Some("mock-measurement".to_string()),
+                        ..Default::default()
+                    },
+                    tcb_status: "UpToDate".to_string(),
+                    measurement: Some("mock-measurement".to_string()),
+                    signer_id: Some("mock-signer".to_string()),
                     ..Default::default()
-                },
-                tcb_status: "UpToDate".to_string(),
-                measurement: Some("mock-measurement".to_string()),
-                signer_id: Some("mock-signer".to_string()),
-                ..Default::default()
+                })
             })
         }
     }

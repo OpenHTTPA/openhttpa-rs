@@ -22,6 +22,7 @@ type Aead = hpke::aead::AesGcm256;
 /// HPKE receiver context type.
 type ReceiverCtx = AeadCtxR<Aead, Kdf, Kem>;
 
+#[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum ObliviousError {
     #[error("HPKE error: {0}")]

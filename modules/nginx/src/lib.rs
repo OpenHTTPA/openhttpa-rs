@@ -121,10 +121,10 @@ extern "C" fn openhttpa_handshake_body_handler(r: *mut ffi::ngx_http_request_t) 
                     hs_res.atb_id.clone(),
                     suite,
                     version,
-                    hs_res.session_keys,
+                    hs_res.session_keys.clone(),
                     hs_res.expires_at,
                     ReplayStrategy::default(),
-                    hs_res.client_attestation_result,
+                    hs_res.client_attestation_result.clone(),
                 );
                 REGISTRY.insert(session).unwrap();
 

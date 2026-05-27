@@ -75,7 +75,6 @@ keywords    = ["http", "attestation", "tee", "pqc", "security"]
 tokio            = { version = "1", features = ["full"] }
 
 # ── async utilities ────────────────────────────────────────────────────────────
-async-trait      = "0.1"
 futures          = "0.3"
 
 # ── error handling ─────────────────────────────────────────────────────────────

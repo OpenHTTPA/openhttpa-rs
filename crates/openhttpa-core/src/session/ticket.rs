@@ -20,13 +20,16 @@ use openhttpa_crypto::aead::{AeadAlgorithm, AeadError, AeadKey, AeadNonce, NONCE
 use openhttpa_proto::types::SessionTicket;
 use tracing::{info, instrument, warn};
 
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
 /// The server-side key used to seal and unseal resumption tickets.
 ///
 /// Addresses SEC-01 (Nonce-Reuse Risk) by using a monotonic counter.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct TicketKey {
     pub key: [u8; 32],
     #[serde(with = "atomic_u64_serde")]
+    #[zeroize(skip)]
     counter: AtomicU64,
 }
 

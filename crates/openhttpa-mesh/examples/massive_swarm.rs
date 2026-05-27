@@ -19,24 +19,31 @@ use openhttpa_tee::mock::MockTeeProvider;
 use std::sync::Arc;
 
 struct ExampleVerifier;
-#[async_trait]
 impl QuoteVerifier for ExampleVerifier {
-    async fn verify(
-        &self,
-        _quote: &AttestQuote,
-        _report_data: &[u8; 64],
-    ) -> Result<VerificationResult, VerificationError> {
-        Ok(VerificationResult {
-            secondary: vec![],
-            eat_token: None,
-            claims: EatClaims {
-                hwmodel: Some("mock-measurement".to_string()),
-                dbgstat: Some(0),
-                ..Default::default()
-            },
-            tcb_status: "UpToDate".to_string(),
-            measurement: Some("mock-measurement".to_string()),
-            signer_id: Some("mock-signer".to_string()),
+    fn verify<'a>(
+        &'a self,
+        _quote: &'a AttestQuote,
+        _report_data: &'a [u8; 64],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            Ok(VerificationResult {
+                secondary: vec![],
+                eat_token: None,
+                claims: EatClaims {
+                    hwmodel: Some("mock-measurement".to_string()),
+                    dbgstat: Some(0),
+                    ..Default::default()
+                },
+                tcb_status: "UpToDate".to_string(),
+                measurement: Some("mock-measurement".to_string()),
+                signer_id: Some("mock-signer".to_string()),
+            })
         })
     }
 }

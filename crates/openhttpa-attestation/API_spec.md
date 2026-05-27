@@ -312,7 +312,7 @@ pub use maa_verifier::MaaVerifier;
 openhttpa-attestation
 ├── openhttpa-proto       (AttestQuote, VerificationResult, EatClaims, AttestError)
 ├── openhttpa-zk          (ZkOutput, OPENHTTPA_GUEST_ID — for DcapZkVerifier)
-├── async-trait
+├── tokio
 ├── dashmap               (SimpleRevocationProvider.revoked_identities)
 └── reqwest (optional)    (MaaVerifier, ItaVerifier, NvidiaRemoteVerifier)
 ```

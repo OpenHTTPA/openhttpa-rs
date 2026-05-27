@@ -3,7 +3,6 @@
 
 //! NVIDIA GPU quote verifier.
 
-use async_trait::async_trait;
 use openhttpa_proto::{AttestQuote, QuoteType};
 
 use crate::verifier::{EatClaims, QuoteVerifier, VerificationError, VerificationResult};
@@ -12,54 +11,61 @@ use crate::verifier::{EatClaims, QuoteVerifier, VerificationError, VerificationR
 #[derive(Debug, Default)]
 pub struct NvidiaGpuVerifier;
 
-#[async_trait]
 impl QuoteVerifier for NvidiaGpuVerifier {
-    async fn verify(
-        &self,
-        quote: &AttestQuote,
-        report_data: &[u8; 64],
-    ) -> Result<VerificationResult, VerificationError> {
-        if quote.quote_type != QuoteType::NvidiaGpu {
-            return Err(VerificationError::MalformedQuote(
-                "not an nvidia_gpu quote".to_owned(),
-            ));
-        }
+    fn verify<'a>(
+        &'a self,
+        quote: &'a AttestQuote,
+        report_data: &'a [u8; 64],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            if quote.quote_type != QuoteType::NvidiaGpu {
+                return Err(VerificationError::MalformedQuote(
+                    "not an nvidia_gpu quote".to_owned(),
+                ));
+            }
 
-        // Verify that report_data matches the QUDD in the quote
-        if quote.qudd.as_ref() != report_data {
-            return Err(VerificationError::PolicyViolation(
-                "QUDD mismatch".to_owned(),
-            ));
-        }
+            // Verify that report_data matches the QUDD in the quote
+            if quote.qudd.as_ref() != report_data {
+                return Err(VerificationError::PolicyViolation(
+                    "QUDD mismatch".to_owned(),
+                ));
+            }
 
-        // In a real implementation:
-        // 1. Parse the NVIDIA Rim report.
-        // 2. Validate the certificate chain against NVIDIA Root CA.
-        // 3. Verify the signature of the report.
-        // 4. Check measurements (VBIOS, etc.) against reference values.
+            // In a real implementation:
+            // 1. Parse the NVIDIA Rim report.
+            // 2. Validate the certificate chain against NVIDIA Root CA.
+            // 3. Verify the signature of the report.
+            // 4. Check measurements (VBIOS, etc.) against reference values.
 
-        // For the simulation:
-        if quote
-            .raw
-            .starts_with(b"NVIDIA-HOPPER-ATTESTATION-REPORT-SIM")
-        {
-            return Ok(VerificationResult {
-                claims: EatClaims {
-                    hwmodel: Some("NVIDIA H100".to_owned()),
-                    hwversion: Some("hopper_v1".to_owned()),
-                    oemid: Some("NVIDIA".to_owned()),
-                    dbgstat: Some(0),
-                    boot_progress: Some("simulated_gpu_measurement".to_owned()),
+            // For the simulation:
+            if quote
+                .raw
+                .starts_with(b"NVIDIA-HOPPER-ATTESTATION-REPORT-SIM")
+            {
+                return Ok(VerificationResult {
+                    claims: EatClaims {
+                        hwmodel: Some("NVIDIA H100".to_owned()),
+                        hwversion: Some("hopper_v1".to_owned()),
+                        oemid: Some("NVIDIA".to_owned()),
+                        dbgstat: Some(0),
+                        boot_progress: Some("simulated_gpu_measurement".to_owned()),
+                        ..Default::default()
+                    },
+                    tcb_status: "UpToDate".to_owned(),
+                    measurement: Some("simulated_gpu_measurement".to_owned()),
+                    signer_id: Some("nvidia_prod_signer".to_owned()),
                     ..Default::default()
-                },
-                tcb_status: "UpToDate".to_owned(),
-                measurement: Some("simulated_gpu_measurement".to_owned()),
-                signer_id: Some("nvidia_prod_signer".to_owned()),
-                ..Default::default()
-            });
-        }
+                });
+            }
 
-        Err(VerificationError::SignatureInvalid)
+            Err(VerificationError::SignatureInvalid)
+        })
     }
 }
 #[cfg(test)]

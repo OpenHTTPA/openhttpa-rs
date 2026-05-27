@@ -9,7 +9,6 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use async_trait::async_trait;
 use base64ct::{Base64, Encoding as _};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -215,82 +214,89 @@ struct MaaRuntimeDataClaim {
     data: String,
 }
 
-#[async_trait]
 impl QuoteVerifier for MaaVerifier {
-    async fn verify(
-        &self,
-        quote: &openhttpa_proto::AttestQuote,
-        report_data: &[u8; 64],
-    ) -> Result<VerificationResult, VerificationError> {
-        use openhttpa_proto::QuoteType;
+    fn verify<'a>(
+        &'a self,
+        quote: &'a openhttpa_proto::AttestQuote,
+        report_data: &'a [u8; 64],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            use openhttpa_proto::QuoteType;
 
-        let quote_b64 = Base64::encode_string(quote.raw.as_ref());
-        let rd_b64 = Base64::encode_string(report_data);
+            let quote_b64 = Base64::encode_string(quote.raw.as_ref());
+            let rd_b64 = Base64::encode_string(report_data);
 
-        let body = MaaAttestRequest {
-            quote: quote_b64,
-            runtime_data: MaaRuntimeData {
-                data: rd_b64,
-                data_type: "Binary".to_owned(),
-            },
-        };
+            let body = MaaAttestRequest {
+                quote: quote_b64,
+                runtime_data: MaaRuntimeData {
+                    data: rd_b64,
+                    data_type: "Binary".to_owned(),
+                },
+            };
 
-        let path = match quote.quote_type {
-            QuoteType::Sgx => "SgxEnclave",
-            QuoteType::Tdx => "TdxGuest",
-            _ => {
-                return Err(VerificationError::PolicyViolation(format!(
-                    "MAA verifier does not support quote type: {:?}",
-                    quote.quote_type
+            let path = match quote.quote_type {
+                QuoteType::Sgx => "SgxEnclave",
+                QuoteType::Tdx => "TdxGuest",
+                _ => {
+                    return Err(VerificationError::PolicyViolation(format!(
+                        "MAA verifier does not support quote type: {:?}",
+                        quote.quote_type
+                    )));
+                }
+            };
+
+            let url = format!("{}/attest/{}?api-version=2022-08-01", self.endpoint, path);
+            debug!(%url, "submitting quote to MAA");
+
+            let resp = self
+                .client
+                .post(&url)
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| VerificationError::NetworkError(e.to_string()))?;
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                return Err(VerificationError::ServiceError(format!(
+                    "MAA returned {status}: {body}"
                 )));
             }
-        };
 
-        let url = format!("{}/attest/{}?api-version=2022-08-01", self.endpoint, path);
-        debug!(%url, "submitting quote to MAA");
+            let maa_resp: MaaAttestResponse = resp
+                .json()
+                .await
+                .map_err(|e| VerificationError::ServiceError(e.to_string()))?;
 
-        let resp = self
-            .client
-            .post(&url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| VerificationError::NetworkError(e.to_string()))?;
+            // Verify the JWT signature and extract verified claims (C-QS-4/C-TEE-2).
+            #[cfg(feature = "maa")]
+            let (_claims_json, debug_build) = self
+                .verify_jwt_signature(&maa_resp.token, report_data)
+                .await?;
 
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(VerificationError::ServiceError(format!(
-                "MAA returned {status}: {body}"
-            )));
-        }
+            #[cfg(not(feature = "maa"))]
+            return Err(VerificationError::Malformed(
+                "MAA verification requested but 'maa' feature is disabled".to_owned(),
+            ));
 
-        let maa_resp: MaaAttestResponse = resp
-            .json()
-            .await
-            .map_err(|e| VerificationError::ServiceError(e.to_string()))?;
-
-        // Verify the JWT signature and extract verified claims (C-QS-4/C-TEE-2).
-        #[cfg(feature = "maa")]
-        let (_claims_json, debug_build) = self
-            .verify_jwt_signature(&maa_resp.token, report_data)
-            .await?;
-
-        #[cfg(not(feature = "maa"))]
-        return Err(VerificationError::Malformed(
-            "MAA verification requested but 'maa' feature is disabled".to_owned(),
-        ));
-
-        Ok(VerificationResult {
-            claims: EatClaims {
-                hwmodel: Some(format!("{:?}", quote.quote_type)),
-                hwversion: Some("maa-verified".to_owned()),
-                oemid: Some("Microsoft".to_owned()),
-                dbgstat: Some(u8::from(debug_build)),
+            Ok(VerificationResult {
+                claims: EatClaims {
+                    hwmodel: Some(format!("{:?}", quote.quote_type)),
+                    hwversion: Some("maa-verified".to_owned()),
+                    oemid: Some("Microsoft".to_owned()),
+                    dbgstat: Some(u8::from(debug_build)),
+                    ..Default::default()
+                },
+                tcb_status: "UpToDate".to_owned(),
                 ..Default::default()
-            },
-            tcb_status: "UpToDate".to_owned(),
-            ..Default::default()
+            })
         })
     }
 }

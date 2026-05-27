@@ -19,6 +19,7 @@ pub enum McpClientError {
 }
 
 /// A confidential MCP client that communicates over `OpenHTTPA`.
+#[derive(Clone)]
 pub struct OpenHttpaMcpClient {
     client: OpenHttpaClient,
 }

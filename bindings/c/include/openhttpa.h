@@ -6,6 +6,19 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+typedef struct OpenHttpaCtx OpenHttpaCtx;
+
+struct OpenHttpaCtx *openhttpa_ctx_new(void);
+
+/**
+ * Free an `OpenHttpaCtx`.
+ *
+ * # Safety
+ *
+ * The `ctx` must have been returned by `openhttpa_ctx_new` and not yet freed.
+ */
+void openhttpa_ctx_free(struct OpenHttpaCtx *ctx);
+
 char *openhttpa_version(void);
 
 /**
@@ -24,7 +37,7 @@ char *openhttpa_parse_atb_id(const char *atb_id);
  *
  * The `server_uri` pointer must be a valid, null-terminated C string.
  */
-char *openhttpa_attest_handshake(const char *server_uri);
+char *openhttpa_attest_handshake(struct OpenHttpaCtx *ctx, const char *server_uri);
 
 /**
  * Send a confidential chat message to an LLM via `OpenHTTPA`.
@@ -33,7 +46,8 @@ char *openhttpa_attest_handshake(const char *server_uri);
  *
  * All input pointers must be valid, null-terminated C strings.
  */
-char *openhttpa_confidential_chat(const char *server_uri,
+char *openhttpa_confidential_chat(struct OpenHttpaCtx *ctx,
+                                  const char *server_uri,
                                   const char *model,
                                   const char *messages_json);
 
@@ -44,7 +58,7 @@ char *openhttpa_confidential_chat(const char *server_uri,
  *
  * The `request_json` pointer must be a valid, null-terminated C string.
  */
-char *openhttpa_server_handshake(const char *request_json);
+char *openhttpa_server_handshake(struct OpenHttpaCtx *ctx, const char *request_json);
 
 /**
  * Decrypt a server-side `OpenHTTPA` request payload.
@@ -53,7 +67,8 @@ char *openhttpa_server_handshake(const char *request_json);
  *
  * Both `atb_id_str` and `ciphertext_hex` must be valid, null-terminated C strings.
  */
-char *openhttpa_server_decrypt(const char *atb_id_str,
+char *openhttpa_server_decrypt(struct OpenHttpaCtx *ctx,
+                               const char *atb_id_str,
                                uint64_t nonce_val,
                                const char *ciphertext_hex);
 
@@ -64,7 +79,9 @@ char *openhttpa_server_decrypt(const char *atb_id_str,
  *
  * Both `atb_id_str` and `plaintext_hex` must be valid, null-terminated C strings.
  */
-char *openhttpa_server_encrypt(const char *atb_id_str, const char *plaintext_hex);
+char *openhttpa_server_encrypt(struct OpenHttpaCtx *ctx,
+                               const char *atb_id_str,
+                               const char *plaintext_hex);
 
 /**
  * Free a string returned by any of the `openhttpa_*` functions.

@@ -197,8 +197,13 @@ impl McpTool for SecureSum {
             "required": ["party_id", "value"]
         })
     }
-    async fn call(&self, _args: serde_json::Value) -> Result<serde_json::Value, String> {
-        Ok(serde_json::json!({ "status": "recorded", "operation": "sum" }))
+    fn call<'a>(
+        &'a self,
+        _args: serde_json::Value,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'a>,
+    > {
+        Box::pin(async move { Ok(serde_json::json!({ "status": "recorded", "operation": "sum" })) })
     }
 }
 
@@ -221,8 +226,15 @@ impl McpTool for SecureAverage {
             "required": ["party_id", "value"]
         })
     }
-    async fn call(&self, _args: serde_json::Value) -> Result<serde_json::Value, String> {
-        Ok(serde_json::json!({ "status": "recorded", "operation": "average" }))
+    fn call<'a>(
+        &'a self,
+        _args: serde_json::Value,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'a>,
+    > {
+        Box::pin(
+            async move { Ok(serde_json::json!({ "status": "recorded", "operation": "average" })) },
+        )
     }
 }
 
@@ -245,8 +257,15 @@ impl McpTool for SecureVariance {
             "required": ["party_id", "value"]
         })
     }
-    async fn call(&self, _args: serde_json::Value) -> Result<serde_json::Value, String> {
-        Ok(serde_json::json!({ "status": "recorded", "operation": "variance" }))
+    fn call<'a>(
+        &'a self,
+        _args: serde_json::Value,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'a>,
+    > {
+        Box::pin(
+            async move { Ok(serde_json::json!({ "status": "recorded", "operation": "variance" })) },
+        )
     }
 }
 
@@ -465,30 +484,38 @@ async fn simulate_swarm(State(_state): State<AppState>) -> impl IntoResponse {
     use openhttpa_transport::connection::AttestTransport;
 
     struct MockVerifier;
-    #[async_trait]
     impl QuoteVerifier for MockVerifier {
-        async fn verify(
-            &self,
-            _quote: &AttestQuote,
-            _report_data: &[u8; 64],
-        ) -> Result<VerificationResult, VerificationError> {
-            Ok(VerificationResult {
-                claims: openhttpa_attestation::verifier::EatClaims {
-                    hwmodel: Some("mock".to_string()),
-                    hwversion: Some("ok".to_string()),
-                    dbgstat: Some(1),
-                    boot_progress: Some("mock-measurement".to_string()),
+        fn verify<'a>(
+            &'a self,
+            _quote: &'a AttestQuote,
+            _report_data: &'a [u8; 64],
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                    + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async move {
+                Ok(VerificationResult {
+                    claims: openhttpa_attestation::verifier::EatClaims {
+                        hwmodel: Some("mock".to_string()),
+                        hwversion: Some("ok".to_string()),
+                        dbgstat: Some(1),
+                        boot_progress: Some("mock-measurement".to_string()),
+                        ..Default::default()
+                    },
+                    tcb_status: "UpToDate".to_string(),
+                    measurement: Some("mock-measurement".to_string()),
+                    signer_id: Some("mock-signer".to_string()),
                     ..Default::default()
-                },
-                tcb_status: "UpToDate".to_string(),
-                measurement: Some("mock-measurement".to_string()),
-                signer_id: Some("mock-signer".to_string()),
-                ..Default::default()
+                })
             })
         }
     }
 
     struct LocalTransport;
+    #[async_trait]
     #[async_trait]
     impl AttestTransport for LocalTransport {
         async fn send(
@@ -782,10 +809,10 @@ async fn aths_json(
         result.atb_id.clone(),
         suite,
         version,
-        result.session_keys,
+        result.session_keys.clone(),
         std::time::Instant::now() + std::time::Duration::from_secs(3600),
         ReplayStrategy::default(),
-        result.client_attestation_result,
+        result.client_attestation_result.clone(),
     );
 
     if let Err(e) = state.registry.insert(session) {
@@ -855,6 +882,7 @@ struct WsChatHandler {
     tx: broadcast::Sender<WsPayload>,
 }
 
+#[async_trait]
 #[async_trait]
 impl AttestWsHandler for WsChatHandler {
     async fn handle(&self, mut ws: AttestWsSession) {

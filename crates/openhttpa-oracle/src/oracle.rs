@@ -9,6 +9,7 @@ use serde_big_array::BigArray;
 use std::sync::Arc;
 use thiserror::Error;
 
+#[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum OracleError {
     #[error("Failed to fetch data: {0}")]

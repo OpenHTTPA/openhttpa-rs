@@ -53,6 +53,7 @@ pub enum ClientError {
 /// - `max_response_size` defaults to [`DEFAULT_MAX_RESPONSE_SIZE`] (16 MiB).
 ///   Increase only for known bulk-data endpoints.
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct OpenHttpaClient {
     server_uri: Uri,
     tee_provider: Arc<dyn TeeProvider>,

@@ -12,7 +12,6 @@
 
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-use std::sync::OnceLock;
 
 use tokio::runtime::Runtime;
 
@@ -24,32 +23,42 @@ use openhttpa_llm::{ChatMessage, Role};
 use openhttpa_proto::{AtbId, CipherSuite, ProtocolVersion};
 use openhttpa_server::AtbRegistry;
 
-static RT: OnceLock<Runtime> = OnceLock::new();
-static REGISTRY: OnceLock<AtbRegistry> = OnceLock::new();
-static EXECUTOR: OnceLock<AtHsExecutor> = OnceLock::new();
-static TEE: OnceLock<std::sync::Arc<dyn openhttpa_tee::TeeProvider>> = OnceLock::new();
-
-fn runtime() -> &'static Runtime {
-    RT.get_or_init(|| {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("tokio runtime")
-    })
+pub struct OpenHttpaCtx {
+    pub rt: Runtime,
+    pub registry: AtbRegistry,
+    pub executor: AtHsExecutor,
+    pub tee: std::sync::Arc<dyn openhttpa_tee::TeeProvider>,
 }
 
-fn registry() -> &'static AtbRegistry {
-    REGISTRY.get_or_init(AtbRegistry::new)
+#[unsafe(no_mangle)]
+pub extern "C" fn openhttpa_ctx_new() -> *mut OpenHttpaCtx {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime");
+    let registry = AtbRegistry::new();
+    let executor = AtHsExecutor::with_config(vec![], vec![], true, false);
+    let tee = openhttpa_tee::detect_best_provider(&openhttpa_tee::provider::TeeConfig::default())
+        .unwrap();
+    let ctx = Box::new(OpenHttpaCtx {
+        rt,
+        registry,
+        executor,
+        tee,
+    });
+    Box::into_raw(ctx)
 }
 
-fn executor() -> &'static AtHsExecutor {
-    EXECUTOR.get_or_init(|| AtHsExecutor::with_config(vec![], vec![], true, false))
-}
-
-fn tee() -> &'static dyn openhttpa_tee::TeeProvider {
-    &**TEE.get_or_init(|| {
-        openhttpa_tee::detect_best_provider(&openhttpa_tee::provider::TeeConfig::default()).unwrap()
-    })
+/// Free an `OpenHttpaCtx`.
+///
+/// # Safety
+///
+/// The `ctx` must have been returned by `openhttpa_ctx_new` and not yet freed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn openhttpa_ctx_free(ctx: *mut OpenHttpaCtx) {
+    if !ctx.is_null() {
+        unsafe { drop(Box::from_raw(ctx)) };
+    }
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -89,7 +98,10 @@ pub unsafe extern "C" fn openhttpa_parse_atb_id(atb_id: *const c_char) -> *mut c
 ///
 /// The `server_uri` pointer must be a valid, null-terminated C string.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn openhttpa_attest_handshake(server_uri: *const c_char) -> *mut c_char {
+pub unsafe extern "C" fn openhttpa_attest_handshake(
+    ctx: *mut OpenHttpaCtx,
+    server_uri: *const c_char,
+) -> *mut c_char {
     if server_uri.is_null() {
         return std::ptr::null_mut();
     }
@@ -102,7 +114,8 @@ pub unsafe extern "C" fn openhttpa_attest_handshake(server_uri: *const c_char) -
         .server_uri(uri)
         .require_preflight(true)
         .build();
-    match runtime().block_on(client.attest_handshake()) {
+    let ctx_ref = unsafe { &*ctx };
+    match ctx_ref.rt.block_on(client.attest_handshake()) {
         Ok(session) => {
             let id = session.state().id.to_string();
             CString::new(id)
@@ -120,6 +133,7 @@ pub unsafe extern "C" fn openhttpa_attest_handshake(server_uri: *const c_char) -
 /// All input pointers must be valid, null-terminated C strings.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn openhttpa_confidential_chat(
+    ctx: *mut OpenHttpaCtx,
     server_uri: *const c_char,
     model: *const c_char,
     messages_json: *const c_char,
@@ -157,7 +171,8 @@ pub unsafe extern "C" fn openhttpa_confidential_chat(
         })
         .collect();
 
-    let result = runtime().block_on(async {
+    let ctx_ref = unsafe { &*ctx };
+    let result = ctx_ref.rt.block_on(async {
         openhttpa_llm::client::ConfidentialLlmClientBuilder::default()
             .server_uri(uri)
             .model(model_str)
@@ -183,7 +198,10 @@ pub unsafe extern "C" fn openhttpa_confidential_chat(
 ///
 /// The `request_json` pointer must be a valid, null-terminated C string.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn openhttpa_server_handshake(request_json: *const c_char) -> *mut c_char {
+pub unsafe extern "C" fn openhttpa_server_handshake(
+    ctx: *mut OpenHttpaCtx,
+    request_json: *const c_char,
+) -> *mut c_char {
     if request_json.is_null() {
         return std::ptr::null_mut();
     }
@@ -231,9 +249,11 @@ pub unsafe extern "C" fn openhttpa_server_handshake(request_json: *const c_char)
         provenance: None,
     };
 
-    let result = runtime().block_on(async {
-        executor()
-            .execute_server(&hs_req, Some(tee()), None, None)
+    let ctx_ref = unsafe { &*ctx };
+    let result = ctx_ref.rt.block_on(async {
+        ctx_ref
+            .executor
+            .execute_server(&hs_req, Some(&*ctx_ref.tee), None, None)
             .await
     });
 
@@ -243,12 +263,13 @@ pub unsafe extern "C" fn openhttpa_server_handshake(request_json: *const c_char)
                 hs_res.atb_id.clone(),
                 suite,
                 version,
-                hs_res.session_keys,
+                hs_res.session_keys.clone(),
                 hs_res.expires_at,
                 ReplayStrategy::default(),
-                hs_res.client_attestation_result,
+                hs_res.client_attestation_result.clone(),
             );
-            if registry().insert(session).is_err() {
+            let ctx_ref = unsafe { &*ctx };
+            if ctx_ref.registry.insert(session).is_err() {
                 return std::ptr::null_mut();
             }
 
@@ -274,6 +295,7 @@ pub unsafe extern "C" fn openhttpa_server_handshake(request_json: *const c_char)
 /// Both `atb_id_str` and `ciphertext_hex` must be valid, null-terminated C strings.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn openhttpa_server_decrypt(
+    ctx: *mut OpenHttpaCtx,
     atb_id_str: *const c_char,
     nonce_val: u64,
     ciphertext_hex: *const c_char,
@@ -293,7 +315,8 @@ pub unsafe extern "C" fn openhttpa_server_decrypt(
         Err(_) => return std::ptr::null_mut(),
     };
 
-    let session = match registry().get(&id) {
+    let ctx_ref = unsafe { &*ctx };
+    let session = match ctx_ref.registry.get(&id) {
         Some(s) => s,
         None => return std::ptr::null_mut(),
     };
@@ -335,6 +358,7 @@ pub unsafe extern "C" fn openhttpa_server_decrypt(
 /// Both `atb_id_str` and `plaintext_hex` must be valid, null-terminated C strings.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn openhttpa_server_encrypt(
+    ctx: *mut OpenHttpaCtx,
     atb_id_str: *const c_char,
     plaintext_hex: *const c_char,
 ) -> *mut c_char {
@@ -353,7 +377,8 @@ pub unsafe extern "C" fn openhttpa_server_encrypt(
         Err(_) => return std::ptr::null_mut(),
     };
 
-    let session = match registry().get(&id) {
+    let ctx_ref = unsafe { &*ctx };
+    let session = match ctx_ref.registry.get(&id) {
         Some(s) => s,
         None => return std::ptr::null_mut(),
     };
@@ -422,6 +447,7 @@ mod tests {
 
     #[test]
     fn server_handshake_roundtrip() {
+        let ctx = openhttpa_ctx_new();
         let client_random = [0u8; 32];
         let client_challenge = [0u8; 48];
         let client_pair = openhttpa_crypto::key_exchange::HybridKemPair::generate().unwrap();
@@ -435,7 +461,7 @@ mod tests {
         });
 
         let c_client_json = CString::new(client_req.to_string()).unwrap();
-        let server_json_ptr = unsafe { openhttpa_server_handshake(c_client_json.as_ptr()) };
+        let server_json_ptr = unsafe { openhttpa_server_handshake(ctx, c_client_json.as_ptr()) };
         assert!(!server_json_ptr.is_null());
 
         let server_json = unsafe { CStr::from_ptr(server_json_ptr).to_str().unwrap().to_owned() };
@@ -443,11 +469,12 @@ mod tests {
 
         let server_resp: serde_json::Value = serde_json::from_str(&server_json).unwrap();
         assert!(server_resp.get("base_id").is_some());
+        unsafe { openhttpa_ctx_free(ctx) };
     }
 
     #[test]
     fn server_decrypt_encrypt_roundtrip() {
-        // 1. Handshake
+        let ctx = openhttpa_ctx_new(); // 1. Handshake
         let client_random = [0u8; 32];
         let client_challenge = [0u8; 48];
         let client_pair = openhttpa_crypto::key_exchange::HybridKemPair::generate().unwrap();
@@ -461,7 +488,7 @@ mod tests {
         });
 
         let server_json_ptr = unsafe {
-            openhttpa_server_handshake(CString::new(client_req.to_string()).unwrap().as_ptr())
+            openhttpa_server_handshake(ctx, CString::new(client_req.to_string()).unwrap().as_ptr())
         };
         let server_json_str = unsafe { CStr::from_ptr(server_json_ptr).to_str().unwrap() };
         let server_resp: serde_json::Value = serde_json::from_str(server_json_str).unwrap();
@@ -504,7 +531,7 @@ mod tests {
         let c_id = CString::new(base_id.clone()).unwrap();
         let c_cipher = CString::new(hex::encode(data)).unwrap();
         let plain_hex_ptr =
-            unsafe { openhttpa_server_decrypt(c_id.as_ptr(), nonce_val, c_cipher.as_ptr()) };
+            unsafe { openhttpa_server_decrypt(ctx, c_id.as_ptr(), nonce_val, c_cipher.as_ptr()) };
         assert!(!plain_hex_ptr.is_null());
         let plain_hex = unsafe { CStr::from_ptr(plain_hex_ptr).to_str().unwrap() };
         let decrypted = hex::decode(plain_hex).unwrap();
@@ -513,7 +540,8 @@ mod tests {
 
         // 5. Server Encrypt (TrS)
         let c_reply = CString::new(hex::encode(b"Hello Client")).unwrap();
-        let enc_json_ptr = unsafe { openhttpa_server_encrypt(c_id.as_ptr(), c_reply.as_ptr()) };
+        let enc_json_ptr =
+            unsafe { openhttpa_server_encrypt(ctx, c_id.as_ptr(), c_reply.as_ptr()) };
         let enc_json = unsafe { CStr::from_ptr(enc_json_ptr).to_str().unwrap() };
         let enc_val: serde_json::Value = serde_json::from_str(enc_json).unwrap();
         let s_ciphertext = hex::decode(enc_val["ciphertext"].as_str().unwrap()).unwrap();
@@ -534,5 +562,6 @@ mod tests {
             .open_in_place(&s_aead_nonce, &aad, &mut s_data)
             .unwrap();
         assert_eq!(s_decrypted, b"Hello Client");
+        unsafe { openhttpa_ctx_free(ctx) };
     }
 }

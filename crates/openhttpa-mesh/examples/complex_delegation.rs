@@ -24,24 +24,31 @@ use uuid::Uuid;
 // --- Mock Infrastructure ---
 
 struct ExampleVerifier;
-#[async_trait]
 impl QuoteVerifier for ExampleVerifier {
-    async fn verify(
-        &self,
-        _quote: &AttestQuote,
-        _report_data: &[u8; 64],
-    ) -> Result<VerificationResult, VerificationError> {
-        Ok(VerificationResult {
-            secondary: vec![],
-            eat_token: None,
-            claims: EatClaims {
-                hwmodel: Some("mock-measurement".to_string()),
-                dbgstat: Some(0),
-                ..Default::default()
-            },
-            tcb_status: "UpToDate".to_string(),
-            measurement: Some("mock-measurement".to_string()),
-            signer_id: Some("mock-signer".to_string()),
+    fn verify<'a>(
+        &'a self,
+        _quote: &'a AttestQuote,
+        _report_data: &'a [u8; 64],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            Ok(VerificationResult {
+                secondary: vec![],
+                eat_token: None,
+                claims: EatClaims {
+                    hwmodel: Some("mock-measurement".to_string()),
+                    dbgstat: Some(0),
+                    ..Default::default()
+                },
+                tcb_status: "UpToDate".to_string(),
+                measurement: Some("mock-measurement".to_string()),
+                signer_id: Some("mock-signer".to_string()),
+            })
         })
     }
 }
@@ -246,7 +253,6 @@ struct AggregatorTool {
     total: Arc<DashMap<Uuid, u64>>,
 }
 
-#[async_trait]
 impl McpTool for AggregatorTool {
     fn name(&self) -> &str {
         "report_samples"
@@ -263,12 +269,19 @@ impl McpTool for AggregatorTool {
             }
         })
     }
-    async fn call(&self, args: serde_json::Value) -> Result<serde_json::Value, String> {
-        let hits = args["hits"].as_u64().ok_or("missing hits")?;
-        let total = args["total"].as_u64().ok_or("missing total")?;
-        self.hits.insert(Uuid::new_v4(), hits);
-        self.total.insert(Uuid::new_v4(), total);
-        Ok(json!("ok"))
+    fn call<'a>(
+        &'a self,
+        args: serde_json::Value,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            let hits = args["hits"].as_u64().ok_or("missing hits")?;
+            let total = args["total"].as_u64().ok_or("missing total")?;
+            self.hits.insert(Uuid::new_v4(), hits);
+            self.total.insert(Uuid::new_v4(), total);
+            Ok(json!("ok"))
+        })
     }
 }
 
@@ -277,7 +290,6 @@ struct GetPiTool {
     total: Arc<DashMap<Uuid, u64>>,
 }
 
-#[async_trait]
 impl McpTool for GetPiTool {
     fn name(&self) -> &str {
         "get_pi"
@@ -288,14 +300,21 @@ impl McpTool for GetPiTool {
     fn input_schema(&self) -> serde_json::Value {
         json!({})
     }
-    async fn call(&self, _args: serde_json::Value) -> Result<serde_json::Value, String> {
-        let total_hits: u64 = self.hits.iter().map(|p| *p.value()).sum();
-        let total_samples: u64 = self.total.iter().map(|p| *p.value()).sum();
-        if total_samples == 0 {
-            return Err("No samples".into());
-        }
-        let pi = 4.0 * (total_hits as f64) / (total_samples as f64);
-        Ok(json!({ "pi": pi, "samples": total_samples }))
+    fn call<'a>(
+        &'a self,
+        _args: serde_json::Value,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            let total_hits: u64 = self.hits.iter().map(|p| *p.value()).sum();
+            let total_samples: u64 = self.total.iter().map(|p| *p.value()).sum();
+            if total_samples == 0 {
+                return Err("No samples".into());
+            }
+            let pi = 4.0 * (total_hits as f64) / (total_samples as f64);
+            Ok(json!({ "pi": pi, "samples": total_samples }))
+        })
     }
 }
 
@@ -306,7 +325,6 @@ struct SamplerTool {
     node: Weak<AgentNode>,
 }
 
-#[async_trait]
 impl McpTool for SamplerTool {
     fn name(&self) -> &str {
         "sample_points"
@@ -320,30 +338,37 @@ impl McpTool for SamplerTool {
             "properties": { "count": { "type": "integer" } }
         })
     }
-    async fn call(&self, args: serde_json::Value) -> Result<serde_json::Value, String> {
-        let count = args["count"].as_u64().unwrap_or(1000);
-        let mut hits = 0;
-        for _ in 0..count {
-            let x: f64 = rand::random::<f64>();
-            let y: f64 = rand::random::<f64>();
-            if x * x + y * y <= 1.0 {
-                hits += 1;
+    fn call<'a>(
+        &'a self,
+        args: serde_json::Value,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            let count = args["count"].as_u64().unwrap_or(1000);
+            let mut hits = 0;
+            for _ in 0..count {
+                let x: f64 = rand::random::<f64>();
+                let y: f64 = rand::random::<f64>();
+                if x * x + y * y <= 1.0 {
+                    hits += 1;
+                }
             }
-        }
 
-        let node = self.node.upgrade().ok_or("Node dropped")?;
-        node.call_peer_tool(
-            self.aggregator_id,
-            "report_samples",
-            json!({
-                "hits": hits,
-                "total": count
-            }),
-        )
-        .await
-        .map_err(|e: openhttpa_mesh::MeshError| e.to_string())?;
+            let node = self.node.upgrade().ok_or("Node dropped")?;
+            node.call_peer_tool(
+                self.aggregator_id,
+                "report_samples",
+                json!({
+                    "hits": hits,
+                    "total": count
+                }),
+            )
+            .await
+            .map_err(|e: openhttpa_mesh::MeshError| e.to_string())?;
 
-        Ok(json!({ "hits": hits }))
+            Ok(json!({ "hits": hits }))
+        })
     }
 }
 

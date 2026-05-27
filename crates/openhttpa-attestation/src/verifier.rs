@@ -3,42 +3,53 @@
 
 //! The [`QuoteVerifier`] trait and result types.
 
-use async_trait::async_trait;
-
 pub use openhttpa_proto::{AttestQuote, EatClaims, QuoteType, VerificationResult};
 
 pub use openhttpa_proto::AttestError as VerificationError;
 
 /// Pluggable provider for revocation status.
-#[async_trait]
 pub trait RevocationProvider: Send + Sync + std::fmt::Debug {
     /// Check if a specific TEE platform or enclave has been revoked.
     ///
     /// # Errors
     /// Returns [`Err`] with `VerificationError::Revoked` if the identity is revoked.
-    async fn check_revocation(&self, result: &VerificationResult) -> Result<(), VerificationError>;
+    fn check_revocation<'a>(
+        &'a self,
+        result: &'a VerificationResult,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<(), VerificationError>> + Send + 'a>,
+    >;
 }
 
 /// A policy for deciding whether to accept a [`VerificationResult`].
-#[async_trait]
 pub trait PolicyEngine: Send + Sync + std::fmt::Debug {
     /// Evaluate the verification result against the policy.
-    async fn evaluate(&self, result: &VerificationResult) -> Result<(), VerificationError>;
+    fn evaluate<'a>(
+        &'a self,
+        result: &'a VerificationResult,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<(), VerificationError>> + Send + 'a>,
+    >;
 }
 
 /// An async pluggable quote verifier.
-#[async_trait]
 pub trait QuoteVerifier: Send + Sync {
     /// Verify a single `quote` and return the verification result.
     ///
     /// # Arguments
     /// * `quote` - The raw attestation quote.
     /// * `report_data` - The 64-byte data buffer expected to be embedded in the quote.
-    async fn verify(
-        &self,
-        quote: &AttestQuote,
-        report_data: &[u8; 64],
-    ) -> Result<VerificationResult, VerificationError>;
+    fn verify<'a>(
+        &'a self,
+        quote: &'a AttestQuote,
+        report_data: &'a [u8; 64],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    >;
 
     /// Verify multiple quotes (a composite bundle).
     ///
@@ -48,25 +59,33 @@ pub trait QuoteVerifier: Send + Sync {
     ///
     /// The default implementation verifies each quote individually and returns
     /// a failure if any single verification fails (Fail-fast).
-    async fn verify_bundle(
-        &self,
-        quotes: &[AttestQuote],
-        report_data: &[u8; 64],
-    ) -> Result<VerificationResult, VerificationError> {
-        if quotes.is_empty() {
-            return Err(VerificationError::MalformedQuote(
-                "empty quote bundle".to_owned(),
-            ));
-        }
+    fn verify_bundle<'a>(
+        &'a self,
+        quotes: &'a [AttestQuote],
+        report_data: &'a [u8; 64],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            if quotes.is_empty() {
+                return Err(VerificationError::MalformedQuote(
+                    "empty quote bundle".to_owned(),
+                ));
+            }
 
-        let mut primary_res = self.verify(&quotes[0], report_data).await?;
+            let mut primary_res = self.verify(&quotes[0], report_data).await?;
 
-        for quote in &quotes[1..] {
-            let secondary_res = self.verify(quote, report_data).await?;
-            primary_res.secondary.push(secondary_res);
-        }
+            for quote in &quotes[1..] {
+                let secondary_res = self.verify(quote, report_data).await?;
+                primary_res.secondary.push(secondary_res);
+            }
 
-        Ok(primary_res)
+            Ok(primary_res)
+        })
     }
 
     /// Verify multiple quotes independently and concurrently.
@@ -76,24 +95,32 @@ pub trait QuoteVerifier: Send + Sync {
     ///
     /// # Errors
     /// Returns [`Err`] if any verification fails or if input lengths do not match.
-    async fn verify_batch(
-        &self,
-        quotes: &[AttestQuote],
-        report_data: &[[u8; 64]],
-    ) -> Result<Vec<VerificationResult>, VerificationError> {
-        if quotes.len() != report_data.len() {
-            return Err(VerificationError::MalformedQuote(
+    fn verify_batch<'a>(
+        &'a self,
+        quotes: &'a [AttestQuote],
+        report_data: &'a [[u8; 64]],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<Vec<VerificationResult>, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            if quotes.len() != report_data.len() {
+                return Err(VerificationError::MalformedQuote(
                 "quotes and report_data slices must have the same length for batch verification"
                     .to_owned(),
             ));
-        }
+            }
 
-        let mut futures = Vec::with_capacity(quotes.len());
-        for (quote, rd) in quotes.iter().zip(report_data.iter()) {
-            futures.push(self.verify(quote, rd));
-        }
+            let mut futures = Vec::with_capacity(quotes.len());
+            for (quote, rd) in quotes.iter().zip(report_data.iter()) {
+                futures.push(self.verify(quote, rd));
+            }
 
-        futures::future::try_join_all(futures).await
+            futures::future::try_join_all(futures).await
+        })
     }
 }
 
@@ -116,7 +143,6 @@ pub struct SimpleRevocationProvider {
     pub revoked_identities: dashmap::DashSet<String>,
 }
 
-#[async_trait]
 #[allow(deprecated)] // M-01: internal impl of the deprecated test-only type
 impl RevocationProvider for SimpleRevocationProvider {
     /// Check revocation against all available identity fields.
@@ -124,20 +150,27 @@ impl RevocationProvider for SimpleRevocationProvider {
     /// SEC-06: Checks `boot_progress`, `measurement`, and `signer_id` to
     /// prevent a revoked enclave from bypassing the check by omitting
     /// `boot_progress` while supplying the same identity via another field.
-    async fn check_revocation(&self, result: &VerificationResult) -> Result<(), VerificationError> {
-        let candidates: [Option<&String>; 3] = [
-            result.claims.boot_progress.as_ref(),
-            result.measurement.as_ref(),
-            result.signer_id.as_ref(),
-        ];
-        for identity in candidates.into_iter().flatten() {
-            if self.revoked_identities.contains(identity) {
-                return Err(VerificationError::Revoked(format!(
-                    "identity '{identity}' is on the revocation list"
-                )));
+    fn check_revocation<'a>(
+        &'a self,
+        result: &'a VerificationResult,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<(), VerificationError>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            let candidates: [Option<&String>; 3] = [
+                result.claims.boot_progress.as_ref(),
+                result.measurement.as_ref(),
+                result.signer_id.as_ref(),
+            ];
+            for identity in candidates.into_iter().flatten() {
+                if self.revoked_identities.contains(identity) {
+                    return Err(VerificationError::Revoked(format!(
+                        "identity '{identity}' is on the revocation list"
+                    )));
+                }
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 }
 
@@ -268,19 +301,26 @@ mod tests {
     #[tokio::test]
     async fn test_verify_batch() {
         struct DummyVerifier;
-        #[async_trait]
         impl QuoteVerifier for DummyVerifier {
-            async fn verify(
-                &self,
-                quote: &AttestQuote,
-                report_data: &[u8; 64],
-            ) -> Result<VerificationResult, VerificationError> {
-                if quote.raw.as_ref() == b"fail" {
-                    return Err(VerificationError::SignatureInvalid);
-                }
-                Ok(VerificationResult {
-                    tcb_status: format!("verified-{}", report_data[0]),
-                    ..Default::default()
+            fn verify<'a>(
+                &'a self,
+                quote: &'a AttestQuote,
+                report_data: &'a [u8; 64],
+            ) -> std::pin::Pin<
+                Box<
+                    dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                        + Send
+                        + 'a,
+                >,
+            > {
+                Box::pin(async move {
+                    if quote.raw.as_ref() == b"fail" {
+                        return Err(VerificationError::SignatureInvalid);
+                    }
+                    Ok(VerificationResult {
+                        tcb_status: format!("verified-{}", report_data[0]),
+                        ..Default::default()
+                    })
                 })
             }
         }

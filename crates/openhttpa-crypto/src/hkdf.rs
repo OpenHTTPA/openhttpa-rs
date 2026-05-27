@@ -39,6 +39,7 @@ use thiserror::Error;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// HKDF errors.
+#[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum HkdfError {
     #[error("HKDF extract failed")]

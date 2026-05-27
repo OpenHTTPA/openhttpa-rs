@@ -3,7 +3,6 @@
 
 //! Composite verifier for heterogeneous TEE environments.
 
-use async_trait::async_trait;
 use std::collections::HashMap;
 
 use crate::verifier::{QuoteVerifier, VerificationError, VerificationResult};
@@ -35,49 +34,64 @@ impl CompositeVerifier {
     }
 }
 
-#[async_trait]
 impl QuoteVerifier for CompositeVerifier {
-    async fn verify(
-        &self,
-        quote: &AttestQuote,
-        report_data: &[u8; 64],
-    ) -> Result<VerificationResult, VerificationError> {
-        let type_key = quote.quote_type.to_string();
+    fn verify<'a>(
+        &'a self,
+        quote: &'a AttestQuote,
+        report_data: &'a [u8; 64],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let type_key = quote.quote_type.to_string();
 
-        let verifier = self.verifiers.get(&type_key).ok_or_else(|| {
-            VerificationError::PolicyViolation(format!(
-                "no verifier registered for quote type: {type_key}"
-            ))
-        })?;
+            let verifier = self.verifiers.get(&type_key).ok_or_else(|| {
+                VerificationError::PolicyViolation(format!(
+                    "no verifier registered for quote type: {type_key}"
+                ))
+            })?;
 
-        verifier.verify(quote, report_data).await
+            verifier.verify(quote, report_data).await
+        })
     }
 
     /// Optimized bundle verification for composite environments.
-    async fn verify_bundle(
-        &self,
-        quotes: &[AttestQuote],
-        report_data: &[u8; 64],
-    ) -> Result<VerificationResult, VerificationError> {
-        if quotes.is_empty() {
-            return Err(VerificationError::Malformed(
-                "empty quote bundle".to_owned(),
-            ));
-        }
+    fn verify_bundle<'a>(
+        &'a self,
+        quotes: &'a [AttestQuote],
+        report_data: &'a [u8; 64],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            if quotes.is_empty() {
+                return Err(VerificationError::Malformed(
+                    "empty quote bundle".to_owned(),
+                ));
+            }
 
-        let mut results = Vec::with_capacity(quotes.len());
+            let mut results = Vec::with_capacity(quotes.len());
 
-        for quote in quotes {
-            let res = self.verify(quote, report_data).await?;
-            results.push(res);
-        }
+            for quote in quotes {
+                let res = self.verify(quote, report_data).await?;
+                results.push(res);
+            }
 
-        // Aggregate results:
-        // The first result is treated as the 'primary' (host TEE).
-        // Secondary results (GPU, TPM) are nested.
-        let mut primary = results.remove(0);
-        primary.secondary = results;
+            // Aggregate results:
+            // The first result is treated as the 'primary' (host TEE).
+            // Secondary results (GPU, TPM) are nested.
+            let mut primary = results.remove(0);
+            primary.secondary = results;
 
-        Ok(primary)
+            Ok(primary)
+        })
     }
 }

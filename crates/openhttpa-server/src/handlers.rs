@@ -251,10 +251,10 @@ pub async fn aths_handler(
         result.atb_id.clone(),
         suite,
         version,
-        result.session_keys,
+        result.session_keys.clone(),
         result.expires_at,
         openhttpa_core::ReplayStrategy::default(),
-        result.client_attestation_result,
+        result.client_attestation_result.clone(),
     );
     if let Err(e) = state.registry.insert(session) {
         return (StatusCode::SERVICE_UNAVAILABLE, e).into_response();
@@ -269,16 +269,16 @@ pub async fn aths_handler(
         cipher_suite: suite,
         random: result.server_random.to_vec(),
         key_share_json,
-        base_id: result.atb_id,
+        base_id: result.atb_id.clone(),
         version,
         expires_secs: ttl,
-        quotes: result.server_quotes,
+        quotes: result.server_quotes.clone(),
         secrets: vec![],
         cargo: None,
         ticket_resumption: None,
-        server_signatures: result.server_signatures,
+        server_signatures: result.server_signatures.clone(),
         #[cfg(feature = "zk")]
-        zk_proof: result.server_zk_proof,
+        zk_proof: result.server_zk_proof.clone(),
         #[cfg(not(feature = "zk"))]
         zk_proof: None,
     };

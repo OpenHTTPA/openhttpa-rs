@@ -14,7 +14,6 @@ use serde_json::json;
 use std::sync::Arc;
 
 struct MockTool;
-#[async_trait]
 impl McpTool for MockTool {
     fn name(&self) -> &str {
         "mock_tool"
@@ -25,8 +24,13 @@ impl McpTool for MockTool {
     fn input_schema(&self) -> serde_json::Value {
         json!({})
     }
-    async fn call(&self, _args: serde_json::Value) -> Result<serde_json::Value, String> {
-        Ok(json!({ "status": "success" }))
+    fn call<'a>(
+        &'a self,
+        _args: serde_json::Value,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'a>,
+    > {
+        Box::pin(async move { Ok(json!({ "status": "success" })) })
     }
 }
 
@@ -84,14 +88,14 @@ impl AttestTransport for MockTransport {
                 cipher_suite: suite,
                 random: result.server_random.to_vec(),
                 key_share_json,
-                base_id: result.atb_id,
+                base_id: result.atb_id.clone(),
                 version,
                 expires_secs: 3600,
-                quotes: result.server_quotes,
+                quotes: result.server_quotes.clone(),
                 secrets: vec![],
                 cargo: None,
                 ticket_resumption: None,
-                server_signatures: result.server_signatures,
+                server_signatures: result.server_signatures.clone(),
                 zk_proof: None,
             };
 

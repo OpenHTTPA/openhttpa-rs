@@ -25,10 +25,8 @@ pub use types::*;
 mod tests {
     use super::server::McpTool;
     use super::*;
-    use async_trait::async_trait;
 
     struct MockTool;
-    #[async_trait]
     impl McpTool for MockTool {
         fn name(&self) -> &'static str {
             "test"
@@ -39,8 +37,13 @@ mod tests {
         fn input_schema(&self) -> serde_json::Value {
             serde_json::json!({})
         }
-        async fn call(&self, _args: serde_json::Value) -> Result<serde_json::Value, String> {
-            Ok(serde_json::json!({ "ok": true }))
+        fn call<'a>(
+            &'a self,
+            _args: serde_json::Value,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'a>,
+        > {
+            Box::pin(async { Ok(serde_json::json!({ "ok": true })) })
         }
     }
 
@@ -99,7 +102,6 @@ mod tests {
     }
 
     struct ErrorTool;
-    #[async_trait]
     impl McpTool for ErrorTool {
         fn name(&self) -> &'static str {
             "error_tool"
@@ -110,8 +112,13 @@ mod tests {
         fn input_schema(&self) -> serde_json::Value {
             serde_json::json!({})
         }
-        async fn call(&self, _args: serde_json::Value) -> Result<serde_json::Value, String> {
-            Err("intentional error".to_owned())
+        fn call<'a>(
+            &'a self,
+            _args: serde_json::Value,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'a>,
+        > {
+            Box::pin(async { Err("intentional error".to_owned()) })
         }
     }
 

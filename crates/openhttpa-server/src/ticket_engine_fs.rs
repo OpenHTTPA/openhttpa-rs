@@ -27,6 +27,7 @@ struct EngineState {
 }
 
 /// Errors that can occur when loading or persisting a `FileTicketEngine`.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum TicketEngineError {
     /// The key file exists but could not be read.

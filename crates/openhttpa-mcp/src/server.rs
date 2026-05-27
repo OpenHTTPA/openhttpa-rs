@@ -2,22 +2,26 @@
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
 use crate::types::{McpRequest, McpResponse};
-use async_trait::async_trait;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Trait for implementing MCP tool logic.
-#[async_trait]
 pub trait McpTool: Send + Sync {
     fn name(&self) -> &str;
     fn description(&self) -> Option<&str>;
     fn input_schema(&self) -> Value;
-    async fn call(&self, arguments: Value) -> Result<Value, String>;
+
+    // We explicitly box the future to allow `dyn McpTool` object safety.
+    fn call<'a>(
+        &'a self,
+        arguments: Value,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value, String>> + Send + 'a>>;
 }
 
 /// A confidential MCP server that runs inside a TEE.
+#[derive(Clone)]
 pub struct OpenHttpaMcpServer {
     tools: Arc<RwLock<HashMap<String, Arc<dyn McpTool>>>>,
 }

@@ -19,6 +19,7 @@
 #![forbid(unsafe_code)]
 
 pub mod atb_registry;
+pub mod builder;
 pub mod extractors;
 pub mod handlers;
 pub mod middleware;
@@ -29,6 +30,7 @@ pub mod ticket_engine_fs;
 pub mod ws;
 
 pub use atb_registry::AtbRegistry;
+pub use builder::OpenHttpaServerBuilder;
 pub use extractors::{EncryptedJson, EncryptedStream, LlmError, OpenHttpaSession};
 pub use handlers::{AtHsHandler, ChallengeKey};
 pub use middleware::{LocalReplayGuard, TrRequestLayer};

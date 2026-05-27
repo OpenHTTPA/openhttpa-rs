@@ -13,6 +13,7 @@ use aws_lc_rs::{
 use thiserror::Error;
 
 /// Signature errors.
+#[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum SignatureError {
     #[error("key generation failed")]

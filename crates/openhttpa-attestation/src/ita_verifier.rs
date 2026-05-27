@@ -9,7 +9,6 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use async_trait::async_trait;
 use base64ct::{Base64, Encoding as _};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -175,65 +174,72 @@ impl ItaVerifier {
     }
 }
 
-#[async_trait]
 impl QuoteVerifier for ItaVerifier {
-    async fn verify(
-        &self,
-        quote: &openhttpa_proto::AttestQuote,
-        report_data: &[u8; 64],
-    ) -> Result<VerificationResult, VerificationError> {
-        let quote_b64 = Base64::encode_string(quote.raw.as_ref());
-        let rd_b64 = Base64::encode_string(report_data);
+    fn verify<'a>(
+        &'a self,
+        quote: &'a openhttpa_proto::AttestQuote,
+        report_data: &'a [u8; 64],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let quote_b64 = Base64::encode_string(quote.raw.as_ref());
+            let rd_b64 = Base64::encode_string(report_data);
 
-        let body = ItaAttestRequest {
-            quote: quote_b64,
-            verifier_args: serde_json::json!({}),
-            runtime_data: Some(rd_b64),
-        };
+            let body = ItaAttestRequest {
+                quote: quote_b64,
+                verifier_args: serde_json::json!({}),
+                runtime_data: Some(rd_b64),
+            };
 
-        let url = format!("{}/attest", self.endpoint);
-        let resp = self
-            .client
-            .post(&url)
-            .header("x-api-key", &*self.api_key)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| VerificationError::NetworkError(e.to_string()))?;
+            let url = format!("{}/attest", self.endpoint);
+            let resp = self
+                .client
+                .post(&url)
+                .header("x-api-key", &*self.api_key)
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| VerificationError::NetworkError(e.to_string()))?;
 
-        if !resp.status().is_success() {
-            return Err(VerificationError::ServiceError(format!(
-                "ITA returned {}: {}",
-                resp.status(),
-                resp.text().await.unwrap_or_default()
-            )));
-        }
+            if !resp.status().is_success() {
+                return Err(VerificationError::ServiceError(format!(
+                    "ITA returned {}: {}",
+                    resp.status(),
+                    resp.text().await.unwrap_or_default()
+                )));
+            }
 
-        let ita_resp: ItaAttestResponse = resp
-            .json()
-            .await
-            .map_err(|e| VerificationError::ServiceError(e.to_string()))?;
+            let ita_resp: ItaAttestResponse = resp
+                .json()
+                .await
+                .map_err(|e| VerificationError::ServiceError(e.to_string()))?;
 
-        #[cfg(feature = "ita")]
-        let _claims_json = self
-            .verify_jwt_signature(&ita_resp.token, report_data)
-            .await?;
+            #[cfg(feature = "ita")]
+            let _claims_json = self
+                .verify_jwt_signature(&ita_resp.token, report_data)
+                .await?;
 
-        #[cfg(not(feature = "ita"))]
-        return Err(VerificationError::PolicyViolation(
-            "Intel Trust Authority verification failed: 'ita' feature is disabled".to_owned(),
-        ));
+            #[cfg(not(feature = "ita"))]
+            return Err(VerificationError::PolicyViolation(
+                "Intel Trust Authority verification failed: 'ita' feature is disabled".to_owned(),
+            ));
 
-        Ok(VerificationResult {
-            claims: EatClaims {
-                hwmodel: Some(format!("{:?}", quote.quote_type)),
-                hwversion: Some("ita-verified".to_owned()),
-                oemid: Some("Intel".to_owned()),
-                dbgstat: Some(0),
+            Ok(VerificationResult {
+                claims: EatClaims {
+                    hwmodel: Some(format!("{:?}", quote.quote_type)),
+                    hwversion: Some("ita-verified".to_owned()),
+                    oemid: Some("Intel".to_owned()),
+                    dbgstat: Some(0),
+                    ..Default::default()
+                },
+                tcb_status: "UpToDate".to_owned(),
                 ..Default::default()
-            },
-            tcb_status: "UpToDate".to_owned(),
-            ..Default::default()
+            })
         })
     }
 }

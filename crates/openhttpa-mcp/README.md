@@ -13,20 +13,34 @@ The `openhttpa-mcp` crate integrates the Model Context Protocol with `OpenHTTPA`
 ### Hosting a Tool (Server)
 
 ```rust
-use openhttpa_mcp::{OpenHttpaMcpServer, McpTool};
-use serde_json::json;
-use async_trait::async_trait;
+use openhttpa_mcp::McpTool;
+use serde_json::Value;
 
-struct MyTool;
-#[async_trait]
-impl McpTool for MyTool {
-    fn name(&self) -> &str { "calculate_risk" }
-    fn description(&self) -> Option<&str> { Some("Calculates risk score") }
-    fn input_schema(&self) -> serde_json::Value { json!({ "type": "object" }) }
-    async fn call(&self, args: serde_json::Value) -> Result<serde_json::Value, String> {
-        let score: f64 = args["score"].as_f64().unwrap_or(0.0);
-        let risk = if score > 0.8 { "High" } else { "Low" };
-        Ok(json!({ "risk": risk }))
+struct MyCustomTool;
+
+impl McpTool for MyCustomTool {
+    fn name(&self) -> &str {
+        "my_tool"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("A description of what my tool does.")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "arg1": { "type": "string" }
+            }
+        })
+    }
+
+    fn call<'a>(&'a self, args: Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value, String>> + Send + 'a>> {
+        Box::pin(async move {
+            let arg1 = args["arg1"].as_str().ok_or("Missing arg1")?;
+            Ok(serde_json::json!({ "result": format!("Processed {}", arg1) }))
+        })
     }
 }
 
