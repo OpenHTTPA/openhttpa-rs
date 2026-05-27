@@ -135,3 +135,107 @@ impl ZkProver {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{DcapCollateral, VaiInput, ZkInput, ZkMode};
+
+    fn make_oracle_input() -> ZkInput {
+        ZkInput {
+            mode: ZkMode::Oracle,
+            transcript_hash: [0x42u8; 48],
+            quote_bytes: vec![0x01, 0x02, 0x03],
+            report_data: [0u8; 64],
+            oracle_data: Some(b"oracle payload".to_vec()),
+            vai_data: None,
+            dcap_collateral: None,
+        }
+    }
+
+    fn make_dcap_input() -> ZkInput {
+        ZkInput {
+            mode: ZkMode::DcapCompression,
+            transcript_hash: [0x11u8; 48],
+            quote_bytes: vec![0xde, 0xad, 0xbe, 0xef],
+            report_data: [0u8; 64],
+            oracle_data: None,
+            vai_data: None,
+            dcap_collateral: Some(DcapCollateral {
+                pck_cert: vec![0xca],
+                intermediate_ca: vec![0xfe],
+                root_ca: vec![0x00],
+                tcb_info: vec![0x01],
+                qe_identity: vec![0x02],
+            }),
+        }
+    }
+
+    fn make_vai_input() -> ZkInput {
+        ZkInput {
+            mode: ZkMode::VerifiedAi,
+            transcript_hash: [0x33u8; 48],
+            quote_bytes: vec![],
+            report_data: [0u8; 64],
+            oracle_data: None,
+            vai_data: Some(VaiInput {
+                model_id: [0x01u8; 32],
+                input_hash: [0x02u8; 32],
+                output_hash: [0x03u8; 32],
+            }),
+            dcap_collateral: None,
+        }
+    }
+
+    #[test]
+    fn prove_oracle_mode_returns_receipt() {
+        let input = make_oracle_input();
+        let receipt = ZkProver::prove(&input).expect("prove should succeed");
+        assert!(!receipt.journal.bytes.is_empty());
+    }
+
+    #[test]
+    fn prove_dcap_mode_returns_receipt() {
+        let input = make_dcap_input();
+        let receipt = ZkProver::prove(&input).expect("prove should succeed");
+        assert!(!receipt.journal.bytes.is_empty());
+    }
+
+    #[test]
+    fn prove_vai_mode_returns_receipt_with_vai_output() {
+        let input = make_vai_input();
+        let receipt = ZkProver::prove(&input).expect("prove should succeed");
+        let output = ZkProver::extract_output(&receipt).expect("extract should succeed");
+        assert!(output.vai_output.is_some());
+        let vai = output.vai_output.unwrap();
+        assert_eq!(vai.model_id, [0x01u8; 32]);
+    }
+
+    #[test]
+    fn extract_output_round_trips_transcript_hash() {
+        let input = make_oracle_input();
+        let receipt = ZkProver::prove(&input).unwrap();
+        let output = ZkProver::extract_output(&receipt).unwrap();
+        assert_eq!(output.transcript_hash, [0x42u8; 48]);
+        assert!(output.is_valid);
+    }
+
+    #[test]
+    fn extract_output_dcap_sets_dcap_verified() {
+        let input = make_dcap_input();
+        let receipt = ZkProver::prove(&input).unwrap();
+        let output = ZkProver::extract_output(&receipt).unwrap();
+        assert!(output.dcap_verified);
+    }
+
+    #[cfg(not(feature = "zk"))]
+    #[test]
+    fn receipt_journal_is_postcard_encoded_output() {
+        let input = make_oracle_input();
+        let receipt = ZkProver::prove(&input).unwrap();
+        // The journal bytes should be valid postcard-encoded ZkOutput
+        let decoded: ZkOutput = postcard::from_bytes(&receipt.journal.bytes)
+            .expect("journal should deserialize as ZkOutput");
+        assert!(decoded.is_valid);
+    }
+}

@@ -561,4 +561,100 @@ mod tests {
             .unwrap();
         assert!(!reply.is_empty());
     }
+
+    // ── LlmError display tests ───────────────────────────────────────────────
+
+    #[test]
+    fn llm_error_handshake_display() {
+        let e = LlmError::Handshake("connection refused".to_owned());
+        assert!(e.to_string().contains("connection refused"));
+    }
+
+    #[test]
+    fn llm_error_transport_display() {
+        let e = LlmError::Transport("timeout".to_owned());
+        assert!(e.to_string().contains("timeout"));
+    }
+
+    #[test]
+    fn llm_error_invalid_response_display() {
+        let e = LlmError::InvalidResponse("unexpected JSON".to_owned());
+        assert!(e.to_string().contains("unexpected JSON"));
+    }
+
+    #[test]
+    fn llm_error_inference_display() {
+        let e = LlmError::Inference("no choices".to_owned());
+        assert!(e.to_string().contains("no choices"));
+    }
+
+    // ── compute_vai_hashes determinism ───────────────────────────────────────
+
+    #[test]
+    fn compute_vai_hashes_is_deterministic() {
+        let msgs = vec![ChatMessage {
+            role: Role::User,
+            content: "test input".to_owned(),
+        }];
+        let (model_id1, input_hash1, output_hash1) =
+            ConfidentialLlmClient::compute_vai_hashes("gpt-4o", &msgs, "test output");
+        let (model_id2, input_hash2, output_hash2) =
+            ConfidentialLlmClient::compute_vai_hashes("gpt-4o", &msgs, "test output");
+        assert_eq!(model_id1, model_id2);
+        assert_eq!(input_hash1, input_hash2);
+        assert_eq!(output_hash1, output_hash2);
+    }
+
+    #[test]
+    fn compute_vai_hashes_sensitive_to_model() {
+        let msgs = vec![ChatMessage {
+            role: Role::User,
+            content: "hello".to_owned(),
+        }];
+        let (h1, _, _) = ConfidentialLlmClient::compute_vai_hashes("gpt-4o", &msgs, "reply");
+        let (h2, _, _) = ConfidentialLlmClient::compute_vai_hashes("llama3", &msgs, "reply");
+        assert_ne!(h1, h2, "Different models must produce different model IDs");
+    }
+
+    #[test]
+    fn compute_vai_hashes_sensitive_to_content() {
+        let msgs1 = vec![ChatMessage {
+            role: Role::User,
+            content: "input A".to_owned(),
+        }];
+        let msgs2 = vec![ChatMessage {
+            role: Role::User,
+            content: "input B".to_owned(),
+        }];
+        let (_, h1, _) = ConfidentialLlmClient::compute_vai_hashes("model", &msgs1, "output");
+        let (_, h2, _) = ConfidentialLlmClient::compute_vai_hashes("model", &msgs2, "output");
+        assert_ne!(h1, h2, "Different inputs must produce different hashes");
+    }
+
+    #[test]
+    fn compute_vai_hashes_output_hash_differs_on_content_change() {
+        let msgs = vec![ChatMessage {
+            role: Role::User,
+            content: "prompt".to_owned(),
+        }];
+        let (_, _, h1) = ConfidentialLlmClient::compute_vai_hashes("model", &msgs, "response A");
+        let (_, _, h2) = ConfidentialLlmClient::compute_vai_hashes("model", &msgs, "response B");
+        assert_ne!(h1, h2);
+    }
+
+    // ── Builder defaults ──────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn builder_with_bypass_skips_attestation() {
+        // A builder in bypass mode should build successfully without a live server.
+        let client = ConfidentialLlmClientBuilder::default()
+            .server_uri("http://127.0.0.1:8080".parse().unwrap())
+            .model("test-model")
+            .inference_path("/v1/chat/completions")
+            .with_bypass()
+            .build()
+            .await
+            .unwrap();
+        assert!(client.bypass_attestation);
+    }
 }

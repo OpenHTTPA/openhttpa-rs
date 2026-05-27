@@ -129,3 +129,155 @@ impl OpenHttpaService for AttestHandshakeService {
         Err(Status::unimplemented("trusted_call — not yet implemented"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openhttpa_core::handshake::AtHsExecutor;
+
+    fn make_executor() -> AtHsExecutor {
+        // AtHsExecutor::new takes (supported_suites, supported_versions).
+        // Empty vecs cause it to accept all suites/versions.
+        AtHsExecutor::new(vec![], vec![])
+    }
+
+    fn make_valid_key_share_bytes() -> Vec<u8> {
+        let pair = openhttpa_crypto::key_exchange::HybridKemPair::generate().unwrap();
+        let pub_share = pair.public_key_share();
+        let share = openhttpa_core::handshake::ClientKeyShare {
+            ecdhe_public: pub_share.ecdhe_public,
+            mlkem_public: pub_share.mlkem_public,
+        };
+        serde_json::to_vec(&share).unwrap()
+    }
+
+    #[tokio::test]
+    async fn attest_handshake_rejects_short_challenge() {
+        let svc = AttestHandshakeService::new(make_executor());
+
+        let req = Request::new(AtHsRequest {
+            key_share: prost::bytes::Bytes::from(make_valid_key_share_bytes()),
+            random: prost::bytes::Bytes::from(vec![0u8; 32]),
+            cipher_suites: vec!["X25519_ML_KEM768_AES256GCM_SHA384".to_owned()],
+            versions: vec!["openhttpa".to_owned()],
+            date: "2026-01-01T00:00:00Z".to_owned(),
+            base_creation: "new".to_owned(),
+            client_quote: None,
+            // Only 32 bytes — must be rejected
+            challenge: prost::bytes::Bytes::from(vec![0u8; 32]),
+        });
+
+        let result = svc.attest_handshake(req).await;
+        assert!(result.is_err());
+        let status = result.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::InvalidArgument);
+        assert!(status.message().contains("48 bytes"));
+    }
+
+    #[tokio::test]
+    async fn attest_handshake_rejects_empty_challenge() {
+        let svc = AttestHandshakeService::new(make_executor());
+
+        let req = Request::new(AtHsRequest {
+            key_share: prost::bytes::Bytes::from(make_valid_key_share_bytes()),
+            random: prost::bytes::Bytes::from(vec![0u8; 32]),
+            cipher_suites: vec!["X25519_ML_KEM768_AES256GCM_SHA384".to_owned()],
+            versions: vec!["openhttpa".to_owned()],
+            date: "2026-01-01T00:00:00Z".to_owned(),
+            base_creation: "new".to_owned(),
+            client_quote: None,
+            challenge: prost::bytes::Bytes::new(),
+        });
+
+        let result = svc.attest_handshake(req).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn attest_handshake_rejects_invalid_key_share() {
+        let svc = AttestHandshakeService::new(make_executor());
+
+        let req = Request::new(AtHsRequest {
+            key_share: prost::bytes::Bytes::from(b"not-valid-json".to_vec()),
+            random: prost::bytes::Bytes::from(vec![0u8; 32]),
+            cipher_suites: vec!["X25519_ML_KEM768_AES256GCM_SHA384".to_owned()],
+            versions: vec!["openhttpa".to_owned()],
+            date: "2026-01-01T00:00:00Z".to_owned(),
+            base_creation: "new".to_owned(),
+            client_quote: None,
+            challenge: prost::bytes::Bytes::from(vec![0xabu8; 48]),
+        });
+
+        let result = svc.attest_handshake(req).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn attest_handshake_succeeds_with_valid_request() {
+        let svc = AttestHandshakeService::new(make_executor());
+
+        let req = Request::new(AtHsRequest {
+            key_share: prost::bytes::Bytes::from(make_valid_key_share_bytes()),
+            random: prost::bytes::Bytes::from(vec![0x42u8; 32]),
+            cipher_suites: vec!["X25519_ML_KEM768_AES256GCM_SHA384".to_owned()],
+            versions: vec!["openhttpa".to_owned()],
+            date: "2026-01-01T00:00:00Z".to_owned(),
+            base_creation: "new".to_owned(),
+            client_quote: None,
+            challenge: prost::bytes::Bytes::from(vec![0xbcu8; 48]),
+        });
+
+        let result = svc.attest_handshake(req).await;
+        assert!(result.is_ok(), "Expected Ok but got: {:?}", result.err());
+        let resp = result.unwrap().into_inner();
+        assert!(!resp.base_id.is_empty(), "base_id should not be empty");
+        assert_eq!(resp.version, "openhttpa");
+    }
+
+    #[tokio::test]
+    async fn trusted_call_returns_unimplemented() {
+        let svc = AttestHandshakeService::new(make_executor());
+
+        let req = Request::new(TrustedRequest {
+            base_id: "some-id".to_owned(),
+            ciphertext: prost::bytes::Bytes::new(),
+            nonce: prost::bytes::Bytes::new(),
+            termination: "keep".to_owned(),
+        });
+
+        let result = svc.trusted_call(req).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::Unimplemented);
+    }
+
+    #[test]
+    fn grpc_attest_quote_fields() {
+        let quote = crate::GrpcAttestQuote {
+            quote_type: "mock".to_owned(),
+            raw: prost::bytes::Bytes::from_static(b"rawquote"),
+            qudd: prost::bytes::Bytes::from_static(b"qudddata"),
+        };
+        assert_eq!(quote.quote_type, "mock");
+        assert_eq!(&quote.raw[..], b"rawquote");
+    }
+
+    #[test]
+    fn trusted_request_and_response_fields() {
+        let req = TrustedRequest {
+            base_id: "abc-123".to_owned(),
+            ciphertext: prost::bytes::Bytes::from_static(b"ct"),
+            nonce: prost::bytes::Bytes::from_static(b"nc"),
+            termination: "destroy".to_owned(),
+        };
+        assert_eq!(req.base_id, "abc-123");
+        assert_eq!(req.termination, "destroy");
+
+        let resp = TrustedResponse {
+            ciphertext: prost::bytes::Bytes::from_static(b"resp_ct"),
+            nonce: prost::bytes::Bytes::from_static(b"resp_nc"),
+        };
+        assert_eq!(&resp.ciphertext[..], b"resp_ct");
+    }
+}

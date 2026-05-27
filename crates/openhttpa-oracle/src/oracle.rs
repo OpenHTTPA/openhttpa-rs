@@ -132,3 +132,111 @@ impl OracleNode {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openhttpa_tee::mock::MockTeeProvider;
+    use std::sync::Arc;
+
+    fn mock_oracle() -> OracleNode {
+        OracleNode::new(Arc::new(MockTeeProvider::default()))
+    }
+
+    #[test]
+    fn oracle_node_new_does_not_panic() {
+        // Smoke test: OracleNode::new should construct without panic.
+        let _node = mock_oracle();
+    }
+
+    #[tokio::test]
+    async fn fetch_and_prove_rejects_http_non_local_url() {
+        let node = mock_oracle();
+        let transcript = [0u8; 48];
+        // A non-localhost http:// URL must be rejected (HTTPS required).
+        let result = node
+            .fetch_and_prove("http://example.com/api/price", transcript, false)
+            .await;
+        assert!(result.is_err());
+        let err_str = result.unwrap_err().to_string();
+        assert!(
+            err_str.contains("HTTPS required"),
+            "Expected HTTPS required error, got: {err_str}"
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_and_prove_rejects_malformed_url() {
+        let node = mock_oracle();
+        let transcript = [0u8; 48];
+        let result = node
+            .fetch_and_prove("not-a-url-at-all", transcript, false)
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn fetch_and_prove_allows_http_localhost() {
+        // 127.0.0.1 is treated as local, so HTTP is allowed.
+        // We still expect a connection error since no server is running,
+        // but it should NOT be the HTTPS-required error.
+        let node = mock_oracle();
+        let transcript = [0u8; 48];
+        let result = node
+            .fetch_and_prove("http://127.0.0.1:19999/data", transcript, false)
+            .await;
+        // Either passes (if a server is running) or fails with a network/fetch error —
+        // but NOT with "HTTPS required".
+        if let Err(e) = &result {
+            assert!(
+                !e.to_string().contains("HTTPS required"),
+                "Localhost http should be allowed; got: {e}"
+            );
+        }
+    }
+
+    #[test]
+    fn oracle_response_serde_round_trip() {
+        let original = OracleResponse {
+            data: vec![0x01, 0x02, 0x03],
+            quote: vec![0xde, 0xad],
+            quote_type: "Mock".to_owned(),
+            transcript_hash: [0x42u8; 48],
+            zk_receipt: Some(vec![0xbe, 0xef]),
+        };
+
+        let json = serde_json::to_vec(&original).unwrap();
+        let decoded: OracleResponse = serde_json::from_slice(&json).unwrap();
+
+        assert_eq!(decoded.data, original.data);
+        assert_eq!(decoded.quote_type, original.quote_type);
+        assert_eq!(decoded.transcript_hash, original.transcript_hash);
+        assert_eq!(decoded.zk_receipt, original.zk_receipt);
+    }
+
+    #[test]
+    fn oracle_response_serde_without_zk_receipt() {
+        let original = OracleResponse {
+            data: vec![1, 2],
+            quote: vec![3, 4],
+            quote_type: "Tdx".to_owned(),
+            transcript_hash: [0u8; 48],
+            zk_receipt: None,
+        };
+        let json = serde_json::to_vec(&original).unwrap();
+        let decoded: OracleResponse = serde_json::from_slice(&json).unwrap();
+        assert!(decoded.zk_receipt.is_none());
+    }
+
+    #[test]
+    fn oracle_error_display_tee_error() {
+        let err = OracleError::TeeError("TEE failed to generate quote".to_owned());
+        assert!(err.to_string().contains("TEE failed to generate quote"));
+    }
+
+    #[test]
+    fn oracle_error_display_zk_error() {
+        let err = OracleError::ZkError("proof generation failed".to_owned());
+        assert!(err.to_string().contains("proof generation failed"));
+    }
+}

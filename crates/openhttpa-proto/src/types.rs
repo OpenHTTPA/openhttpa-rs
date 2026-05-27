@@ -522,6 +522,22 @@ mod tests {
     }
 
     #[test]
+    fn atb_id_uniqueness() {
+        // Each call to AtbId::new() must produce a unique ID.
+        let ids: Vec<AtbId> = (0..10).map(|_| AtbId::new()).collect();
+        let unique: std::collections::HashSet<String> =
+            ids.iter().map(std::string::ToString::to_string).collect();
+        assert_eq!(unique.len(), 10, "All generated AtbIds must be unique");
+    }
+
+    #[test]
+    fn atb_id_as_uuid() {
+        let id = AtbId::new();
+        let uuid = id.as_uuid();
+        assert_eq!(id.to_string(), uuid.to_string());
+    }
+
+    #[test]
     fn cipher_suite_display() {
         assert_eq!(
             CipherSuite::X25519MlKem768Aes256GcmSha384.to_string(),
@@ -530,9 +546,95 @@ mod tests {
     }
 
     #[test]
+    fn cipher_suite_from_str_round_trips() {
+        let suites = [
+            CipherSuite::X25519MlKem768Aes256GcmSha384,
+            CipherSuite::P384MlKem1024Aes256GcmSha384,
+            CipherSuite::X25519Aes256GcmSha384,
+            CipherSuite::X25519ChaCha20Poly1305Sha256,
+        ];
+        for suite in &suites {
+            let s = suite.to_string();
+            let parsed: CipherSuite = s.parse().expect("should parse");
+            assert_eq!(*suite, parsed);
+        }
+    }
+
+    #[test]
+    fn cipher_suite_numeric_ids_unique() {
+        // Each cipher suite must have a unique numeric ID.
+        let suites = CipherSuite::preferred_list();
+        let ids: Vec<u16> = suites.iter().map(|s| s.numeric_id()).collect();
+        let unique: std::collections::HashSet<u16> = ids.iter().copied().collect();
+        assert_eq!(
+            ids.len(),
+            unique.len(),
+            "All cipher suite IDs must be unique"
+        );
+    }
+
+    #[test]
     fn preferred_list_starts_with_pqc() {
         let list = CipherSuite::preferred_list();
         assert!(list[0].is_post_quantum());
+    }
+
+    #[test]
+    fn protocol_version_from_str_round_trip() {
+        let versions = [
+            (ProtocolVersion::V1, "httpa/1"),
+            (ProtocolVersion::V2, "openhttpa"),
+        ];
+        for (ver, s) in &versions {
+            let parsed: ProtocolVersion = s.parse().expect("should parse");
+            assert_eq!(*ver, parsed);
+            assert_eq!(ver.to_string(), *s);
+        }
+    }
+
+    #[test]
+    fn protocol_version_from_str_unknown_returns_err() {
+        let result: Result<ProtocolVersion, _> = "unknown/v99".parse();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn atb_creation_serde_round_trip() {
+        let variants = [AtbCreation::New, AtbCreation::Reuse, AtbCreation::Shared];
+        for v in &variants {
+            let json = serde_json::to_vec(v).unwrap();
+            let decoded: AtbCreation = serde_json::from_slice(&json).unwrap();
+            assert_eq!(*v, decoded);
+        }
+    }
+
+    #[test]
+    fn atb_termination_serde_round_trip() {
+        let variants = [
+            AtbTermination::Cleanup,
+            AtbTermination::Destroy,
+            AtbTermination::Keep,
+        ];
+        for v in &variants {
+            let json = serde_json::to_vec(v).unwrap();
+            let decoded: AtbTermination = serde_json::from_slice(&json).unwrap();
+            assert_eq!(*v, decoded);
+        }
+    }
+
+    #[test]
+    fn session_ticket_serde_round_trip() {
+        let ticket = SessionTicket {
+            ticket: vec![0x01, 0x02, 0x03],
+            lifetime: 3600,
+            cipher_suite: CipherSuite::X25519MlKem768Aes256GcmSha384,
+            rtt0_eligible: true,
+        };
+        let json = serde_json::to_vec(&ticket).unwrap();
+        let decoded: SessionTicket = serde_json::from_slice(&json).unwrap();
+        assert_eq!(decoded.lifetime, 3600);
+        assert!(decoded.rtt0_eligible);
+        assert_eq!(decoded.ticket, vec![0x01, 0x02, 0x03]);
     }
 
     #[test]
@@ -555,6 +657,20 @@ mod tests {
     }
 
     #[test]
+    fn attest_quote_serde_with_collateral_uris() {
+        let quote = AttestQuote {
+            quote_type: QuoteType::Tdx,
+            raw: Bytes::from_static(b"raw"),
+            qudd: Bytes::from_static(b"qudd"),
+            collateral_uris: vec!["https://collateral.intel.com/crl.pem".to_owned()],
+        };
+        let json = serde_json::to_vec(&quote).unwrap();
+        let decoded: AttestQuote = serde_json::from_slice(&json).unwrap();
+        assert_eq!(decoded.quote_type, QuoteType::Tdx);
+        assert_eq!(decoded.collateral_uris.len(), 1);
+    }
+
+    #[test]
     fn attest_base_record_expiry() {
         let rec = AttestBaseRecord {
             id: AtbId::new(),
@@ -565,6 +681,109 @@ mod tests {
             terminated: false,
         };
         assert!(rec.is_expired());
+    }
+
+    #[test]
+    fn attest_base_record_not_expired() {
+        let rec = AttestBaseRecord {
+            id: AtbId::new(),
+            service_uri: "https://example.com/api".to_owned(),
+            created_at: SystemTime::now(),
+            max_age: Duration::from_secs(3600),
+            policy: AtbPolicy::default(),
+            terminated: false,
+        };
+        assert!(!rec.is_expired());
+    }
+
+    #[test]
+    fn atb_policy_default_values() {
+        let policy = AtbPolicy::default();
+        assert!(policy.direct_attestation);
+        assert!(!policy.allow_untrusted_requests);
+    }
+
+    #[test]
+    fn provenance_chain_append_and_query() {
+        let mut chain = ProvenanceChain::default();
+        assert!(chain.origin().is_none());
+        assert!(chain.previous().is_none());
+
+        let agent = AgentMetadata {
+            id: uuid::Uuid::new_v4(),
+            name: "agent-alpha".to_owned(),
+            capabilities: vec!["compute".to_owned()],
+            endpoint: "https://alpha.example.com".to_owned(),
+            public_key: vec![],
+            last_quote: None,
+            signature: vec![],
+            prev_hash: None,
+        };
+        chain.append(agent);
+
+        assert!(chain.contains_agent("agent-alpha"));
+        assert!(!chain.contains_agent("agent-beta"));
+        assert!(chain.origin().is_some());
+        assert_eq!(chain.origin().unwrap().name, "agent-alpha");
+    }
+
+    #[test]
+    fn federation_manifest_validity() {
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let valid_manifest = FederationManifest {
+            version: 1,
+            issued_at: now_secs - 60,
+            expires_at: now_secs + 3600,
+            entries: vec![],
+            signature: ManifestSignature::default(),
+        };
+        assert!(valid_manifest.is_valid());
+
+        let expired_manifest = FederationManifest {
+            version: 1,
+            issued_at: now_secs - 7200,
+            expires_at: now_secs - 3600,
+            entries: vec![],
+            signature: ManifestSignature::default(),
+        };
+        assert!(!expired_manifest.is_valid());
+    }
+
+    #[test]
+    fn quote_type_from_str_round_trip() {
+        let types = [
+            ("sgx", QuoteType::Sgx),
+            ("tdx", QuoteType::Tdx),
+            ("sev_snp", QuoteType::SevSnp),
+            ("mock", QuoteType::Mock),
+        ];
+        for (s, qt) in &types {
+            let parsed: QuoteType = s.parse().unwrap();
+            assert_eq!(parsed, *qt);
+            assert_eq!(qt.to_string(), *s);
+        }
+    }
+
+    #[test]
+    fn quote_type_unknown_fallback() {
+        let qt: QuoteType = "custom_tee".parse().unwrap();
+        assert!(matches!(qt, QuoteType::Unknown(_)));
+        assert_eq!(qt.to_string(), "custom_tee");
+    }
+
+    #[test]
+    fn tee_class_from_quote_type() {
+        assert_eq!(TeeClass::from(&QuoteType::Tdx), TeeClass::IntelTdx);
+        assert_eq!(TeeClass::from(&QuoteType::SevSnp), TeeClass::AmdSevSnp);
+        assert_eq!(TeeClass::from(&QuoteType::Mock), TeeClass::Mock);
+        assert_eq!(
+            TeeClass::from(&QuoteType::Unknown("foo".to_owned())),
+            TeeClass::Unknown
+        );
     }
 }
 

@@ -448,6 +448,37 @@ mod tests {
         }
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn local_guard_concurrent_replays_prevent_toctou() {
+        use std::sync::Arc;
+        let guard = Arc::new(LocalReplayGuard::new(1000, 0.001));
+
+        let mut handles = vec![];
+        for _ in 0..100 {
+            let guard_clone = guard.clone();
+            handles.push(tokio::spawn(async move {
+                guard_clone.check_and_accept("k_concurrent", 1337).await
+            }));
+        }
+
+        let mut success_count = 0;
+        let mut replay_err_count = 0;
+
+        for h in handles {
+            match h.await.unwrap() {
+                Ok(()) => success_count += 1,
+                Err(ReplayError::Replay(1337)) => replay_err_count += 1,
+                Err(e) => panic!("Unexpected error type: {e:?}"),
+            }
+        }
+
+        assert_eq!(success_count, 1, "Exactly one thread should win the race");
+        assert_eq!(
+            replay_err_count, 99,
+            "All other 99 threads must receive ReplayError"
+        );
+    }
+
     // ── LocalReplayGuard::rotate (MED-01 overlap) ─────────────────────────
 
     #[tokio::test]
@@ -522,5 +553,54 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    fn dummy_cx() -> std::task::Context<'static> {
+        let waker = Box::leak(Box::new(std::task::Waker::noop()));
+        std::task::Context::from_waker(waker)
+    }
+
+    #[tokio::test]
+    async fn middleware_poll_ready_delegation() {
+        use axum::body::Body;
+        use http::Request;
+        use tower::Service;
+
+        let registry = AtbRegistry::new();
+        let inner = tower::service_fn(|_req: Request<Body>| async {
+            Ok::<_, std::convert::Infallible>(http::Response::new(Body::empty()))
+        });
+
+        let mut svc = TrRequestMiddleware { inner, registry };
+
+        let mut cx = dummy_cx();
+        assert!(svc.poll_ready(&mut cx).is_ready());
+    }
+
+    #[tokio::test]
+    async fn rtt0_middleware_poll_ready_delegation() {
+        use axum::body::Body;
+        use http::Request;
+        use tower::Service;
+
+        let registry = AtbRegistry::new();
+        let engine = openhttpa_core::session::ticket::TicketEngine::new(
+            openhttpa_core::session::ticket::TicketKey::generate(),
+        );
+        let guard = Arc::new(LocalReplayGuard::new(1000, 0.001));
+
+        let inner = tower::service_fn(|_req: Request<Body>| async {
+            Ok::<_, std::convert::Infallible>(http::Response::new(Body::empty()))
+        });
+
+        let mut svc = Rtt0ResumptionMiddleware {
+            inner,
+            registry,
+            ticket_engine: Arc::new(engine),
+            replay_guard: guard,
+        };
+
+        let mut cx = dummy_cx();
+        assert!(svc.poll_ready(&mut cx).is_ready());
     }
 }

@@ -838,4 +838,43 @@ mod tests {
             "expected AttestationRequired when quotes submitted but no verifier provided"
         );
     }
+
+    #[tokio::test]
+    async fn handshake_rejects_junk_fast_before_cpu_exhaustion() {
+        let executor = AtHsExecutor::new(vec![], vec![]);
+        let (mut client_share, client_random, client_challenge) = setup_client();
+
+        // Feed an impossibly large key share to attempt memory exhaustion or force ring to crash
+        client_share.ecdhe_public = vec![0x42; 10 * 1024 * 1024]; // 10MB
+        client_share.mlkem_public = vec![0x42; 10 * 1024 * 1024]; // 10MB
+
+        let result = executor
+            .execute_server(
+                &AtHsRequest {
+                    client_suites: &[CipherSuite::X25519MlKem768Aes256GcmSha384],
+                    client_versions: &[ProtocolVersion::V2],
+                    client_random: &client_random,
+                    client_challenge: &client_challenge,
+                    client_share: &client_share,
+                    client_quotes: &[],
+                    atb_ttl_secs: 3600,
+                    provenance: None,
+                },
+                None,
+                None,
+                None,
+            )
+            .await;
+
+        // The exact error depends on where the validation happens, but it MUST be an error.
+        // It should be HandshakeError::Protocol("invalid X25519 public key length...").
+        assert!(result.is_err(), "Junk/massive key shares must be rejected");
+        let Err(err) = result else {
+            panic!("Expected error, got Ok");
+        };
+        assert!(
+            matches!(err, HandshakeError::KeyExchange(_)),
+            "Should fail cleanly at protocol validation with KeyExchange error"
+        );
+    }
 }

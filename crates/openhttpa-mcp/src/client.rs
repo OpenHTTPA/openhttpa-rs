@@ -103,3 +103,43 @@ impl OpenHttpaMcpClient {
         .await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_with_valid_url_succeeds() {
+        let result = OpenHttpaMcpClient::new("http://127.0.0.1:8080");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn new_from_client_constructs() {
+        let client = openhttpa_client::OpenHttpaClient::builder()
+            .server_uri("http://127.0.0.1:8080".parse().unwrap())
+            .build();
+        let _mcp = OpenHttpaMcpClient::new_from_client(client);
+        // Should not panic
+    }
+
+    #[test]
+    fn mcp_client_error_open_httpa_display() {
+        let e = McpClientError::OpenHttpa("handshake failed".to_owned());
+        assert!(e.to_string().contains("handshake failed"));
+    }
+
+    #[test]
+    fn mcp_client_error_protocol_display() {
+        let e = McpClientError::Protocol("method not found".to_owned());
+        assert!(e.to_string().contains("method not found"));
+    }
+
+    #[test]
+    fn mcp_client_error_serde_display() {
+        // Trigger a serde error by constructing one via the From impl
+        let serde_err = serde_json::from_str::<serde_json::Value>("invalid").unwrap_err();
+        let e: McpClientError = serde_err.into();
+        assert!(e.to_string().contains("Serialization error"));
+    }
+}

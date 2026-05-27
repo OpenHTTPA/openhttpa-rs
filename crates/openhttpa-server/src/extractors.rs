@@ -718,4 +718,105 @@ mod tests {
 
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
     }
+
+    #[tokio::test]
+    async fn test_session_extractor_malformed_id() {
+        let (registry, _id) = setup_registry();
+        let app = Router::new()
+            .route("/test", post(|_s: OpenHttpaSession| async { "ok" }))
+            .with_state(registry);
+
+        let client = TestClient::new(app);
+        let res = client
+            .post("/test")
+            .header(HDR_ATTEST_BASE_ID.as_str(), "not-a-uuid")
+            .send()
+            .await;
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_encrypted_json_invalid_ciphertext() {
+        let (registry, id) = setup_registry();
+        let app = Router::new()
+            .route(
+                "/test",
+                post(|_s: EncryptedJson<serde_json::Value>| async { "ok" }),
+            )
+            .with_state(registry.clone());
+
+        let client = TestClient::new(app);
+
+        let _session = registry.get(&id).unwrap();
+        // Provide a dummy ticket
+        let t_hv = openhttpa_headers::encode_attest_ticket(12345, &[0u8; 48], None);
+
+        let body = serde_json::json!({ "ciphertext": "@@!invalid-base64" }).to_string();
+
+        let res = client
+            .post("/test")
+            .header(HDR_ATTEST_BASE_ID.as_str(), &id.to_string())
+            .header("Attest-Ticket", t_hv.to_str().unwrap())
+            .send_with_body(body)
+            .await;
+
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_encrypted_json_decryption_failure() {
+        use base64::Engine;
+        let (registry, id) = setup_registry();
+        let app = Router::new()
+            .route(
+                "/test",
+                post(|_s: EncryptedJson<serde_json::Value>| async { "ok" }),
+            )
+            .with_state(registry.clone());
+
+        let client = TestClient::new(app);
+
+        let _session = registry.get(&id).unwrap();
+        let t_hv = openhttpa_headers::encode_attest_ticket(12345, &[0u8; 48], None);
+
+        let body = serde_json::json!({ "ciphertext": base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b"not-a-real-ciphertext-with-valid-mac") }).to_string();
+
+        let res = client
+            .post("/test")
+            .header(HDR_ATTEST_BASE_ID.as_str(), &id.to_string())
+            .header("Attest-Ticket", t_hv.to_str().unwrap())
+            .send_with_body(body)
+            .await;
+
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_encrypted_json_payload_too_large() {
+        let (registry, id) = setup_registry();
+        let app = Router::new()
+            .route(
+                "/test",
+                post(|_s: EncryptedJson<serde_json::Value>| async { "ok" }),
+            )
+            .with_state(registry.clone());
+
+        let client = TestClient::new(app);
+
+        let _session = registry.get(&id).unwrap();
+        let t_hv = openhttpa_headers::encode_attest_ticket(12345, &[0u8; 48], None);
+
+        // Axum Json extractor defaults to 2MB limit. We generate 3MB.
+        let massive_ciphertext = "A".repeat(3 * 1024 * 1024);
+        let body = serde_json::json!({ "ciphertext": massive_ciphertext }).to_string();
+
+        let res = client
+            .post("/test")
+            .header(HDR_ATTEST_BASE_ID.as_str(), &id.to_string())
+            .header("Attest-Ticket", t_hv.to_str().unwrap())
+            .send_with_body(body)
+            .await;
+
+        assert_eq!(res.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
 }

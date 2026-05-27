@@ -200,6 +200,43 @@ impl ObliviousServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::connection::{AttestTransport, TransportRequest, TransportResponse};
+    use async_trait::async_trait;
+    use http::{Method, StatusCode};
+    use std::sync::Arc;
+
+    struct MockTransport {
+        server_secret_key: <Kem as KemTrait>::PrivateKey,
+    }
+
+    #[async_trait]
+    impl AttestTransport for MockTransport {
+        async fn send(&self, req: TransportRequest) -> Result<TransportResponse, SendError> {
+            let body_bytes = axum::body::to_bytes(req.body, 1024 * 1024).await.unwrap();
+            let server = ObliviousServer::new(self.server_secret_key.clone());
+            let (plaintext, ctx) = server.decapsulate(&body_bytes).unwrap();
+            assert_eq!(plaintext, b"hello server");
+
+            let resp_bytes = server.encapsulate_response(&ctx, b"hello client").unwrap();
+
+            Ok(TransportResponse {
+                status: StatusCode::OK,
+                headers: http::HeaderMap::default(),
+                body: axum::body::Body::from(resp_bytes),
+                trailers: None,
+            })
+        }
+    }
+
+    #[test]
+    fn test_oblivious_error_display() {
+        let err1 = ObliviousError::Hpke("bad".to_owned());
+        assert_eq!(err1.to_string(), "HPKE error: bad");
+        let err2 = ObliviousError::Malformed;
+        assert_eq!(err2.to_string(), "malformed oblivious message");
+        let err3 = ObliviousError::Transport(SendError::Protocol("fail".to_owned()));
+        assert_eq!(err3.to_string(), "transport error: protocol error: fail");
+    }
 
     #[test]
     fn test_oblivious_server_malformed() {
@@ -212,5 +249,55 @@ mod tests {
         let enc_body = vec![0u8; 64];
         let result = server.decapsulate(&enc_body);
         assert!(matches!(result, Err(ObliviousError::Hpke(_))));
+    }
+
+    #[tokio::test]
+    async fn test_oblivious_client_server_round_trip() {
+        let (sk, pk) = <Kem as KemTrait>::gen_keypair(&mut rand::thread_rng());
+        let pk_bytes = pk.to_bytes().to_vec();
+
+        let mock = Arc::new(MockTransport {
+            server_secret_key: sk,
+        });
+
+        let client = ObliviousClient::new(mock, pk_bytes, 0x01);
+
+        let req = TransportRequest {
+            method: Method::POST,
+            uri: "http://example.com/".parse().unwrap(),
+            headers: http::HeaderMap::default(),
+            body: axum::body::Body::from("hello server"),
+            trailers: None,
+        };
+
+        let resp = client.send(req).await.unwrap();
+        assert_eq!(resp.status, StatusCode::OK);
+
+        let resp_body = axum::body::to_bytes(resp.body, 1024 * 1024).await.unwrap();
+        assert_eq!(resp_body.as_ref(), b"hello client");
+    }
+
+    #[tokio::test]
+    async fn test_oblivious_client_invalid_server_key() {
+        // Invalid key length/format
+        let pk_bytes = vec![0u8; 10];
+        let mock = Arc::new(MockTransport {
+            server_secret_key: <Kem as KemTrait>::gen_keypair(&mut rand::thread_rng()).0,
+        });
+
+        let client = ObliviousClient::new(mock, pk_bytes, 0x01);
+
+        let req = TransportRequest {
+            method: Method::POST,
+            uri: "http://example.com/".parse().unwrap(),
+            headers: http::HeaderMap::default(),
+            body: axum::body::Body::from("hello server"),
+            trailers: None,
+        };
+
+        let Err(err) = client.send(req).await else {
+            panic!("expected error");
+        };
+        assert!(matches!(err, SendError::Connection(_)));
     }
 }
