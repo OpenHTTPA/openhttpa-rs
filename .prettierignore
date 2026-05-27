@@ -12,6 +12,7 @@ bindings/nodejs/index.d.ts
 # Submodules (rely on upstream formatting)
 crates/openhttpa-contract/lib/
 demo/multiparty-webapp/frontend/wasm/
+modules/browser-extension/wasm/
 
 # Test artifacts
 **/test-results/**

@@ -32,7 +32,7 @@ export OPTEE_CLIENT_EXPORT ?= /tmp
 DEMO_DIR := demo/multiparty-webapp
 DEMO_MAKE := $(MAKE) -C $(DEMO_DIR)
 
-.PHONY: all build build-release test test-release clean demo clippy fmt format check check-bindings audit test-web check-examples e2e test-all-examples example-resumption example-ohttpa example-attestation example-oblivious example-gpu example-hub example-orchestration example-oracle example-federation native-build native-demo native-test ci docs demo-stable-up demo-stable-down test-contracts build-contracts formal formal-verify formal-pv formal-tamarin test-zk-compression audit-zk-scalability status publish-python publish-npm publish-wasm publish-go publish-crates publish-github publish-all
+.PHONY: all build build-release test test-release clean demo clippy fmt format check check-bindings audit test-web check-examples e2e test-all-examples example-resumption example-ohttpa example-attestation example-oblivious example-gpu example-hub example-orchestration example-oracle example-federation native-build native-demo native-test ci docs demo-stable-up demo-stable-down test-contracts build-contracts formal formal-verify formal-pv formal-tamarin test-zk-compression audit-zk-scalability status publish-python publish-npm publish-wasm publish-go publish-crates publish-github publish-all verify-core verify-bindings verify-examples verify-demo verify-all
 
 all: build test
 
@@ -62,13 +62,24 @@ ci: ## Run all standard CI checks
 	$(MAKE) -j4 ci-parallel
 	@echo "All CI checks passed locally!"
 
-verify-all: format clippy build build-release test test-release ci ## Exhaustive formal validation and verification suite
-	@echo "Starting E2E stack for project: $(COMPOSE_PROJECT_NAME) for verify-all"
+verify-core: format clippy build build-release test test-release ## Verify core Rust crates
+	@echo "--- CORE VERIFICATION COMPLETED ---"
+
+verify-bindings: check-bindings test-bindings ## Verify multi-language bindings and FFI
+	@echo "--- BINDINGS VERIFICATION COMPLETED ---"
+
+verify-examples: check-examples test-rust-examples ## Verify all interactive and non-interactive examples
+	@echo "--- EXAMPLES VERIFICATION COMPLETED ---"
+
+verify-demo: ## Verify E2E demo stack functionality
+	@echo "Starting E2E stack for project: $(COMPOSE_PROJECT_NAME) for verify-demo"
 	@set -e; \
 	trap '$(MAKE) demo-down' EXIT; \
 	$(MAKE) demo-up; \
-	$(DEMO_MAKE) e2e-run; \
-	$(MAKE) test-all-examples
+	$(DEMO_MAKE) e2e-run
+	@echo "--- DEMO VERIFICATION COMPLETED ---"
+
+verify-all: verify-core verify-bindings verify-examples verify-demo ci ## Exhaustive formal validation and verification suite
 	@echo "--- ALL FORMAL VALIDATION AND VERIFICATION COMPLETED SUCCESSFULLY ---"
 	@echo "The OpenHTTPA project stack is verified for production readiness."
 
@@ -448,6 +459,9 @@ test-contracts: ## Run Solidity contract tests
 # Run all language binding examples (requires Docker)
 test-bindings: test-all-bindings ## Alias for test-all-bindings
 test-all-bindings: ## Run all language binding integration tests
+	@set -e; \
+	trap '$(MAKE) demo-down' EXIT; \
+	$(MAKE) demo-up; \
 	./bindings/run_examples.sh
 
 # Individual binding shortcuts
