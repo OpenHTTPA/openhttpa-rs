@@ -125,6 +125,60 @@ impl AttestationEvidence {
             },
         }
     }
+
+    /// Normalise vendor-specific evidence into vendor-neutral [`EatClaims`].
+    ///
+    /// This is the M4 Multi-Vendor Federation bridge: it maps each vendor's
+    /// evidence fields to the common `EatClaims` struct, filling in
+    /// `tee_class`, `hwmodel`, and `oemid` so that [`FederatedVerifier`] and
+    /// downstream policy engines can operate without vendor-specific logic.
+    ///
+    /// Fields that require live verification (e.g. measurement, SVN) are left
+    /// as `None`; the verifier layer fills them in after validating the quote.
+    ///
+    /// [`FederatedVerifier`]: (openhttpa_attestation::federation::FederatedVerifier)
+    #[must_use]
+    pub fn to_eat_claims(&self) -> openhttpa_proto::EatClaims {
+        use openhttpa_proto::{EatClaims, TeeClass};
+        match self {
+            Self::Tdx(_) => EatClaims {
+                tee_class: Some(TeeClass::IntelTdx),
+                hwmodel: Some("Intel TDX".to_owned()),
+                oemid: Some("Intel".to_owned()),
+                ..Default::default()
+            },
+            Self::SevSnp(_) => EatClaims {
+                tee_class: Some(TeeClass::AmdSevSnp),
+                hwmodel: Some("AMD SEV-SNP".to_owned()),
+                oemid: Some("AMD".to_owned()),
+                ..Default::default()
+            },
+            Self::Tpm(_) => EatClaims {
+                tee_class: Some(TeeClass::Tpm),
+                hwmodel: Some("TPM 2.0".to_owned()),
+                oemid: None,
+                ..Default::default()
+            },
+            Self::NvidiaGpu(_) => EatClaims {
+                tee_class: Some(TeeClass::NvidiaGpu),
+                hwmodel: Some("NVIDIA Hopper GPU".to_owned()),
+                oemid: Some("NVIDIA".to_owned()),
+                ..Default::default()
+            },
+            Self::AwsNitro(_) => EatClaims {
+                tee_class: Some(TeeClass::AwsNitro),
+                hwmodel: Some("AWS Nitro Enclave".to_owned()),
+                oemid: Some("Amazon".to_owned()),
+                ..Default::default()
+            },
+            Self::Mock(_) => EatClaims {
+                tee_class: Some(TeeClass::Mock),
+                hwmodel: Some("Mock TEE".to_owned()),
+                oemid: None,
+                ..Default::default()
+            },
+        }
+    }
 }
 
 /// A bundle of attestation evidence produced by one or more TEE hardware units.

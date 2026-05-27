@@ -32,7 +32,7 @@ export OPTEE_CLIENT_EXPORT ?= /tmp
 DEMO_DIR := demo/multiparty-webapp
 DEMO_MAKE := $(MAKE) -C $(DEMO_DIR)
 
-.PHONY: all build build-release test test-release clean demo clippy fmt format check check-bindings audit test-web check-examples e2e test-all-examples example-resumption example-ohttpa example-attestation example-oblivious example-gpu example-hub example-orchestration example-oracle native-build native-demo native-test ci docs demo-stable-up demo-stable-down test-contracts build-contracts formal formal-verify formal-pv formal-tamarin test-zk-compression audit-zk-scalability status publish-python publish-npm publish-wasm publish-go publish-crates publish-github publish-all
+.PHONY: all build build-release test test-release clean demo clippy fmt format check check-bindings audit test-web check-examples e2e test-all-examples example-resumption example-ohttpa example-attestation example-oblivious example-gpu example-hub example-orchestration example-oracle example-federation native-build native-demo native-test ci docs demo-stable-up demo-stable-down test-contracts build-contracts formal formal-verify formal-pv formal-tamarin test-zk-compression audit-zk-scalability status publish-python publish-npm publish-wasm publish-go publish-crates publish-github publish-all
 
 all: build test
 
@@ -391,7 +391,7 @@ swarm-complex: ## Run complex 10+ agent delegation demo
 test-all-examples: check-examples test-rust-examples test-bindings ## Run all non-interactive examples
 	@echo "All verified examples passed."
 
-test-rust-examples: example-resumption example-ohttpa example-attestation example-gpu example-oblivious example-orchestration example-hub example-oracle example-swarm example-llm example-crypto ## Run only Rust-based non-interactive examples
+test-rust-examples: example-resumption example-ohttpa example-attestation example-gpu example-oblivious example-orchestration example-hub example-oracle example-swarm example-llm example-crypto example-federation ## Run only Rust-based non-interactive examples
 	@echo "All Rust examples passed."
 
 # Individual Rust examples (root moved to crates)
@@ -414,6 +414,9 @@ example-gpu: ## Run the NVIDIA GPU attestation example
 example-hub: ## Run the attestation hub server example (timeout 5s)
 	@echo "Starting Hub (will stop after 5s)..."
 	+-timeout 5 cargo run --example attestation_hub -p openhttpa-server || true
+
+example-federation: ## Run the autonomous cross-vendor federation demo
+	+cargo run --example federated_mock_mesh -p openhttpa-attestation --features mock
 
 example-orchestration: ## Run the agent orchestration example
 	+cargo run --example orchestration -p openhttpa-a2a

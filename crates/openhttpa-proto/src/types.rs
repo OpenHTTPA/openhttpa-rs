@@ -640,6 +640,217 @@ impl ProvenanceChain {
     }
 }
 
+// ─── TEE class (vendor-neutral) ──────────────────────────────────────────────
+
+/// A vendor-neutral classification of the TEE hardware type.
+///
+/// Used in [`EatClaims`] to allow federation policies to match across vendors
+/// without requiring quote-type-specific logic in the policy layer.
+///
+/// This is the M4 **Multi-Vendor TEE Federation** extension.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum TeeClass {
+    /// Intel® SGX (Software Guard Extensions).
+    IntelSgx,
+    /// Intel® TDX (Trust Domain Extensions).
+    IntelTdx,
+    /// AMD SEV-SNP (Secure Encrypted Virtualization — Secure Nested Paging).
+    AmdSevSnp,
+    /// Arm `TrustZone` / OP-TEE.
+    ArmTrustZone,
+    /// NVIDIA Confidential Computing GPU (H100/H200 Hopper).
+    NvidiaGpu,
+    /// AWS Nitro Enclaves.
+    AwsNitro,
+    /// TPM 2.0.
+    Tpm,
+    /// Simulated/mock — **never trust in production**.
+    Mock,
+    /// An unrecognised TEE class.
+    Unknown,
+}
+
+impl std::fmt::Display for TeeClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::IntelSgx => "intel_sgx",
+            Self::IntelTdx => "intel_tdx",
+            Self::AmdSevSnp => "amd_sev_snp",
+            Self::ArmTrustZone => "arm_trustzone",
+            Self::NvidiaGpu => "nvidia_gpu",
+            Self::AwsNitro => "aws_nitro",
+            Self::Tpm => "tpm",
+            Self::Mock => "mock",
+            Self::Unknown => "unknown",
+        };
+        f.write_str(s)
+    }
+}
+
+impl From<&QuoteType> for TeeClass {
+    fn from(qt: &QuoteType) -> Self {
+        match qt {
+            QuoteType::Sgx => Self::IntelSgx,
+            QuoteType::Tdx => Self::IntelTdx,
+            QuoteType::SevSnp => Self::AmdSevSnp,
+            QuoteType::TrustZone => Self::ArmTrustZone,
+            QuoteType::NvidiaGpu => Self::NvidiaGpu,
+            QuoteType::AwsNitro => Self::AwsNitro,
+            QuoteType::Tpm => Self::Tpm,
+            QuoteType::Mock => Self::Mock,
+            QuoteType::ZkCompressed | QuoteType::Unknown(_) => Self::Unknown,
+        }
+    }
+}
+
+// ─── Federation manifest (M4) ─────────────────────────────────────────────────
+
+/// A single entry in a [`FederationManifest`].
+///
+/// Declares that a specific TEE class with a particular measurement hash is
+/// trusted within this federation.  Measurements are vendor-specific:
+/// - Intel TDX: MRTD (48-byte SHA-384)
+/// - AMD SEV-SNP: measurement (48 bytes from the SNP attestation report)
+/// - Intel SGX: MRENCLAVE (32 bytes)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FederationEntry {
+    /// The TEE class this entry applies to.
+    pub tee_class: TeeClass,
+    /// Expected measurement hash (hex-encoded).  An empty string acts as a
+    /// wildcard — use with extreme caution in production.
+    pub measurement_hex: String,
+    /// Human-readable label (e.g. "prod-tdx-west").
+    pub label: String,
+    /// Minimum Security Version Number acceptable for this entry.
+    pub min_svn: Option<u16>,
+    /// Whether debug-mode enclaves are permitted for this entry.
+    pub allow_debug: bool,
+}
+
+/// The signature on a [`FederationManifest`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ManifestSignature {
+    /// A single operator offline signature.
+    Operator {
+        /// Operator's ML-DSA-44 or Ed25519 public key (raw bytes).
+        public_key: Vec<u8>,
+        /// Signature over `SHA-384(canonical_json(entries ‖ version ‖ issued_at))`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        signature: Vec<u8>,
+    },
+    /// A quorum of mesh nodes counter-signing the manifest.
+    Quorum {
+        /// The M-of-N threshold required.
+        threshold: u32,
+        /// List of (`public_key`, `signature`) pairs.
+        signatures: Vec<(Vec<u8>, Vec<u8>)>,
+    },
+}
+
+impl Default for ManifestSignature {
+    fn default() -> Self {
+        Self::Operator {
+            public_key: vec![],
+            signature: vec![],
+        }
+    }
+}
+
+/// A signed cross-vendor trust policy.
+///
+/// The manifest is produced by a human operator and signed offline with an
+/// Ed25519 or ML-DSA key.  Mesh nodes load it at startup (or hot-reload it)
+/// and pass it to [`FederatedVerifier`] via [`FederationTrustBundle`].
+///
+/// # Wire format
+///
+/// Serialised as JSON for human readability; the `signature` covers
+/// `SHA-384(canonical_json(entries ‖ version ‖ issued_at))` produced by the
+/// operator's identity key, or a quorum of mesh node keys.
+///
+/// [`FederatedVerifier`]: (openhttpa_attestation::federation::FederatedVerifier)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationManifest {
+    /// Manifest format version (currently `1`).
+    pub version: u32,
+    /// Unix timestamp when this manifest was issued.
+    pub issued_at: u64,
+    /// Unix timestamp after which this manifest must not be trusted.
+    pub expires_at: u64,
+    /// Ordered list of trusted TEE entries.
+    pub entries: Vec<FederationEntry>,
+    /// The signature(s) authenticating this manifest.
+    #[serde(default)]
+    pub signature: ManifestSignature,
+}
+
+impl FederationManifest {
+    /// Returns `true` if this manifest has not yet expired.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        now < self.expires_at
+    }
+
+    /// Look up all entries matching a given [`TeeClass`].
+    #[must_use]
+    pub fn entries_for(&self, class: TeeClass) -> Vec<&FederationEntry> {
+        self.entries
+            .iter()
+            .filter(|e| e.tee_class == class)
+            .collect()
+    }
+
+    /// Return `true` if the manifest contains at least one entry for `class`
+    /// whose `measurement_hex` matches `measurement_hex` (case-insensitive)
+    /// or is a wildcard (empty string).
+    #[must_use]
+    pub fn allows(
+        &self,
+        class: TeeClass,
+        measurement_hex: &str,
+        svn: Option<u16>,
+        is_debug: bool,
+    ) -> bool {
+        self.entries_for(class).iter().any(|e| {
+            // Wildcard entry allows any measurement.
+            let measurement_ok = e.measurement_hex.is_empty()
+                || e.measurement_hex.eq_ignore_ascii_case(measurement_hex);
+            let svn_ok = match (e.min_svn, svn) {
+                (Some(min), Some(actual)) => actual >= min,
+                (Some(_), None) => false, // policy requires SVN but none present
+                (None, _) => true,
+            };
+            let debug_ok = !is_debug || e.allow_debug;
+            measurement_ok && svn_ok && debug_ok
+        })
+    }
+}
+
+/// Bundles the per-vendor root CA certificates together with the signed
+/// [`FederationManifest`] for use by [`FederatedVerifier`].
+///
+/// [`FederatedVerifier`]: (openhttpa_attestation::federation::FederatedVerifier)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct FederationTrustBundle {
+    /// Intel PCK/DCAP root CA (DER-encoded X.509).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub intel_root_ca: Vec<u8>,
+    /// AMD ARK (AMD Root Key) root CA (DER-encoded X.509).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub amd_root_ca: Vec<u8>,
+    /// NVIDIA GPU root CA (DER-encoded X.509).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nvidia_root_ca: Vec<u8>,
+    /// The signed federation manifest.
+    pub manifest: Option<FederationManifest>,
+}
+
 // ─── Attestation Results (EAT-aligned) ──────────────────────────────────────
 
 /// Standard EAT (Entity Attestation Token) claims as per RFC 9334.
@@ -668,6 +879,13 @@ pub struct EatClaims {
     /// lifetime is bounded. Verifiers MUST reject tokens where
     /// `exp <= now()` unless operating in a time-insensitive context.
     pub exp: Option<u64>,
+    /// Vendor-neutral TEE class (M4 Multi-Vendor Federation extension).
+    ///
+    /// Set by each verifier after a successful verification so that
+    /// downstream consumers (e.g. `FederatedVerifier`, `AgentNode`) can act
+    /// on the TEE type without inspecting raw quote bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tee_class: Option<TeeClass>,
 }
 
 /// The result of a successful quote verification, now EAT-aligned.

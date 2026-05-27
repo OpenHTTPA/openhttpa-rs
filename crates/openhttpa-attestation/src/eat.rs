@@ -216,6 +216,7 @@ mod tests {
             security_version: Some(3),
             iat: Some(1_716_681_600),
             exp: Some(1_716_681_600 + 3600), // 1-hour validity
+            ..Default::default()
         };
 
         let cbor = serialize_claims(&claims).unwrap();

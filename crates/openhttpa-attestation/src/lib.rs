@@ -27,6 +27,8 @@ pub mod collateral_fetcher;
 pub mod composite;
 pub mod dcap_zk_verifier;
 pub mod eat;
+/// M4: Multi-Vendor TEE Federation verifier.
+pub mod federation;
 #[cfg(feature = "ita")]
 pub mod ita_verifier;
 #[cfg(feature = "maa")]
@@ -36,6 +38,8 @@ pub mod mock_verifier;
 pub mod nvidia_remote_verifier;
 pub mod nvidia_verifier;
 pub mod policy;
+/// AMD SEV-SNP quote verifier (M4 — `amd_snp` feature).
+pub mod snp_verifier;
 #[cfg(test)]
 mod tests;
 pub mod tpm_verifier;
@@ -43,6 +47,8 @@ pub mod verifier;
 
 pub use dcap_zk_verifier::DcapZkVerifier;
 pub use eat::{EatSignAlgorithm, create_signed_eat, verify_signed_eat};
+/// M4: [`FederatedVerifier`] for cross-vendor TEE federation.
+pub use federation::FederatedVerifier;
 #[cfg(feature = "ita")]
 pub use ita_verifier::ItaVerifier;
 pub use mock_verifier::MockVerifier;
@@ -50,6 +56,9 @@ pub use mock_verifier::MockVerifier;
 pub use nvidia_remote_verifier::NvidiaRemoteVerifier;
 pub use nvidia_verifier::NvidiaGpuVerifier;
 pub use policy::SimplePolicy;
+/// AMD SEV-SNP verifier (M4). Available on all feature configurations;
+/// full chain verification requires `--features amd_snp`.
+pub use snp_verifier::SevSnpVerifier;
 /// TPM 2.0 PCR quote verifier.
 ///
 /// # ⚠️ Production stub

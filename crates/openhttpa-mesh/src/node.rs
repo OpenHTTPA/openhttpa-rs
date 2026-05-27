@@ -145,6 +145,19 @@ impl AgentNode {
                 )));
             }
             info!(policy_id = %result.policy_id, "Peer satisfied mesh admission policy");
+
+            // M4: Log the peer's TEE class so operators can observe cross-vendor
+            // connections in the tracing output and mesh dashboards.
+            let tee_class_str = res
+                .claims
+                .tee_class
+                .map_or_else(|| "unknown".to_owned(), |c| c.to_string());
+            info!(
+                peer_id = %peer_id,
+                tee_class = %tee_class_str,
+                pqc_bound = %session.state().cipher_suite.is_post_quantum(),
+                "M4: peer TEE class resolved in federated mesh"
+            );
         }
 
         let agent_session = Arc::new(AgentSession {

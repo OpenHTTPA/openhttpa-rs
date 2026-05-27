@@ -45,12 +45,12 @@ impl QuoteVerifier for MockVerifier {
         }
 
         // 3. Generate a structured result based on the quote type
-        let (model, version) = match quote.quote_type {
-            QuoteType::Tdx => ("Intel TDX", "v1.0"),
-            QuoteType::SevSnp => ("AMD SEV-SNP", "v2.0"),
-            QuoteType::Tpm => ("TPM 2.0", "v1.0"),
-            QuoteType::NvidiaGpu => ("NVIDIA H100", "v1.0"),
-            _ => ("Mock TEE", "v0.0"),
+        let (model, version, tee_class) = match quote.quote_type {
+            QuoteType::Tdx => ("Intel TDX", "v1.0", openhttpa_proto::TeeClass::IntelTdx),
+            QuoteType::SevSnp => ("AMD SEV-SNP", "v2.0", openhttpa_proto::TeeClass::AmdSevSnp),
+            QuoteType::Tpm => ("TPM 2.0", "v1.0", openhttpa_proto::TeeClass::Tpm),
+            QuoteType::NvidiaGpu => ("NVIDIA H100", "v1.0", openhttpa_proto::TeeClass::NvidiaGpu),
+            _ => ("Mock TEE", "v0.0", openhttpa_proto::TeeClass::Mock),
         };
 
         Ok(VerificationResult {
@@ -60,6 +60,7 @@ impl QuoteVerifier for MockVerifier {
                 dbgstat: Some(1), // Mock is always considered debug-mode
                 boot_progress: Some("mock-measurement".to_owned()),
                 security_version: Some(1),
+                tee_class: Some(tee_class),
                 iat: Some(
                     std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
