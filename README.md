@@ -157,8 +157,8 @@ make build
 # Run all tests (mock TEE — no hardware required)
 make test
 
-# Start the demo
-docker compose -f demo/multiparty-webapp/docker-compose.yml up
+# Start the demo (pre-configured to port 3001)
+make stable-up
 # Then open http://127.0.0.1:3001
 
 # Formal Verification (ProVerif + Tamarin)

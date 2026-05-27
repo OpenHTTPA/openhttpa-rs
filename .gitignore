@@ -20,6 +20,7 @@ bindings/nodejs/build/
 # Demo frontend build output
 demo/multiparty-webapp/frontend/dist/
 demo/multiparty-webapp/frontend/wasm/
+modules/browser-extension/wasm/
 
 # Formal verification outputs
 formal/handshake.summary

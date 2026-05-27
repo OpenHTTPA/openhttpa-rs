@@ -273,6 +273,7 @@ deep-clean: clean ## Remove ALL artifacts (node_modules, wasm, etc.)
 	rm -rf node_modules/
 	rm -rf bindings/nodejs/node_modules/
 	rm -rf $(DEMO_DIR)/frontend/wasm/
+	rm -rf modules/browser-extension/wasm/
 	rm -rf playwright-report/ test-results/
 	find . -name "dist" -type d -exec rm -rf {} +
 	find . -name ".turbo" -type d -exec rm -rf {} +
@@ -462,8 +463,23 @@ bind-go: ## Build Go bindings
 bind-c: ## Build C bindings
 	+cargo build -p openhttpa-c --release
 
-wasm: ## Build browser Wasm bindings
+wasm: wasm-demo wasm-extension ## Build both browser and extension Wasm bindings
+
+wasm-demo:
 	$(DEMO_MAKE) wasm
+
+wasm-extension: ## Build browser extension Wasm bindings
+	@command -v wasm-pack >/dev/null 2>&1 || { \
+		echo "wasm-pack not found. Install with:  cargo install wasm-pack"; \
+		exit 1; \
+	}
+	@echo "Building browser extension Wasm bindings..."
+	@mkdir -p modules/browser-extension/wasm
+	+wasm-pack build bindings/wasm \
+		--target web \
+		--out-dir $(CURDIR)/modules/browser-extension/wasm \
+		--release
+	@echo "Browser extension Wasm build complete."
 
 ## -- Publish / Distribution --
 

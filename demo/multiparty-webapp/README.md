@@ -13,7 +13,7 @@ returns only the result, signed by an attestation quote.
 
 ```bash
 # From this directory
-make dev
+make stable-up
 ```
 
 Open **http://127.0.0.1:3001** once the backend health check passes.

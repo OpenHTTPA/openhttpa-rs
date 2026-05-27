@@ -5,101 +5,197 @@
 
 set -e
 
-# OpenHTTPA Runner Setup Script for Ubuntu 24.04 (Noble)
-# This script installs all necessary prerequisites for the CI/CD pipeline.
+# OpenHTTPA Runner Setup Script for Ubuntu 24.04 (Noble) and compatible environments.
+# This script installs all necessary prerequisites for the CI/CD pipeline and local development.
 
 echo "🚀 Starting OpenHTTPA Runner Setup..."
 
+# Helper: Check if command is available
+has_cmd() {
+    command -v "$1" &> /dev/null
+}
+
+# Helper: Run command with sudo if not already root, or fail gracefully if sudo is missing
+run_sudo() {
+    if [ "$EUID" -ne 0 ]; then
+        if has_cmd sudo; then
+            sudo "$@"
+        else
+            echo "❌ Error: This setup step requires root/sudo privileges, but 'sudo' was not found." >&2
+            echo "Please run this script as root or install 'sudo' first." >&2
+            exit 1;
+        fi
+    else
+        "$@"
+    fi
+}
+
 # 1. Clean up broken repositories
-echo "🧹 Cleaning up old package sources..."
-sudo rm -f /etc/apt/sources.list.d/trivy.list
-sudo apt-get update
+if [ -f /etc/apt/sources.list.d/trivy.list ]; then
+    echo "🧹 Cleaning up old package sources..."
+    run_sudo rm -f /etc/apt/sources.list.d/trivy.list
+    if has_cmd apt-get; then
+        run_sudo apt-get update
+    fi
+fi
 
 # 2. Install System Dependencies
-echo "📦 Installing system dependencies..."
-sudo apt-get install -y \
-    unzip bubblewrap rsync libgtk2.0-dev m4 patch make gcc \
-    wget curl gnupg lsb-release ca-certificates pkg-config \
-    libssl-dev cmake ninja-build libpcre3-dev zlib1g-dev binaryen
+if [ "${SKIP_SYSTEM_DEPS}" = "1" ]; then
+    echo "⏭️ Skipping system dependencies installation as requested."
+elif has_cmd apt-get; then
+    echo "📦 Installing system dependencies..."
+    run_sudo apt-get update
+    run_sudo apt-get install -y \
+        unzip bubblewrap rsync libgtk2.0-dev m4 patch make gcc \
+        wget curl gnupg lsb-release ca-certificates pkg-config \
+        libssl-dev cmake ninja-build libpcre3-dev zlib1g-dev binaryen
+else
+    echo "⚠️ 'apt-get' not found. Skipping system package installation."
+    echo "Please ensure you have equivalent system libraries installed manually."
+fi
 
 # 3. Install Rust Toolchain
-echo "🦀 Installing Rust toolchain..."
-if ! command -v rustup &> /dev/null; then
+echo "🦀 Installing/updating Rust toolchain..."
+if ! has_cmd rustup; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
     source "$HOME/.cargo/env"
 else
     rustup update stable
 fi
 
+export PATH="$HOME/.cargo/bin:$PATH"
 rustup component add rustfmt clippy llvm-tools-preview
 rustup target add wasm32-unknown-unknown
 
 # 4. Install OPAM & ProVerif (Formal Verification)
-echo "💎 Installing OPAM and ProVerif..."
-if ! command -v opam &> /dev/null; then
-    sudo apt-get install -y opam
-    opam init --disable-sandboxing --bare -y
-fi
+if [ "${SKIP_FORMAL_SETUP}" = "1" ]; then
+    echo "⏭️ Skipping Formal Verification setup (opam/proverif) as requested."
+else
+    if ! has_cmd proverif; then
+        echo "💎 Installing OPAM and ProVerif..."
+        if ! has_cmd opam; then
+            if has_cmd apt-get; then
+                run_sudo apt-get install -y opam
+            else
+                echo "❌ Error: 'opam' not found and 'apt-get' is not available. Install opam manually." >&2
+                exit 1
+            fi
+        fi
+        
+        if [ ! -d "$HOME/.opam" ]; then
+            opam init --disable-sandboxing --bare -y
+        fi
 
-# Create a stable OCaml switch if it doesn't exist
-if ! opam switch list | grep -q "4.14.0"; then
-    opam switch create 4.14.0 -y
-fi
+        # Create a stable OCaml switch if it doesn't exist
+        if ! opam switch list | grep -q "4.14.0"; then
+            opam switch create 4.14.0 -y
+        fi
 
-eval $(opam env)
-opam install -y proverif
+        eval $(opam env)
+        opam install -y proverif
+    else
+        echo "✓ ProVerif is already installed."
+    fi
+fi
 
 # 5. Install Wasm-Pack
-echo "🕸️ Installing wasm-pack..."
-if ! command -v wasm-pack &> /dev/null; then
+if ! has_cmd wasm-pack; then
+    echo "🕸️ Installing wasm-pack..."
     curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+else
+    echo "✓ wasm-pack is already installed."
 fi
 
 # 6. Install Node.js, PNPM, and UV
 echo "📦 Installing Node.js, PNPM, and UV..."
-if ! command -v node &> /dev/null; then
-    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-    sudo apt-get install -y nodejs
+if ! has_cmd node; then
+    if has_cmd apt-get; then
+        curl -fsSL https://deb.nodesource.com/setup_22.x | run_sudo -E bash -
+        run_sudo apt-get install -y nodejs
+    else
+        echo "❌ Node.js not found. Please install Node.js (>=18) manually." >&2
+        exit 1
+    fi
+else
+    echo "✓ Node.js is already installed."
 fi
-if ! command -v pnpm &> /dev/null; then
-    sudo npm install -g pnpm@9
+
+if ! has_cmd pnpm; then
+    run_sudo npm install -g pnpm@9
+else
+    echo "✓ pnpm is already installed."
 fi
-if ! command -v uv &> /dev/null; then
+
+if ! has_cmd uv; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
-    source "$HOME/.local/bin/env"
+    export PATH="$HOME/.local/bin:$PATH"
+else
+    echo "✓ uv is already installed."
 fi
 
 # 6b. Install GitHub CLI (gh)
-echo "📦 Installing GitHub CLI (gh)..."
-if ! command -v gh &> /dev/null; then
-    sudo mkdir -p -m 755 /etc/apt/keyrings
-    wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
-    sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-    sudo apt-get update
-    sudo apt-get install -y gh
+if ! has_cmd gh; then
+    echo "📦 Installing GitHub CLI (gh)..."
+    if has_cmd apt-get; then
+        run_sudo mkdir -p -m 755 /etc/apt/keyrings
+        wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | run_sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+        run_sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | run_sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+        run_sudo apt-get update
+        run_sudo apt-get install -y gh
+    else
+        echo "⚠️ 'gh' CLI not found and 'apt-get' not available. Skipping."
+    fi
+else
+    echo "✓ gh CLI is already installed."
 fi
 
 # 7. Install Cargo Tools
-echo "🛡️ Installing cargo-audit, cargo-deny, maturin, and cargo-cyclonedx..."
-cargo install cargo-audit cargo-deny maturin cargo-cyclonedx --locked
+if [ "${SKIP_CARGO_INSTALL}" = "1" ]; then
+    echo "⏭️ Skipping Cargo tools installation as requested."
+else
+    echo "🛡️ Installing cargo-audit, cargo-deny, maturin, and cargo-cyclonedx..."
+    export PATH="$HOME/.cargo/bin:$PATH"
+    
+    TO_INSTALL=()
+    if ! has_cmd cargo-audit; then TO_INSTALL+=("cargo-audit"); fi
+    if ! has_cmd cargo-deny; then TO_INSTALL+=("cargo-deny"); fi
+    if ! has_cmd maturin; then TO_INSTALL+=("maturin"); fi
+    if ! has_cmd cargo-cyclonedx; then TO_INSTALL+=("cargo-cyclonedx"); fi
+    
+    if [ ${#TO_INSTALL[@]} -ne 0 ]; then
+        echo "Installing missing Cargo tools: ${TO_INSTALL[*]}"
+        cargo install "${TO_INSTALL[@]}" --locked
+    else
+        echo "✓ All cargo tools are already installed."
+    fi
+fi
 
 # 8. Install Trivy (Container Scanner)
-echo "🔍 Installing Trivy..."
-if ! command -v trivy &> /dev/null; then
-    TRIVY_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-    wget "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.deb"
-    sudo dpkg -i "trivy_${TRIVY_VERSION}_Linux-64bit.deb"
-    rm "trivy_${TRIVY_VERSION}_Linux-64bit.deb"
+if ! has_cmd trivy; then
+    echo "🔍 Installing Trivy..."
+    if has_cmd apt-get; then
+        TRIVY_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+        wget "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.deb"
+        run_sudo dpkg -i "trivy_${TRIVY_VERSION}_Linux-64bit.deb"
+        rm "trivy_${TRIVY_VERSION}_Linux-64bit.deb"
+    else
+        echo "⚠️ 'trivy' not found and 'apt-get' not available. Skipping."
+    fi
+else
+    echo "✓ trivy is already installed."
 fi
 
 # 9. Install Foundry (for Solidity verification)
-echo "⛓️ Installing Foundry..."
-if ! command -v forge &> /dev/null; then
+if ! has_cmd forge; then
+    echo "⛓️ Installing Foundry..."
     curl -L https://foundry.paradigm.xyz | bash
     export PATH="$HOME/.foundry/bin:$PATH"
     foundryup
+else
+    echo "✓ Foundry (forge) is already installed."
 fi
+
 # 10. Install project package dependencies (if run in repo root)
 if [ -f "package.json" ]; then
     echo "📦 Installing project npm packages..."
@@ -110,5 +206,8 @@ echo ""
 echo "✅ Setup Complete!"
 echo "--------------------------------------------------------"
 echo "Please restart your terminal or run the following command:"
-echo "source \$HOME/.cargo/env && eval \$(opam env)"
+echo "source \$HOME/.cargo/env"
+if [ "${SKIP_FORMAL_SETUP}" != "1" ] && has_cmd opam; then
+    echo "eval \$(opam env)"
+fi
 echo "--------------------------------------------------------"
