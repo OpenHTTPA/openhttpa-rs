@@ -16,12 +16,16 @@ use thiserror::Error;
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum SignatureError {
+    /// Key generation failed.
     #[error("key generation failed")]
     KeyGen,
+    /// Signing operation failed.
     #[error("sign operation failed")]
     Sign,
+    /// Signature verification failed.
     #[error("signature verification failed")]
     Verify,
+    /// Invalid key bytes provided.
     #[error("invalid key bytes")]
     InvalidKey,
 }

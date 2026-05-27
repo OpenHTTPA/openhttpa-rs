@@ -82,3 +82,61 @@ impl QuoteVerifier for DcapZkVerifier {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::Bytes;
+    use openhttpa_proto::QuoteType;
+
+    #[tokio::test]
+    async fn test_dcap_zk_verifier_wrong_type() {
+        let verifier = DcapZkVerifier {
+            allow_fallback: false,
+        };
+        let quote = AttestQuote {
+            quote_type: QuoteType::Sgx,
+            raw: Bytes::new(),
+            qudd: Bytes::new(),
+            collateral_uris: vec![],
+        };
+        let result = verifier.verify(&quote, &[0u8; 64]).await;
+        assert!(
+            matches!(result, Err(VerificationError::Malformed(msg)) if msg.contains("Expected ZkCompressed"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_dcap_zk_verifier_fallback() {
+        let verifier = DcapZkVerifier {
+            allow_fallback: true,
+        };
+        let quote = AttestQuote {
+            quote_type: QuoteType::Sgx,
+            raw: Bytes::new(),
+            qudd: Bytes::new(),
+            collateral_uris: vec![],
+        };
+        let result = verifier.verify(&quote, &[0u8; 64]).await;
+        assert!(
+            matches!(result, Err(VerificationError::Malformed(msg)) if msg.contains("Raw DCAP fallback not implemented"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_dcap_zk_verifier_bad_receipt() {
+        let verifier = DcapZkVerifier {
+            allow_fallback: false,
+        };
+        let quote = AttestQuote {
+            quote_type: QuoteType::ZkCompressed,
+            raw: Bytes::from(vec![1, 2, 3]), // Invalid bincode
+            qudd: Bytes::new(),
+            collateral_uris: vec![],
+        };
+        let result = verifier.verify(&quote, &[0u8; 64]).await;
+        assert!(
+            matches!(result, Err(VerificationError::Malformed(msg)) if msg.contains("Failed to deserialize"))
+        );
+    }
+}

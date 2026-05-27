@@ -126,7 +126,7 @@ impl AttestationEvidence {
         }
     }
 
-    /// Normalise vendor-specific evidence into vendor-neutral [`EatClaims`].
+    /// Normalise vendor-specific evidence into vendor-neutral [`EatClaims`](openhttpa_proto::EatClaims).
     ///
     /// This is the M4 Multi-Vendor Federation bridge: it maps each vendor's
     /// evidence fields to the common `EatClaims` struct, filling in
@@ -206,5 +206,52 @@ impl EvidenceBundle {
             quotes.push(s.to_quote(qudd.clone()));
         }
         quotes
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openhttpa_proto::TeeClass;
+
+    #[test]
+    fn test_evidence_to_quote() {
+        let qudd = Bytes::from_static(b"qudd");
+
+        let tdx = AttestationEvidence::Tdx(TdxEvidence {
+            quote: Bytes::from_static(b"tdx"),
+            pck_cert_uri: None,
+        });
+        let q = tdx.to_quote(qudd.clone());
+        assert_eq!(q.quote_type, QuoteType::Tdx);
+        assert_eq!(q.raw.as_ref(), b"tdx");
+
+        let mock = AttestationEvidence::Mock(Bytes::from_static(b"mock"));
+        let q = mock.to_quote(qudd.clone());
+        assert_eq!(q.quote_type, QuoteType::Mock);
+
+        let bundle = EvidenceBundle {
+            primary: tdx,
+            secondary: vec![mock],
+        };
+        let quotes = bundle.to_quotes(&qudd);
+        assert_eq!(quotes.len(), 2);
+    }
+
+    #[test]
+    fn test_evidence_to_eat_claims() {
+        let mock = AttestationEvidence::Mock(Bytes::from_static(b"mock"));
+        let claims = mock.to_eat_claims();
+        assert_eq!(claims.tee_class, Some(TeeClass::Mock));
+        assert_eq!(claims.hwmodel.unwrap(), "Mock TEE");
+        assert!(claims.oemid.is_none());
+
+        let snp = AttestationEvidence::SevSnp(SevSnpEvidence {
+            report: Bytes::new(),
+            vcek_cert_uri: None,
+        });
+        let claims = snp.to_eat_claims();
+        assert_eq!(claims.tee_class, Some(TeeClass::AmdSevSnp));
+        assert_eq!(claims.oemid.unwrap(), "AMD");
     }
 }

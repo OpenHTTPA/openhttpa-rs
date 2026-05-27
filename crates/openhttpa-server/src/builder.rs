@@ -121,3 +121,23 @@ impl OpenHttpaServerBuilder {
         router
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_builder_default() {
+        let builder = OpenHttpaServerBuilder::default();
+        let _router = builder.build();
+    }
+
+    #[test]
+    fn test_builder_with_options() {
+        let builder = OpenHttpaServerBuilder::new()
+            .with_atb_ttl(Duration::from_secs(1234))
+            .with_challenge_key([1u8; 32])
+            .with_registry(AtbRegistry::new());
+        let _router = builder.build();
+    }
+}

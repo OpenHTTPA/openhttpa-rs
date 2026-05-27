@@ -677,6 +677,45 @@ mod tests {
                 let req = req.body(Body::empty()).unwrap();
                 self.app.oneshot(req).await.unwrap()
             }
+
+            pub async fn send_with_body(self, b: String) -> Response {
+                let mut req = http::Request::builder().method("POST").uri(self.path);
+                req = req.header(http::header::CONTENT_TYPE, "application/json");
+
+                for (k, v) in self.headers {
+                    req = req.header(k.unwrap(), v);
+                }
+
+                let req = req.body(Body::from(b)).unwrap();
+                self.app.oneshot(req).await.unwrap()
+            }
         }
+    }
+
+    #[tokio::test]
+    async fn test_encrypted_json_bad_mac() {
+        let (registry, id) = setup_registry();
+        let app = Router::new()
+            .route(
+                "/test",
+                post(|_s: EncryptedJson<serde_json::Value>| async { "ok" }),
+            )
+            .with_state(registry);
+
+        let client = TestClient::new(app);
+
+        let bad_mac = [0u8; 48];
+        let t_hv = openhttpa_headers::encode_attest_ticket(12345, &bad_mac, None);
+
+        let body = serde_json::json!({ "ciphertext": "000000" }).to_string();
+
+        let res = client
+            .post("/test")
+            .header(HDR_ATTEST_BASE_ID.as_str(), &id.to_string())
+            .header("Attest-Ticket", t_hv.to_str().unwrap())
+            .send_with_body(body)
+            .await;
+
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
     }
 }

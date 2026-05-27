@@ -53,14 +53,19 @@ impl AeadAlgorithm {
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum AeadError {
+    /// AEAD key construction failed.
     #[error("AEAD key construction failed")]
     KeyConstruction,
+    /// AEAD encryption operation failed.
     #[error("AEAD seal (encrypt) failed")]
     SealFailed,
+    /// AEAD decryption or authentication failed.
     #[error("AEAD open (decrypt + verify) failed — ciphertext is corrupted or tampered")]
     OpenFailed,
+    /// The provided nonce length is incorrect.
     #[error("nonce length must be exactly {NONCE_LEN} bytes")]
     InvalidNonceLength,
+    /// An underlying I/O or system error occurred.
     #[error("I/O or system error: {0}")]
     IoError(String),
 }
@@ -175,8 +180,10 @@ impl aead::NonceSequence for SingleUseNonce {
 /// AEAD errors specific to `BoundAeadKey`.
 #[derive(Debug, Error)]
 pub enum BoundAeadError {
+    /// Nonce counter overflowed.
     #[error("nonce counter overflowed — session must be renegotiated")]
     NonceOverflow,
+    /// An underlying AEAD operation failed.
     #[error("AEAD operation failed: {0}")]
     Aead(#[from] AeadError),
 }

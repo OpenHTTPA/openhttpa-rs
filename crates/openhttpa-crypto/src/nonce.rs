@@ -16,10 +16,18 @@ use thiserror::Error;
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum NonceError {
+    /// A replay attack was detected. The received nonce was not strictly greater than the last seen.
     #[error("replay detected: received nonce {received} is not greater than last seen {last}")]
-    Replay { received: u64, last: u64 },
+    Replay {
+        /// The nonce that was received.
+        received: u64,
+        /// The highest nonce seen so far.
+        last: u64,
+    },
+    /// The 64-bit nonce counter overflowed. The session must be renegotiated.
     #[error("nonce counter overflowed — session must be renegotiated")]
     Overflow,
+    /// An underlying storage error occurred.
     #[error("storage error: {0}")]
     Storage(String),
 }

@@ -101,3 +101,36 @@ impl DistributedReplayGuard for RedisReplayGuard {
         self.set_nx(key, nonce).await.map(|_| ())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_redis_guard_new_valid_url() {
+        let guard = RedisReplayGuard::new("redis://127.0.0.1/", Duration::from_secs(60));
+        assert!(guard.is_ok());
+    }
+
+    #[test]
+    fn test_redis_guard_new_invalid_url() {
+        let guard = RedisReplayGuard::new("not-a-redis-url", Duration::from_secs(60));
+        assert!(guard.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_redis_guard_connection_failure() {
+        // Use a port that is guaranteed not to have a redis server running.
+        let guard =
+            RedisReplayGuard::new("redis://127.0.0.1:65535/", Duration::from_secs(60)).unwrap();
+
+        let result = guard.check_and_accept("test_key", 1).await;
+        assert!(matches!(result, Err(ReplayError::StorageError(_))));
+
+        let check_result = guard.check("test_key", 1).await;
+        assert!(matches!(check_result, Err(ReplayError::StorageError(_))));
+
+        let accept_result = guard.accept("test_key", 1).await;
+        assert!(matches!(accept_result, Err(ReplayError::StorageError(_))));
+    }
+}

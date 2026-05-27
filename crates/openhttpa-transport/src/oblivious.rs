@@ -196,3 +196,21 @@ impl ObliviousServer {
         Ok(ciphertext)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_oblivious_server_malformed() {
+        let (sk, _pk) = <Kem as KemTrait>::gen_keypair(&mut rand::thread_rng());
+        let server = ObliviousServer::new(sk);
+
+        let result = server.decapsulate(b"short");
+        assert!(matches!(result, Err(ObliviousError::Malformed)));
+
+        let enc_body = vec![0u8; 64];
+        let result = server.decapsulate(&enc_body);
+        assert!(matches!(result, Err(ObliviousError::Hpke(_))));
+    }
+}

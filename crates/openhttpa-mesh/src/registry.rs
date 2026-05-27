@@ -146,3 +146,57 @@ impl AgentRegistry for ShardedRegistry {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    #[tokio::test]
+    async fn test_mock_registry() {
+        let registry = MockRegistry::new();
+        let agent = AgentMetadata {
+            id: Uuid::new_v4(),
+            name: "test_agent".to_owned(),
+            capabilities: vec!["llm".to_owned()],
+            endpoint: "http://localhost".to_owned(),
+            public_key: vec![],
+            last_quote: None,
+            signature: vec![],
+            prev_hash: None,
+        };
+
+        registry.register(agent.clone()).await.unwrap();
+        let retrieved = registry.get_agent(agent.id).await.unwrap().unwrap();
+        assert_eq!(retrieved.name, "test_agent");
+
+        let search_res = registry.search("llm").await.unwrap();
+        assert_eq!(search_res.len(), 1);
+
+        registry.heartbeat(agent.id).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_sharded_registry() {
+        let registry = ShardedRegistry::new(2, std::time::Duration::from_secs(10));
+        let agent = AgentMetadata {
+            id: Uuid::new_v4(),
+            name: "sharded_agent".to_owned(),
+            capabilities: vec!["db".to_owned()],
+            endpoint: "http://localhost".to_owned(),
+            public_key: vec![],
+            last_quote: None,
+            signature: vec![],
+            prev_hash: None,
+        };
+
+        registry.register(agent.clone()).await.unwrap();
+        let retrieved = registry.get_agent(agent.id).await.unwrap().unwrap();
+        assert_eq!(retrieved.name, "sharded_agent");
+
+        let search_res = registry.search("db").await.unwrap();
+        assert_eq!(search_res.len(), 1);
+
+        registry.heartbeat(agent.id).await.unwrap();
+    }
+}

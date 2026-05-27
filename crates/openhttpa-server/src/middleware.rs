@@ -502,4 +502,25 @@ mod tests {
         guard.count.store(7, std::sync::atomic::Ordering::Relaxed);
         assert!(!guard.is_near_capacity());
     }
+
+    // ── TrRequestMiddleware ───────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn tr_request_middleware_missing_header() {
+        use axum::Router;
+        use axum::body::Body;
+        use axum::routing::get;
+        use http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        let registry = AtbRegistry::new();
+        let app = Router::new()
+            .route("/", get(|| async { "OK" }))
+            .layer(TrRequestLayer::new(registry));
+
+        let req = Request::builder().uri("/").body(Body::empty()).unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
 }

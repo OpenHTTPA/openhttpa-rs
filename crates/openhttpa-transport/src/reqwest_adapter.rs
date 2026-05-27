@@ -75,3 +75,24 @@ impl AttestTransport for ReqwestTransport {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_reqwest_transport_fail() {
+        let transport = ReqwestTransport::new();
+
+        let req = TransportRequest {
+            method: http::Method::POST,
+            uri: "http://invalid-domain.test".parse().unwrap(),
+            headers: http::HeaderMap::new(),
+            body: axum::body::Body::empty(),
+            trailers: None,
+        };
+
+        let result = transport.send(req).await;
+        assert!(matches!(result, Err(SendError::Connection(_))));
+    }
+}

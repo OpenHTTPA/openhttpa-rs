@@ -29,16 +29,22 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum PqcError {
+    /// KEM key generation failed.
     #[error("KEM key generation failed: {0}")]
     KemKeyGen(String),
+    /// KEM encapsulation failed.
     #[error("KEM encapsulation failed: {0}")]
     KemEncap(String),
+    /// KEM decapsulation failed.
     #[error("KEM decapsulation failed: {0}")]
     KemDecap(String),
+    /// Signature key generation failed.
     #[error("signature key generation failed: {0}")]
     SigKeyGen(String),
+    /// Signature generation failed.
     #[error("signature operation failed: {0}")]
     Sign(String),
+    /// Signature verification failed.
     #[error("signature verification failed")]
     Verify,
 }
@@ -234,6 +240,7 @@ impl MlDsaKeyPair {
 pub struct MlKemSharedSecret(Vec<u8>);
 
 impl MlKemSharedSecret {
+    /// Return the underlying raw bytes of the ML-KEM shared secret.
     #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         &self.0

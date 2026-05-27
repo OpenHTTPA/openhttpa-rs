@@ -36,3 +36,25 @@ impl AttestTransport for H2Transport {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_h2_transport_stub() {
+        let uri = "http://localhost:8080".parse().unwrap();
+        let transport = H2Transport::new(uri);
+
+        let req = TransportRequest {
+            method: http::Method::POST,
+            uri: "http://localhost:8080/path".parse().unwrap(),
+            headers: http::HeaderMap::new(),
+            body: axum::body::Body::empty(),
+            trailers: None,
+        };
+
+        let result = transport.send(req).await;
+        assert!(matches!(result, Err(SendError::Connection(_))));
+    }
+}

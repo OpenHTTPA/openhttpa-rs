@@ -134,3 +134,29 @@ pub enum ZkError {
     #[error("serialization error: {0}")]
     Serialization(String),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_zkconfig_default() {
+        let config = ZkConfig::default();
+        assert!(!config.enabled);
+        assert!(!config.compression_enabled);
+        // use_mock_prover is determined by cfg!(debug_assertions)
+        assert_eq!(config.use_mock_prover, cfg!(debug_assertions));
+    }
+
+    #[test]
+    fn test_zkerror_display() {
+        let err1 = ZkError::Prover("test_err".to_owned());
+        assert_eq!(err1.to_string(), "prover error: test_err");
+
+        let err2 = ZkError::Verification("verify_fail".to_owned());
+        assert_eq!(err2.to_string(), "verification error: verify_fail");
+
+        let err3 = ZkError::Serialization("ser_fail".to_owned());
+        assert_eq!(err3.to_string(), "serialization error: ser_fail");
+    }
+}

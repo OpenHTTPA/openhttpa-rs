@@ -291,3 +291,43 @@ impl Drop for AgentNode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{policy::RegoPolicyEngine, registry::MockRegistry};
+    use openhttpa_attestation::mock_verifier::MockVerifier;
+    use openhttpa_tee::mock::MockTeeProvider;
+    use openhttpa_transport::h2_adapter::H2Transport;
+
+    #[tokio::test]
+    async fn test_node_creation_and_heartbeat() {
+        let registry = Arc::new(MockRegistry::new());
+        let tee = Arc::new(MockTeeProvider::with_override(
+            openhttpa_proto::QuoteType::Mock,
+        ));
+        let verifier = Arc::new(MockVerifier::new(
+            openhttpa_attestation::verifier::VerificationResult::default(),
+        )); // stub
+        let transport = Arc::new(H2Transport::new("http://localhost".parse().unwrap()));
+        let policy = Arc::new(RegoPolicyEngine::default());
+
+        let mut node = AgentNode::new(
+            "test_node".to_owned(),
+            vec!["test".to_owned()],
+            "http://localhost".to_owned(),
+            registry,
+            tee,
+            verifier,
+            transport,
+            policy,
+        );
+
+        assert_eq!(node.metadata().name, "test_node");
+        assert_eq!(node.metadata().capabilities.len(), 1);
+
+        node.start_heartbeat(std::time::Duration::from_millis(10));
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        // Dropping node should abort heartbeat
+    }
+}

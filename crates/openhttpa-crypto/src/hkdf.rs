@@ -42,12 +42,15 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum HkdfError {
+    /// HKDF extraction phase failed.
     #[error("HKDF extract failed")]
     ExtractFailed,
+    /// HKDF expansion phase failed (e.g., requested too many bytes).
     #[error("HKDF expand failed (requested too many bytes)")]
     ExpandFailed,
 }
 
+/// A wrapper for HKDF expansion containing the Pseudorandom Key (PRK).
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct HkdfExpander {
     /// R-03: Store only the 48-byte PRK (HKDF-Extract output), not the raw IKM.
@@ -91,6 +94,7 @@ impl HkdfExpander {
 pub struct DerivedKey(pub Vec<u8>);
 
 impl DerivedKey {
+    /// Return the raw byte slice of the derived key.
     #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
@@ -115,15 +119,24 @@ use serde_big_array::BigArray;
 // material require a `SealedSessionKeys` wrapper.  If this type is ever
 // exposed over a network without sealing, that is a misuse at the
 // call site, not a structural flaw in the derive.
+/// The collection of derived keys for a single `OpenHTTPA` session.
 #[derive(Clone, Zeroize, ZeroizeOnDrop, Serialize, Deserialize)]
 pub struct SessionKeys {
+    /// Master secret, used to derive further keys.
     pub master_secret: Vec<u8>,
+    /// Write key for client-to-server traffic.
     pub client_write_key: Vec<u8>,
+    /// Write key for server-to-client traffic.
     pub server_write_key: Vec<u8>,
+    /// Initialization Vector (IV) for client-to-server traffic.
     pub client_write_iv: Vec<u8>,
+    /// Initialization Vector (IV) for server-to-client traffic.
     pub server_write_iv: Vec<u8>,
+    /// MAC key for client-to-server traffic.
     pub client_mac_key: Vec<u8>,
+    /// MAC key for server-to-client traffic.
     pub server_mac_key: Vec<u8>,
+    /// The transcript hash binding these keys to the specific handshake.
     #[serde(with = "BigArray")]
     pub transcript_hash: [u8; 48],
 }

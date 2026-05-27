@@ -64,12 +64,16 @@ use crate::pqc::MlKemPair;
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum KeyExchangeError {
+    /// Classical or post-quantum key generation failed.
     #[error("key generation failed")]
     KeyGeneration,
+    /// Classical DH agreement failed.
     #[error("key agreement failed")]
     Agreement,
+    /// The provided peer public key is invalid or not on the curve.
     #[error("invalid peer public key")]
     InvalidPeerKey,
+    /// Post-quantum encapsulation/decapsulation failed.
     #[error("PQC error: {0}")]
     Pqc(String),
 }

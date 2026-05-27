@@ -122,7 +122,7 @@ mod tests {
 #[derive(Debug, Default)]
 pub struct PskStore {
     /// Maps ticket IDs to session secrets.
-    tickets: RwLock<HashMap<Vec<u8>, Vec<u8>>>,
+    tickets: RwLock<HashMap<Vec<u8>, zeroize::Zeroizing<Vec<u8>>>>,
 }
 
 impl PskStore {
@@ -134,12 +134,14 @@ impl PskStore {
     /// Store a PSK associated with a ticket ID.
     pub async fn store_psk(&self, ticket_id: Vec<u8>, psk: Vec<u8>) {
         let mut tickets = self.tickets.write().await;
-        tickets.insert(ticket_id, psk);
+        tickets.insert(ticket_id, zeroize::Zeroizing::new(psk));
     }
 
     /// Retrieve and remove a PSK associated with a ticket ID (single-use tickets).
     pub async fn take_psk(&self, ticket_id: &[u8]) -> Option<Vec<u8>> {
         let mut tickets = self.tickets.write().await;
-        tickets.remove(ticket_id)
+        // Unwrap the Zeroizing container to return the bytes,
+        // passing ownership to the caller.
+        tickets.remove(ticket_id).map(|z| z.to_vec())
     }
 }
