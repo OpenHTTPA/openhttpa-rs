@@ -486,6 +486,14 @@ wasm-extension: ## Build browser extension Wasm bindings
 
 ## -- Publish / Distribution --
 
+bump: version ## Alias for version
+version: ## Interactive wizard to bump semantic version
+	uv run scripts/bump.py
+
+publish: publish-wizard ## Alias for publish-wizard
+publish-wizard: ## Interactive wizard to publish packages smoothly
+	uv run scripts/publish.py
+
 publish-python: ## Publish Python bindings to PyPI
 	@bash scripts/publish_python.sh
 
