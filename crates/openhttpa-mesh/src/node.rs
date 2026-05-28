@@ -27,6 +27,7 @@ pub struct AgentNode {
     transport: Arc<dyn AttestTransport>,
     policy_engine: Arc<dyn PolicyEngine>,
     heartbeat_handle: Option<tokio::task::JoinHandle<()>>,
+    pub fabric_store: openhttpa_fabric::MemoryStore,
 }
 
 impl AgentNode {
@@ -64,6 +65,9 @@ impl AgentNode {
             transport,
             policy_engine,
             heartbeat_handle: None,
+            fabric_store: openhttpa_fabric::store::MemoryStore::new_kv(
+                openhttpa_fabric::store::Topology::Global,
+            ),
         }
     }
 
@@ -75,6 +79,20 @@ impl AgentNode {
     /// Get the internal MCP server to add tools.
     pub fn mcp_server(&self) -> Arc<OpenHttpaMcpServer> {
         self.mcp_server.clone()
+    }
+
+    /// Register memory fabric tools with the internal MCP server.
+    pub async fn register_fabric_tools(&self) {
+        self.mcp_server
+            .add_tool(Box::new(openhttpa_fabric::mcp_tools::FabricReadTool {
+                store: self.fabric_store.clone(),
+            }))
+            .await;
+        self.mcp_server
+            .add_tool(Box::new(openhttpa_fabric::mcp_tools::FabricWriteTool {
+                store: self.fabric_store.clone(),
+            }))
+            .await;
     }
 
     /// Establish an attested session with another agent.
@@ -325,6 +343,17 @@ mod tests {
 
         assert_eq!(node.metadata().name, "test_node");
         assert_eq!(node.metadata().capabilities.len(), 1);
+
+        node.fabric_store.put(
+            "public",
+            "test_key",
+            b"test_value".to_vec(),
+            std::collections::HashMap::from([("test_node".to_string(), 1)]),
+        );
+        assert_eq!(
+            node.fabric_store.get("public", "test_key"),
+            Some(b"test_value".to_vec())
+        );
 
         node.start_heartbeat(std::time::Duration::from_millis(10));
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;

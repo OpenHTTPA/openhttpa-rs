@@ -29,7 +29,7 @@ members = [
     # [profile.release.package.openhttpa-fuzz] override is resolved without
     # the "did not match any packages" warning.  NOT in default-members —
     # this crate must only be compiled via `cargo fuzz run <target>`.
-    "fuzz",
+    "fuzz", "crates/openhttpa-fabric",
 ]
 # bindings/python must be built with `maturin` (not plain `cargo build`).
 # Exclude it from the default workspace build so `cargo build --workspace`

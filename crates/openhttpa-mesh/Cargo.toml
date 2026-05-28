@@ -16,6 +16,7 @@ openhttpa-mcp = { workspace = true }
 openhttpa-transport = { workspace = true }
 openhttpa-client = { workspace = true }
 openhttpa-core = { workspace = true }
+openhttpa-fabric = { path = "../openhttpa-fabric", version = "0.1.1" }
 http         = { workspace = true }
 axum         = { workspace = true }
 bytes        = { workspace = true }
