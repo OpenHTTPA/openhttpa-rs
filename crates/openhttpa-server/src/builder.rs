@@ -92,6 +92,50 @@ impl OpenHttpaServerBuilder {
         self
     }
 
+    /// Automatically detects all available hardware TEEs and federates them for maximum security.
+    /// Optionally wraps the federated provider in a ZK-compressed attestation (ZAA).
+    #[must_use]
+    pub fn with_auto_attestation(mut self, use_zk_compression: bool) -> Self {
+        let config = openhttpa_tee::provider::TeeConfig::default();
+
+        let provider: Arc<dyn TeeProvider> = match openhttpa_tee::provider::detect_all_providers(
+            &config,
+        ) {
+            Ok(composite) => {
+                let composite_arc = Arc::new(composite);
+                #[cfg(feature = "zaa")]
+                if use_zk_compression {
+                    tracing::info!("Wrapping composite TEE provider with ZK compression (ZAA)");
+                    Arc::new(openhttpa_tee::provider::ZkCompressedTeeProvider::new(
+                        composite_arc,
+                    ))
+                } else {
+                    composite_arc
+                }
+
+                #[cfg(not(feature = "zaa"))]
+                {
+                    if use_zk_compression {
+                        tracing::warn!(
+                            "ZK compression requested but 'zaa' feature is disabled. Proceeding with uncompressed composite provider."
+                        );
+                    }
+                    composite_arc
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Auto-attestation failed to detect hardware TEEs: {}. Falling back to Mock.",
+                    e
+                );
+                Arc::new(openhttpa_tee::mock::MockTeeProvider::default())
+            }
+        };
+
+        self.tee_provider = Some(provider);
+        self
+    }
+
     pub fn build(self) -> Router {
         let executor = self
             .executor

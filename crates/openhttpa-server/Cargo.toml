@@ -51,6 +51,7 @@ base64 = "0.22.1"
 ita = ["openhttpa-attestation/ita"]
 maa = ["openhttpa-attestation/maa"]
 zk = ["openhttpa-core/zk"]
+zaa = ["openhttpa-tee/zaa"]
 
 [[example]]
 name = "remote_attestation"

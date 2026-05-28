@@ -358,6 +358,93 @@ impl CompositeTeeProvider {
     }
 }
 
+/// Detects all available TEE providers and returns them grouped in a `CompositeTeeProvider`.
+/// If no hardware providers are detected and `allow_mock` is true, it returns a mock provider.
+///
+/// # Errors
+/// Returns [`TeeProviderError::NotAvailable`] if no hardware TEE is detected and Mock is disabled.
+pub fn detect_all_providers(config: &TeeConfig) -> Result<CompositeTeeProvider, TeeProviderError> {
+    let mut providers: Vec<Arc<dyn TeeProvider>> = Vec::new();
+
+    #[cfg(feature = "nvidia_gpu")]
+    {
+        let p = crate::nvidia_gpu::NvidiaGpuTeeProvider;
+        if TeeAdapter::is_available(&p) {
+            providers.push(Arc::new(p));
+        }
+    }
+
+    #[cfg(feature = "tdx")]
+    {
+        let p = crate::tdx::TdxTeeProvider;
+        if TeeAdapter::is_available(&p) {
+            providers.push(Arc::new(p));
+        }
+    }
+
+    #[cfg(feature = "sev_snp")]
+    {
+        let p = crate::sev_snp::SevSnpTeeProvider;
+        if TeeAdapter::is_available(&p) {
+            providers.push(Arc::new(p));
+        }
+    }
+
+    #[cfg(feature = "aws_nitro")]
+    {
+        let p = crate::aws_nitro::AwsNitroTeeProvider;
+        if TeeAdapter::is_available(&p) {
+            providers.push(Arc::new(p));
+        }
+    }
+
+    #[cfg(feature = "sgx")]
+    {
+        let p = crate::sgx::SgxTeeProvider;
+        if TeeProvider::is_available(&p) {
+            providers.push(Arc::new(p));
+        }
+    }
+
+    #[cfg(feature = "tpm")]
+    {
+        let p = crate::tpm::TpmTeeAdapter;
+        if TeeAdapter::is_available(&p) {
+            providers.push(Arc::new(p));
+        }
+    }
+
+    #[cfg(feature = "trustzone")]
+    {
+        let p = crate::trustzone::TrustZoneTeeProvider;
+        if TeeProvider::is_available(&p) {
+            providers.push(Arc::new(p));
+        }
+    }
+
+    if providers.is_empty() {
+        #[cfg(feature = "mock")]
+        if config.allow_mock {
+            tracing::error!(
+                security = true,
+                "SECURITY: No hardware TEE detected; falling back to MockTeeProvider for federation. \
+                 This is ONLY acceptable in test/CI environments."
+            );
+            providers.push(Arc::new(crate::mock::MockTeeProvider::default()));
+        } else {
+            return Err(TeeProviderError::NotAvailable(
+                "No hardware TEE detected for federation and Mock is disabled".to_owned(),
+            ));
+        }
+        #[cfg(not(feature = "mock"))]
+        return Err(TeeProviderError::NotAvailable(
+            "No hardware TEE detected for federation and Mock feature is not available".to_owned(),
+        ));
+    }
+
+    Ok(CompositeTeeProvider::new(providers))
+}
+
 impl TeeProvider for CompositeTeeProvider {
     fn quote_type(&self) -> QuoteType {
         // Returns the first provider's type as a primary identity.
