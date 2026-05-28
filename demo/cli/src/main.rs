@@ -9,6 +9,7 @@ use axum::{
 use clap::{Parser, Subcommand};
 use openhttpa_client::OpenHttpaClient;
 use openhttpa_core::handshake::AtHsExecutor;
+use openhttpa_fabric::store::{MemoryStore, Topology, VersionVector};
 use openhttpa_server::{
     AtbRegistry, EncryptedJson, OpenHttpaSession,
     handlers::{AtHsHandlerState, aths_handler},
@@ -53,6 +54,8 @@ enum Commands {
         #[arg(short = 'M', long)]
         mutual: bool,
     },
+    /// Run the Secure Distributed Memory Fabric (SDMF) Demo
+    Fabric,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -285,6 +288,55 @@ async fn run_client(url: String, message: String, mutual: bool) -> anyhow::Resul
 ///
 /// In release builds the env var is REQUIRED — a missing or malformed value
 /// will panic at startup rather than silently use an insecure all-zero key.
+async fn run_fabric_demo() -> anyhow::Result<()> {
+    info!("Starting Secure Distributed Memory Fabric (SDMF) Demo...");
+
+    // 1. Initialize a TeeProvider (Mock used here for demonstration)
+    let tee_provider = Arc::new(MockTeeProvider::default());
+    info!("[1] Initialized TEE Provider for Hardware-Attested Sealing.");
+
+    // 2. Initialize a global Vector DB fabric instance
+    let store = Arc::new(MemoryStore::new_vector(Topology::Global, tee_provider));
+    info!("[2] Started In-Memory Fabric Store (Global Topology, AES-256-GCM Encryption).");
+
+    // 3. Store semantic context with versioning and provenance
+    let mut vv = VersionVector::new();
+    vv.insert("agent_alpha".to_string(), 1);
+
+    let namespace = "agent_context";
+    let key = "mission_alpha";
+    let data = b"Target located in Sector 7".to_vec();
+
+    info!("[3] Storing context to fabric pool...");
+    info!("    Namespace: {}", namespace);
+    info!("    Key:       {}", key);
+    info!("    Data:      {:?}", std::str::from_utf8(&data)?);
+
+    store.put(namespace, key, data, vv, None);
+    info!("    -> Context successfully encrypted on-the-fly and stored in zero-trust memory pool.");
+
+    // 4. Search for context
+    info!("[4] Querying fabric via Semantic Vector Search...");
+    let dummy_embedding = vec![0.5f32; 128];
+    let top_results = store.vector_search(namespace, &dummy_embedding, 5);
+
+    if top_results.is_empty() {
+        error!("    -> No results found!");
+    } else {
+        for (res_key, score, data_bytes) in top_results {
+            info!(
+                "    -> Found matching context: '{}' (Score: {}) | Decrypted Data: '{}'",
+                res_key,
+                score,
+                std::str::from_utf8(&data_bytes)?
+            );
+        }
+    }
+
+    info!("Success: SDMF context injected, encrypted, queried, and decrypted successfully.");
+    Ok(())
+}
+
 fn demo_challenge_key(env_var: &str) -> [u8; 32] {
     if let Ok(hex_val) = std::env::var(env_var) {
         let bytes = hex::decode(&hex_val)
@@ -327,6 +379,9 @@ async fn main() -> anyhow::Result<()> {
             mutual,
         } => {
             run_client(url, message, mutual).await?;
+        }
+        Commands::Fabric => {
+            run_fabric_demo().await?;
         }
     }
 

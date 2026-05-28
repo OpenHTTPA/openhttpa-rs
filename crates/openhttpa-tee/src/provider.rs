@@ -88,6 +88,28 @@ pub trait TeeProvider: Send + Sync {
 
     /// Return `true` if the TEE hardware is present and usable.
     fn is_available(&self) -> bool;
+
+    /// Cryptographically seal data using a hardware-derived key.
+    /// Default implementation returns an error.
+    ///
+    /// # Errors
+    /// Returns [`TeeProviderError`] if hardware is unavailable or sealing fails.
+    fn seal_data(&self, _plaintext: &[u8]) -> Result<Vec<u8>, TeeProviderError> {
+        Err(TeeProviderError::NotAvailable(
+            "Sealing not implemented".to_owned(),
+        ))
+    }
+
+    /// Cryptographically unseal data using a hardware-derived key.
+    /// Default implementation returns an error.
+    ///
+    /// # Errors
+    /// Returns [`TeeProviderError`] if hardware is unavailable or unsealing fails.
+    fn unseal_data(&self, _ciphertext: &[u8]) -> Result<Vec<u8>, TeeProviderError> {
+        Err(TeeProviderError::NotAvailable(
+            "Unsealing not implemented".to_owned(),
+        ))
+    }
 }
 
 /// A modern adapter for TEE hardware that produces structured evidence.
@@ -475,6 +497,20 @@ impl TeeProvider for CompositeTeeProvider {
 
     fn is_available(&self) -> bool {
         self.providers.iter().any(|p| p.is_available())
+    }
+
+    fn seal_data(&self, plaintext: &[u8]) -> Result<Vec<u8>, TeeProviderError> {
+        self.providers
+            .first()
+            .ok_or_else(|| TeeProviderError::NotAvailable("no providers in composite".to_owned()))?
+            .seal_data(plaintext)
+    }
+
+    fn unseal_data(&self, ciphertext: &[u8]) -> Result<Vec<u8>, TeeProviderError> {
+        self.providers
+            .first()
+            .ok_or_else(|| TeeProviderError::NotAvailable("no providers in composite".to_owned()))?
+            .unseal_data(ciphertext)
     }
 }
 

@@ -60,13 +60,14 @@ impl AgentNode {
             mcp_server: Arc::new(OpenHttpaMcpServer::new()),
             registry,
             sessions: DashMap::new(),
-            tee_provider,
+            tee_provider: tee_provider.clone(),
             verifier,
             transport,
             policy_engine,
             heartbeat_handle: None,
             fabric_store: openhttpa_fabric::store::MemoryStore::new_kv(
                 openhttpa_fabric::store::Topology::Global,
+                tee_provider,
             ),
         }
     }
@@ -354,6 +355,7 @@ mod tests {
             "test_key",
             b"test_value".to_vec(),
             std::collections::HashMap::from([("test_node".to_string(), 1)]),
+            None,
         );
         assert_eq!(
             node.fabric_store.get("public", "test_key"),

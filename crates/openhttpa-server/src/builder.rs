@@ -212,8 +212,8 @@ impl OpenHttpaServerBuilder {
             caps,
             endpoint.clone(),
             agent_registry,
-            tee_provider,
-            verifier,
+            tee_provider.clone(),
+            verifier.clone(),
             transport,
             policy_engine,
         );
@@ -231,6 +231,8 @@ impl OpenHttpaServerBuilder {
         let replication_manager = Arc::new(openhttpa_fabric::ReplicationManager::new(
             agent_node.fabric_store.clone(),
             a2a_agent as Arc<dyn openhttpa_fabric::ReplicationTransport>,
+            verifier.clone(),
+            tee_provider.clone(),
         ));
 
         let metrics = Arc::new(openhttpa_fabric::metrics::FabricMetrics::default());

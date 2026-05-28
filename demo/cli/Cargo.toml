@@ -17,6 +17,7 @@ openhttpa-client = { path = "../../crates/openhttpa-client" }
 openhttpa-server = { path = "../../crates/openhttpa-server" }
 openhttpa-transport = { path = "../../crates/openhttpa-transport" }
 openhttpa-attestation = { path = "../../crates/openhttpa-attestation" }
+openhttpa-fabric = { path = "../../crates/openhttpa-fabric" }
 
 tokio = { workspace = true }
 axum = { workspace = true }

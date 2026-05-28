@@ -10,15 +10,20 @@ repository.workspace = true
 documentation.workspace = true
 
 [dependencies]
-openhttpa-a2a = { path = "../openhttpa-a2a", version = "0.1.1" }
-openhttpa-core = { path = "../openhttpa-core", version = "0.1.1" }
-openhttpa-mcp = { path = "../openhttpa-mcp", version = "0.1.1" }
+openhttpa-a2a = { workspace = true }
+openhttpa-core = { workspace = true }
+openhttpa-mcp = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 zeroize = { workspace = true }
+openhttpa-tee = { workspace = true }
+openhttpa-proto = { workspace = true }
+openhttpa-attestation = { workspace = true }
+openhttpa-crypto = { workspace = true }
+aes-gcm = { workspace = true }
 
 hex = { workspace = true }
 regorus = "0.10"

@@ -3905,6 +3905,7 @@ dependencies = [
  "openhttpa-client",
  "openhttpa-core",
  "openhttpa-crypto",
+ "openhttpa-fabric",
  "openhttpa-headers",
  "openhttpa-proto",
  "openhttpa-server",
@@ -4002,11 +4003,16 @@ dependencies = [
 name = "openhttpa-fabric"
 version = "0.1.1"
 dependencies = [
+ "aes-gcm",
  "hex 0.4.3",
  "lru 0.16.4",
  "openhttpa-a2a",
+ "openhttpa-attestation",
  "openhttpa-core",
+ "openhttpa-crypto",
  "openhttpa-mcp",
+ "openhttpa-proto",
+ "openhttpa-tee",
  "proptest",
  "rand 0.8.6",
  "regorus",

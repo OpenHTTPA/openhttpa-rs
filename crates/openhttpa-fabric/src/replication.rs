@@ -3,6 +3,10 @@
 
 use crate::store::{MemoryStore, VersionVector};
 use openhttpa_a2a::{A2AAgent, A2AMessage};
+use openhttpa_attestation::verifier::QuoteVerifier;
+use openhttpa_core::sha2::{Digest, Sha384};
+use openhttpa_proto::{AttestQuote, ProvenanceChain};
+use openhttpa_tee::provider::{QuoteRequest, TeeProvider};
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -16,6 +20,8 @@ pub struct SyncPayload {
     pub key: String,
     pub data: Vec<u8>,
     pub version: VersionVector,
+    pub provenance: Option<ProvenanceChain>,
+    pub quote: Option<AttestQuote>,
 }
 
 pub trait ReplicationTransport: Send + Sync {
@@ -52,28 +58,99 @@ impl ReplicationTransport for A2AAgent {
     }
 }
 
+pub trait FabricAttestationValidator: Send + Sync {
+    /// Validate an incoming sync payload against its attestation evidence.
+    /// Returns `Ok(())` if the state delta is cryptographically verified and bound to the fabric context.
+    fn validate_sync<'a>(
+        &'a self,
+        sender_id: &'a str,
+        payload: &'a SyncPayload,
+        verifier: &'a dyn QuoteVerifier,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + 'a>>;
+}
+
+pub struct DefaultFabricValidator;
+
+impl FabricAttestationValidator for DefaultFabricValidator {
+    fn validate_sync<'a>(
+        &'a self,
+        sender_id: &'a str,
+        payload: &'a SyncPayload,
+        verifier: &'a dyn QuoteVerifier,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + 'a>> {
+        Box::pin(async move {
+            let quote = payload.quote.as_ref().ok_or_else(|| {
+                format!(
+                    "Rejected state delta from {}: missing attestation quote",
+                    sender_id
+                )
+            })?;
+
+            // Re-derive the expected report data binding (QUDD)
+            // For SDMF, the report data is the hash of the namespace and key
+            let mut binding = [0u8; 64];
+            let msg = format!("{}:{}", payload.namespace, payload.key);
+            let hash = Sha384::digest(msg.as_bytes());
+            binding[..48].copy_from_slice(&hash);
+
+            verifier.verify(quote, &binding).await.map_err(|e| {
+                format!(
+                    "Rejected unauthenticated state delta from {}: {}",
+                    sender_id, e
+                )
+            })?;
+
+            Ok(())
+        })
+    }
+}
+
 pub struct ReplicationManager {
     store: MemoryStore,
     transport: Arc<dyn ReplicationTransport>,
+    verifier: Arc<dyn QuoteVerifier>,
+    tee_provider: Arc<dyn TeeProvider>,
+    attestation_validator: Arc<dyn FabricAttestationValidator>,
 }
 
 impl ReplicationManager {
-    pub fn new(store: MemoryStore, transport: Arc<dyn ReplicationTransport>) -> Self {
-        Self { store, transport }
+    pub fn new(
+        store: MemoryStore,
+        transport: Arc<dyn ReplicationTransport>,
+        verifier: Arc<dyn QuoteVerifier>,
+        tee_provider: Arc<dyn TeeProvider>,
+    ) -> Self {
+        Self {
+            store,
+            transport,
+            verifier,
+            tee_provider,
+            attestation_validator: Arc::new(DefaultFabricValidator),
+        }
     }
 
     /// Process an incoming replication payload.
-    pub fn handle_incoming_sync(&self, sender_id: &str, payload: SyncPayload) {
+    pub async fn handle_incoming_sync(&self, sender_id: &str, payload: SyncPayload) {
         info!(
             "Applying state delta from {} for namespace '{}'",
             sender_id, payload.namespace
         );
+
+        if let Err(e) = self
+            .attestation_validator
+            .validate_sync(sender_id, &payload, self.verifier.as_ref())
+            .await
+        {
+            warn!("{}", e);
+            return;
+        }
 
         let applied = self.store.put(
             &payload.namespace,
             &payload.key,
             payload.data,
             payload.version,
+            payload.provenance,
         );
 
         if !applied {
@@ -82,7 +159,25 @@ impl ReplicationManager {
     }
 
     /// Broadcast a state delta to a specific peer.
-    pub async fn send_sync(&self, target_url: &str, payload: SyncPayload) -> Result<(), String> {
+    pub async fn send_sync(
+        &self,
+        target_url: &str,
+        mut payload: SyncPayload,
+    ) -> Result<(), String> {
+        if payload.quote.is_none() {
+            let mut binding = [0u8; 64];
+            let msg = format!("{}:{}", payload.namespace, payload.key);
+            let hash = Sha384::digest(msg.as_bytes());
+            binding[..48].copy_from_slice(&hash);
+
+            let req = QuoteRequest {
+                report_data: binding,
+            };
+            if let Ok(quote) = self.tee_provider.generate_quote(&req) {
+                payload.quote = Some(quote);
+            }
+        }
+
         let content = serde_json::to_string(&payload)
             .map_err(|e| format!("Failed to serialize sync payload: {}", e))?;
 

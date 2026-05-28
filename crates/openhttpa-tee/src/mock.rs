@@ -278,6 +278,22 @@ impl TeeProvider for MockTeeProvider {
     fn is_available(&self) -> bool {
         <Self as TeeAdapter>::is_available(self)
     }
+
+    fn seal_data(&self, plaintext: &[u8]) -> Result<Vec<u8>, TeeProviderError> {
+        let mut sealed = b"MOCK_SEAL:".to_vec();
+        sealed.extend_from_slice(plaintext);
+        Ok(sealed)
+    }
+
+    fn unseal_data(&self, ciphertext: &[u8]) -> Result<Vec<u8>, TeeProviderError> {
+        if ciphertext.starts_with(b"MOCK_SEAL:") {
+            Ok(ciphertext[b"MOCK_SEAL:".len()..].to_vec())
+        } else {
+            Err(TeeProviderError::Enclave(
+                "Invalid mock sealed data".to_owned(),
+            ))
+        }
+    }
 }
 
 /// Verify a mock quote by re-deriving its hash.

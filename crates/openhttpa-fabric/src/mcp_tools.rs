@@ -108,7 +108,7 @@ impl McpTool for FabricWriteTool {
             vv.insert("mcp_agent".to_string(), timestamp);
 
             self.store
-                .put(namespace, key, value.as_bytes().to_vec(), vv);
+                .put(namespace, key, value.as_bytes().to_vec(), vv, None);
             Ok(json!({ "status": "success" }))
         })
     }
