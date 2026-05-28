@@ -2,7 +2,6 @@
 // Copyright 2026 The OpenHTTPA Foundation
 
 use crate::metrics::FabricMetrics;
-use crate::policy::LocalLlmEngine;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -339,12 +338,19 @@ impl MemoryStore {
     pub fn start_distillation_loop(self: Arc<Self>, metrics: Arc<FabricMetrics>) {
         tokio::spawn(async move {
             let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(60));
-            let llm = LocalLlmEngine::new("Llama-3-8B-Instruct-Q4");
+            let llm = crate::policy::LocalLlmEngine::new("Llama-3-8B-Instruct-Q4");
+            let dummy_measurement = crate::policy::IdentityMeasurement {
+                mrenclave: "system_distiller".to_string(),
+                mrsigner: "openhttpa".to_string(),
+                is_debug: false,
+            };
             loop {
                 ticker.tick().await;
                 tracing::info!("Running autonomous memory distillation loop");
                 // Mocking the semantic summarization of old context
-                let _ = llm.evaluate_intent("distill_context").await;
+                let _ = llm
+                    .evaluate_intent(&dummy_measurement, "system", "distill_context")
+                    .await;
                 metrics.inc_memory_distillation();
             }
         });

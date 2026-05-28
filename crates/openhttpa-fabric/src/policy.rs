@@ -87,33 +87,125 @@ impl AuthorizationPolicy for OpaPolicyEngine {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiqlConfig {
+    pub malicious_keywords: Vec<String>,
+    pub restricted_namespaces: Vec<String>,
+    pub strict_debug_mode: bool,
+    pub block_threshold: f32, // Confidence threshold
+}
+
+impl Default for AiqlConfig {
+    fn default() -> Self {
+        Self {
+            malicious_keywords: vec![
+                "exfiltrate".to_string(),
+                "malicious".to_string(),
+                "bypass".to_string(),
+                "exploit".to_string(),
+            ],
+            restricted_namespaces: vec!["system".to_string(), "admin".to_string()],
+            strict_debug_mode: true,
+            block_threshold: 0.8,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiqlResponse {
+    pub allowed: bool,
+    pub confidence: f32,
+    pub reason: String,
+}
+
 pub struct LocalLlmEngine {
     model_name: String,
+    config: AiqlConfig,
 }
 
 impl LocalLlmEngine {
     pub fn new(model_name: &str) -> Self {
         Self {
             model_name: model_name.to_owned(),
+            config: AiqlConfig::default(),
         }
     }
 
+    pub fn with_config(mut self, config: AiqlConfig) -> Self {
+        self.config = config;
+        self
+    }
+
     /// Evaluates semantic intent by prompting the embedded lightweight model.
-    pub async fn evaluate_intent(&self, action: &str) -> Result<bool, String> {
+    pub async fn evaluate_intent(
+        &self,
+        measurement: &IdentityMeasurement,
+        namespace: &str,
+        action: &str,
+    ) -> Result<AiqlResponse, String> {
         tracing::info!(
-            "Querying local TEE LLM ({}) for semantic intent of action: {}",
+            "Querying local TEE LLM ({}) for semantic intent of action: {} in namespace: {}",
             self.model_name,
-            action
+            action,
+            namespace
         );
-        // Mock LLM inference: simple keyword heuristics representing an NLP semantic check
-        let malicious_intents = ["exfiltrate", "malicious", "bypass", "exploit"];
-        for intent in malicious_intents {
-            if action.to_lowercase().contains(intent) {
-                tracing::warn!("Local LLM flagged malicious intent: {}", intent);
-                return Ok(false);
+
+        let _prompt = format!(
+            "Context: Enclave {} signed by {}. Debug: {}. Namespace: {}. Action: {}",
+            measurement.mrenclave, measurement.mrsigner, measurement.is_debug, namespace, action
+        );
+
+        // 1. Enclave State Check
+        if measurement.is_debug && self.config.strict_debug_mode {
+            let sensitive_actions = ["production", "override", "system_write"];
+            for sensitive in sensitive_actions {
+                if action.to_lowercase().contains(sensitive) {
+                    return Ok(AiqlResponse {
+                        allowed: false,
+                        confidence: 0.95,
+                        reason: format!(
+                            "Strict debug mode blocked sensitive action: {}",
+                            sensitive
+                        ),
+                    });
+                }
             }
         }
-        Ok(true)
+
+        // 2. Namespace Boundary Check
+        if self
+            .config
+            .restricted_namespaces
+            .contains(&namespace.to_string())
+            && (action.to_lowercase().contains("write") || action.to_lowercase().contains("delete"))
+        {
+            return Ok(AiqlResponse {
+                allowed: false,
+                confidence: 0.9,
+                reason: format!(
+                    "Unauthorized modification to restricted namespace: {}",
+                    namespace
+                ),
+            });
+        }
+
+        // 3. Semantic Extraction Check (Mock)
+        for intent in &self.config.malicious_keywords {
+            if action.to_lowercase().contains(intent) {
+                tracing::warn!("Local LLM flagged malicious intent: {}", intent);
+                return Ok(AiqlResponse {
+                    allowed: false,
+                    confidence: 0.85,
+                    reason: format!("Detected malicious keyword intent: {}", intent),
+                });
+            }
+        }
+
+        Ok(AiqlResponse {
+            allowed: true,
+            confidence: 0.99,
+            reason: "Action appears benign and complies with context policies.".to_string(),
+        })
     }
 }
 
@@ -136,6 +228,11 @@ impl AiqlPolicyEngine {
         self.metrics = metrics;
         self
     }
+
+    pub fn with_config(mut self, config: AiqlConfig) -> Self {
+        self.local_llm = self.local_llm.with_config(config);
+        self
+    }
 }
 
 impl Default for AiqlPolicyEngine {
@@ -148,25 +245,35 @@ impl Default for AiqlPolicyEngine {
 impl AuthorizationPolicy for AiqlPolicyEngine {
     async fn is_authorized(
         &self,
-        _measurement: &IdentityMeasurement,
-        _namespace: &str,
+        measurement: &IdentityMeasurement,
+        namespace: &str,
         action: &str,
     ) -> Result<bool, String> {
         self.metrics.inc_aiql_evaluations();
+        let cache_key = format!("{}:{}:{}", measurement.is_debug, namespace, action);
+
         {
             let mut cache = self.cache.lock().unwrap();
-            if let Some(&allowed) = cache.get(action) {
+            if let Some(&allowed) = cache.get(&cache_key) {
                 tracing::debug!("AIQL intent cache hit for action: {}", action);
                 return Ok(allowed);
             }
         }
 
         // AIQL leverages the Local LLM embedded within the TEE boundary
-        let allowed = self.local_llm.evaluate_intent(action).await?;
+        let response = self
+            .local_llm
+            .evaluate_intent(measurement, namespace, action)
+            .await?;
+        let allowed = response.allowed;
+
+        if !allowed {
+            tracing::warn!("AIQL Engine blocked action. Reason: {}", response.reason);
+        }
 
         {
             let mut cache = self.cache.lock().unwrap();
-            cache.put(action.to_string(), allowed);
+            cache.put(cache_key, allowed);
         }
 
         Ok(allowed)
