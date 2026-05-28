@@ -18,6 +18,8 @@ export RUSTUP_MAX_RETRIES := 10
 export CARGO_TERM_COLOR := always
 export OPENHTTPA_ALLOW_MOCK_HARDWARE := 1
 export CI ?= true
+export TMPDIR ?= /tmp
+
 
 # Default to skipping expensive ZK method builds and kernels to avoid toolchain dependencies.
 # This ensures stability on standard runners without full RISC Zero toolchains.
