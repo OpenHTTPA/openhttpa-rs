@@ -515,85 +515,94 @@ async fn simulate_swarm(State(_state): State<AppState>) -> impl IntoResponse {
     }
 
     struct LocalTransport;
-    #[async_trait]
-    #[async_trait]
     impl AttestTransport for LocalTransport {
-        async fn send(
+        fn send(
             &self,
             req: openhttpa_transport::connection::TransportRequest,
-        ) -> Result<
-            openhttpa_transport::connection::TransportResponse,
-            openhttpa_transport::connection::SendError,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<
+                            openhttpa_transport::connection::TransportResponse,
+                            openhttpa_transport::connection::SendError,
+                        >,
+                    > + Send
+                    + '_,
+            >,
         > {
-            if req.method.as_str() == "ATTEST" {
-                use openhttpa_core::handshake::{ClientKeyShare, ServerKeyShare};
-                use openhttpa_crypto::key_exchange::{HybridKemPair, KeyShare};
-                use openhttpa_headers::attest_headers::{AtHsRequestHeaders, AtHsResponseHeaders};
-                use openhttpa_proto::{AttestQuote, CipherSuite, ProtocolVersion, QuoteType};
+            Box::pin(async move {
+                if req.method.as_str() == "ATTEST" {
+                    use openhttpa_core::handshake::{ClientKeyShare, ServerKeyShare};
+                    use openhttpa_crypto::key_exchange::{HybridKemPair, KeyShare};
+                    use openhttpa_headers::attest_headers::{
+                        AtHsRequestHeaders, AtHsResponseHeaders,
+                    };
+                    use openhttpa_proto::{AttestQuote, CipherSuite, ProtocolVersion, QuoteType};
 
-                let req_hdrs = AtHsRequestHeaders::decode(&req.headers).map_err(|e| {
-                    openhttpa_transport::connection::SendError::Protocol(format!(
-                        "header decode: {}",
-                        e
-                    ))
-                })?;
-                let client_share: ClientKeyShare =
-                    serde_json::from_slice(&req_hdrs.key_shares_json).map_err(|e| {
+                    let req_hdrs = AtHsRequestHeaders::decode(&req.headers).map_err(|e| {
                         openhttpa_transport::connection::SendError::Protocol(format!(
-                            "json decode: {}",
+                            "header decode: {}",
                             e
                         ))
                     })?;
+                    let client_share: ClientKeyShare =
+                        serde_json::from_slice(&req_hdrs.key_shares_json).map_err(|e| {
+                            openhttpa_transport::connection::SendError::Protocol(format!(
+                                "json decode: {}",
+                                e
+                            ))
+                        })?;
 
-                let server_pair = HybridKemPair::generate().map_err(|e| {
-                    openhttpa_transport::connection::SendError::Protocol(e.to_string())
-                })?;
-                let server_pub = server_pair.public_key_share();
-                let client_ks = KeyShare {
-                    ecdhe_public: client_share.ecdhe_public,
-                    mlkem_public: client_share.mlkem_public,
-                };
-                let (_, ct) = server_pair.server_combine(&client_ks).map_err(|e| {
-                    openhttpa_transport::connection::SendError::Protocol(e.to_string())
-                })?;
+                    let server_pair = HybridKemPair::generate().map_err(|e| {
+                        openhttpa_transport::connection::SendError::Protocol(e.to_string())
+                    })?;
+                    let server_pub = server_pair.public_key_share();
+                    let client_ks = KeyShare {
+                        ecdhe_public: client_share.ecdhe_public,
+                        mlkem_public: client_share.mlkem_public,
+                    };
+                    let (_, ct) = server_pair.server_combine(&client_ks).map_err(|e| {
+                        openhttpa_transport::connection::SendError::Protocol(e.to_string())
+                    })?;
 
-                let resp_hdrs = AtHsResponseHeaders {
-                    cipher_suite: CipherSuite::X25519MlKem768Aes256GcmSha384,
-                    random: vec![0u8; 32],
-                    key_share_json: serde_json::to_vec(&ServerKeyShare {
-                        ecdhe_public: server_pub.ecdhe_public,
-                        mlkem_ciphertext: ct,
-                        mlkem_public: server_pub.mlkem_public,
-                    })
-                    .unwrap(),
-                    base_id: openhttpa_proto::AtbId::new(),
-                    version: ProtocolVersion::V2,
-                    expires_secs: 3600,
-                    quotes: vec![AttestQuote {
-                        quote_type: QuoteType::Mock,
-                        raw: bytes::Bytes::from_static(b"mock-quote"),
-                        qudd: bytes::Bytes::from_static(&[0u8; 64]),
-                        collateral_uris: vec![],
-                    }],
-                    secrets: vec![],
-                    cargo: None,
-                    ticket_resumption: None,
-                    server_signatures: vec![],
-                    zk_proof: None,
-                };
-                return Ok(openhttpa_transport::connection::TransportResponse {
+                    let resp_hdrs = AtHsResponseHeaders {
+                        cipher_suite: CipherSuite::X25519MlKem768Aes256GcmSha384,
+                        random: vec![0u8; 32],
+                        key_share_json: serde_json::to_vec(&ServerKeyShare {
+                            ecdhe_public: server_pub.ecdhe_public,
+                            mlkem_ciphertext: ct,
+                            mlkem_public: server_pub.mlkem_public,
+                        })
+                        .unwrap(),
+                        base_id: openhttpa_proto::AtbId::new(),
+                        version: ProtocolVersion::V2,
+                        expires_secs: 3600,
+                        quotes: vec![AttestQuote {
+                            quote_type: QuoteType::Mock,
+                            raw: bytes::Bytes::from_static(b"mock-quote"),
+                            qudd: bytes::Bytes::from_static(&[0u8; 64]),
+                            collateral_uris: vec![],
+                        }],
+                        secrets: vec![],
+                        cargo: None,
+                        ticket_resumption: None,
+                        server_signatures: vec![],
+                        zk_proof: None,
+                    };
+                    return Ok(openhttpa_transport::connection::TransportResponse {
+                        status: http::StatusCode::OK,
+                        headers: resp_hdrs.encode(),
+                        body: axum::body::Body::empty(),
+                        trailers: None,
+                    });
+                }
+
+                Ok(openhttpa_transport::connection::TransportResponse {
                     status: http::StatusCode::OK,
-                    headers: resp_hdrs.encode(),
-                    body: axum::body::Body::empty(),
+                    headers: http::HeaderMap::new(),
+                    body: axum::body::Body::from("{\"status\": \"ok\"}"),
                     trailers: None,
-                });
-            }
-
-            Ok(openhttpa_transport::connection::TransportResponse {
-                status: http::StatusCode::OK,
-                headers: http::HeaderMap::new(),
-                body: axum::body::Body::from("{\"status\": \"ok\"}"),
-                trailers: None,
+                })
             })
         }
     }
@@ -882,8 +891,6 @@ struct WsChatHandler {
     tx: broadcast::Sender<WsPayload>,
 }
 
-#[async_trait]
-#[async_trait]
 impl AttestWsHandler for WsChatHandler {
     async fn handle(&self, mut ws: AttestWsSession) {
         let mut rx = self.tx.subscribe();

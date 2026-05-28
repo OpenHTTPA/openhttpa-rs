@@ -33,9 +33,24 @@ mod tests {
     }
 
     #[test]
-    fn test_handshake_stub() {
-        // A2A-STUB-01: both functions now return Err until M-HTTPA is implemented.
-        assert!(handshake::execute_client_handshake().is_err());
+    fn test_handshake_execution() {
+        let agent_id = "test-agent".to_string();
+        let quote = vec![0x11, 0x22, 0x33];
+        let (req, client_pair) = handshake::execute_client_handshake(agent_id, quote).unwrap();
+        assert_eq!(req.client_identity.agent_id, "test-agent");
+
+        let server_id = "server-agent".to_string();
+        let server_quote = vec![0xaa, 0xbb, 0xcc];
+        let (resp, server_secret) =
+            handshake::execute_server_handshake(server_id, server_quote, &req).unwrap();
+        assert_eq!(resp.server_identity.agent_id, "server-agent");
+
+        let server_share: openhttpa_crypto::key_exchange::KeyShare =
+            serde_json::from_slice(&resp.server_identity.public_key).unwrap();
+        let client_secret = client_pair
+            .client_combine(&server_share, &resp.encrypted_handshake_key)
+            .unwrap();
+        assert_eq!(client_secret.as_bytes(), server_secret.as_bytes());
     }
 
     // ── new_with_client ──────────────────────────────────────────────────────

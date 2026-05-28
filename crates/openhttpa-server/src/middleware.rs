@@ -228,7 +228,6 @@ impl LocalReplayGuard {
     }
 }
 
-#[async_trait::async_trait]
 impl DistributedReplayGuard for LocalReplayGuard {
     /// Atomically check and set in a single mutex lock.
     ///
@@ -237,61 +236,82 @@ impl DistributedReplayGuard for LocalReplayGuard {
     ///
     /// MED-01: also consults the overlap (previous) filter so that nonces
     /// accepted just before a rotation are still rejected as replays.
-    async fn check_and_accept(&self, _key: &str, nonce: u64) -> Result<(), ReplayError> {
-        let nonce_bytes = nonce.to_be_bytes().to_vec();
+    fn check_and_accept(
+        &self,
+        _key: &str,
+        nonce: u64,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ReplayError>> + Send + '_>>
+    {
+        Box::pin(async move {
+            let nonce_bytes = nonce.to_be_bytes().to_vec();
 
-        // Check overlap filter first (read-only, no insertion).
-        if let Some(ref prev) = *self.prev_bloom.lock().expect("prev_bloom mutex poisoned")
-            && prev.check(&nonce_bytes)
-        {
-            return Err(ReplayError::Replay(nonce));
-        }
+            // Check overlap filter first (read-only, no insertion).
+            if let Some(ref prev) = *self.prev_bloom.lock().expect("prev_bloom mutex poisoned")
+                && prev.check(&nonce_bytes)
+            {
+                return Err(ReplayError::Replay(nonce));
+            }
 
-        let mut bloom = self.bloom.lock().expect("bloom mutex poisoned");
-        if bloom.check(&nonce_bytes) {
-            return Err(ReplayError::Replay(nonce));
-        }
-        bloom.set(&nonce_bytes);
-        drop(bloom);
-        self.count
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if self.is_near_capacity() {
-            tracing::warn!(
-                capacity = self.capacity,
-                "LocalReplayGuard approaching capacity — \
-                 false-positive rate rising; rotate the guard"
-            );
-        }
-        Ok(())
-    }
-
-    async fn check(&self, _key: &str, nonce: u64) -> Result<(), ReplayError> {
-        let nonce_bytes = nonce.to_be_bytes().to_vec();
-        if let Some(ref prev) = *self.prev_bloom.lock().expect("prev_bloom mutex poisoned")
-            && prev.check(&nonce_bytes)
-        {
-            return Err(ReplayError::Replay(nonce));
-        }
-        if self
-            .bloom
-            .lock()
-            .expect("bloom mutex poisoned")
-            .check(&nonce_bytes)
-        {
-            Err(ReplayError::Replay(nonce))
-        } else {
+            let mut bloom = self.bloom.lock().expect("bloom mutex poisoned");
+            if bloom.check(&nonce_bytes) {
+                return Err(ReplayError::Replay(nonce));
+            }
+            bloom.set(&nonce_bytes);
+            drop(bloom);
+            self.count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if self.is_near_capacity() {
+                tracing::warn!(
+                    capacity = self.capacity,
+                    "LocalReplayGuard approaching capacity — \
+                     false-positive rate rising; rotate the guard"
+                );
+            }
             Ok(())
-        }
+        })
     }
 
-    async fn accept(&self, _key: &str, nonce: u64) -> Result<(), ReplayError> {
-        self.bloom
-            .lock()
-            .expect("bloom mutex poisoned")
-            .set(&nonce.to_be_bytes().to_vec());
-        self.count
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        Ok(())
+    fn check(
+        &self,
+        _key: &str,
+        nonce: u64,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ReplayError>> + Send + '_>>
+    {
+        Box::pin(async move {
+            let nonce_bytes = nonce.to_be_bytes().to_vec();
+            if let Some(ref prev) = *self.prev_bloom.lock().expect("prev_bloom mutex poisoned")
+                && prev.check(&nonce_bytes)
+            {
+                return Err(ReplayError::Replay(nonce));
+            }
+            if self
+                .bloom
+                .lock()
+                .expect("bloom mutex poisoned")
+                .check(&nonce_bytes)
+            {
+                Err(ReplayError::Replay(nonce))
+            } else {
+                Ok(())
+            }
+        })
+    }
+
+    fn accept(
+        &self,
+        _key: &str,
+        nonce: u64,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ReplayError>> + Send + '_>>
+    {
+        Box::pin(async move {
+            self.bloom
+                .lock()
+                .expect("bloom mutex poisoned")
+                .set(&nonce.to_be_bytes().to_vec());
+            self.count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Ok(())
+        })
     }
 }
 

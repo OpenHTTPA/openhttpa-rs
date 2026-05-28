@@ -12,5 +12,5 @@ pub mod replication;
 pub mod store;
 
 pub use policy::{AiqlPolicyEngine, AuthorizationPolicy, OpaPolicyEngine};
-pub use replication::ReplicationManager;
+pub use replication::{ReplicationManager, ReplicationTransport};
 pub use store::{DataStore, KvStore, MemoryStore, Topology, VectorStore};

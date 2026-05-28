@@ -41,7 +41,7 @@ tokio           = { workspace = true }
 zeroize         = { workspace = true }
 rand            = { workspace = true }
 sha2            = "0.10"
-async-trait = "0.1.89"
+
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }

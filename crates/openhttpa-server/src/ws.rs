@@ -63,11 +63,9 @@
 //! use axum::{Router, routing::get};
 //! use openhttpa_server::{AtbRegistry, ws::{AttestWsState, attested_ws_upgrade}};
 //! use openhttpa_server::ws::{AttestWsHandler, AttestWsSession, WsPayload};
-//! use async_trait::async_trait;
 //!
 //! struct EchoHandler;
 //!
-//! #[async_trait]
 //! impl AttestWsHandler for EchoHandler {
 //!     async fn handle(&self, mut ws: AttestWsSession) {
 //!         while let Some(Ok(msg)) = ws.recv().await {
@@ -89,7 +87,6 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use axum::{
     extract::{
         State,
@@ -177,11 +174,9 @@ pub enum WsPayload {
 ///
 /// ```rust,no_run
 /// use openhttpa_server::ws::{AttestWsHandler, AttestWsSession, WsPayload};
-/// use async_trait::async_trait;
 ///
 /// struct EchoHandler;
 ///
-/// #[async_trait]
 /// impl AttestWsHandler for EchoHandler {
 ///     async fn handle(&self, mut ws: AttestWsSession) {
 ///         while let Some(Ok(msg)) = ws.recv().await {
@@ -194,13 +189,12 @@ pub enum WsPayload {
 ///     }
 /// }
 /// ```
-#[async_trait]
 pub trait AttestWsHandler: Send + Sync + 'static {
     /// Called once per WebSocket upgrade with the ready-to-use session.
     ///
     /// The method should loop, reading from `ws` until [`WsPayload::Close`] is
     /// received or an error occurs.
-    async fn handle(&self, ws: AttestWsSession);
+    fn handle(&self, ws: AttestWsSession) -> impl std::future::Future<Output = ()> + Send + '_;
 }
 
 // ─── Shared state ─────────────────────────────────────────────────────────────
@@ -243,12 +237,10 @@ impl<H: AttestWsHandler> AttestWsState<H> {
 /// ```rust,no_run
 /// use axum::{Router, routing::get};
 /// use openhttpa_server::ws::{attested_ws_upgrade, AttestWsState, AttestWsHandler, AttestWsSession, WsPayload};
-/// use async_trait::async_trait;
 /// use std::sync::Arc;
 /// use openhttpa_server::AtbRegistry;
 ///
 /// struct EchoHandler;
-/// #[async_trait]
 /// impl AttestWsHandler for EchoHandler {
 ///     async fn handle(&self, mut ws: AttestWsSession) {}
 /// }

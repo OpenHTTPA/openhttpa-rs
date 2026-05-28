@@ -199,7 +199,6 @@ Provides attested, encrypted WebSocket upgrading.
 Defines the callback handler for accepted WebSockets.
 
 ```rust
-#[async_trait]
 pub trait AttestWsHandler: Send + Sync + 'static {
     async fn handle(&self, ws: AttestWsSession);
 }

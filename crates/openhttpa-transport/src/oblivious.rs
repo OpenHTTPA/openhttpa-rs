@@ -6,7 +6,6 @@
 //! Based on RFC 9458 (Oblivious HTTP).
 
 use aes_gcm::{Aes256Gcm, KeyInit, aead::Aead as _};
-use async_trait::async_trait;
 use hpke::{Deserializable, OpModeR, OpModeS, Serializable, aead::AeadCtxR, kem::Kem as KemTrait};
 use rand::thread_rng;
 use std::sync::Arc;
@@ -50,85 +49,93 @@ impl ObliviousClient {
     }
 }
 
-#[async_trait]
 impl AttestTransport for ObliviousClient {
-    async fn send(&self, req: TransportRequest) -> Result<TransportResponse, SendError> {
-        let (encap, mut sender_ctx) = {
-            let mut rng = thread_rng();
+    fn send(
+        &self,
+        req: TransportRequest,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<TransportResponse, SendError>> + Send + '_>,
+    > {
+        Box::pin(async move {
+            let (encap, mut sender_ctx) = {
+                let mut rng = thread_rng();
 
-            // 1. HPKE Setup
-            let pk_server = <Kem as KemTrait>::PublicKey::from_bytes(&self.server_public_key)
-                .map_err(|_| SendError::Connection("invalid server public key".to_owned()))?;
+                // 1. HPKE Setup
+                let pk_server = <Kem as KemTrait>::PublicKey::from_bytes(&self.server_public_key)
+                    .map_err(|_| {
+                    SendError::Connection("invalid server public key".to_owned())
+                })?;
 
-            hpke::setup_sender::<Aead, Kdf, Kem, _>(
-                &OpModeS::Base,
-                &pk_server,
-                b"openhttpa-oblivious",
-                &mut rng,
-            )
-            .map_err(|e| SendError::Connection(format!("HPKE setup failed: {e:?}")))?
-        };
+                hpke::setup_sender::<Aead, Kdf, Kem, _>(
+                    &OpModeS::Base,
+                    &pk_server,
+                    b"openhttpa-oblivious",
+                    &mut rng,
+                )
+                .map_err(|e| SendError::Connection(format!("HPKE setup failed: {e:?}")))?
+            };
 
-        // 2. Encapsulate Request
-        let TransportRequest {
-            method,
-            uri,
-            mut headers,
-            body,
-            trailers,
-        } = req;
+            // 2. Encapsulate Request
+            let TransportRequest {
+                method,
+                uri,
+                mut headers,
+                body,
+                trailers,
+            } = req;
 
-        let body_bytes = axum::body::to_bytes(body, 100 * 1024 * 1024)
-            .await
-            .map_err(|e| SendError::Protocol(format!("body collect error: {e}")))?;
+            let body_bytes = axum::body::to_bytes(body, 100 * 1024 * 1024)
+                .await
+                .map_err(|e| SendError::Protocol(format!("body collect error: {e}")))?;
 
-        let ciphertext = sender_ctx
-            .seal(&body_bytes, b"")
-            .map_err(|e| SendError::Connection(format!("HPKE seal failed: {e:?}")))?;
+            let ciphertext = sender_ctx
+                .seal(&body_bytes, b"")
+                .map_err(|e| SendError::Connection(format!("HPKE seal failed: {e:?}")))?;
 
-        let mut enc_body = Vec::with_capacity(1 + encap.to_bytes().len() + ciphertext.len());
-        enc_body.push(self.key_id);
-        enc_body.extend_from_slice(&encap.to_bytes());
-        enc_body.extend_from_slice(&ciphertext);
+            let mut enc_body = Vec::with_capacity(1 + encap.to_bytes().len() + ciphertext.len());
+            enc_body.push(self.key_id);
+            enc_body.extend_from_slice(&encap.to_bytes());
+            enc_body.extend_from_slice(&ciphertext);
 
-        headers.insert(
-            http::header::CONTENT_TYPE,
-            "message/oblivious-http".parse().unwrap(),
-        );
+            headers.insert(
+                http::header::CONTENT_TYPE,
+                "message/oblivious-http".parse().unwrap(),
+            );
 
-        let enc_req = TransportRequest {
-            method,
-            uri,
-            headers,
-            body: axum::body::Body::from(enc_body),
-            trailers,
-        };
+            let enc_req = TransportRequest {
+                method,
+                uri,
+                headers,
+                body: axum::body::Body::from(enc_body),
+                trailers,
+            };
 
-        // 3. Send via inner transport
-        let resp = self.inner.send(enc_req).await?;
+            // 3. Send via inner transport
+            let resp = self.inner.send(enc_req).await?;
 
-        // 4. Decapsulate Response using exported key
-        let mut response_key = [0u8; 32];
-        sender_ctx
-            .export(b"openhttpa-oblivious-resp", &mut response_key)
-            .map_err(|e| SendError::Connection(format!("HPKE export failed: {e:?}")))?;
+            // 4. Decapsulate Response using exported key
+            let mut response_key = [0u8; 32];
+            sender_ctx
+                .export(b"openhttpa-oblivious-resp", &mut response_key)
+                .map_err(|e| SendError::Connection(format!("HPKE export failed: {e:?}")))?;
 
-        let resp_body = axum::body::to_bytes(resp.body, 100 * 1024 * 1024)
-            .await
-            .map_err(|e| SendError::Protocol(format!("resp body collect error: {e}")))?;
+            let resp_body = axum::body::to_bytes(resp.body, 100 * 1024 * 1024)
+                .await
+                .map_err(|e| SendError::Protocol(format!("resp body collect error: {e}")))?;
 
-        let cipher = Aes256Gcm::new_from_slice(&response_key)
-            .map_err(|_| SendError::Connection("AES init failed".to_owned()))?;
-        let nonce = aes_gcm::Nonce::from_slice(&[0u8; 12]);
-        let plaintext = cipher
-            .decrypt(nonce, resp_body.as_ref())
-            .map_err(|e| SendError::Connection(format!("AEAD open failed: {e:?}")))?;
+            let cipher = Aes256Gcm::new_from_slice(&response_key)
+                .map_err(|_| SendError::Connection("AES init failed".to_owned()))?;
+            let nonce = aes_gcm::Nonce::from_slice(&[0u8; 12]);
+            let plaintext = cipher
+                .decrypt(nonce, resp_body.as_ref())
+                .map_err(|e| SendError::Connection(format!("AEAD open failed: {e:?}")))?;
 
-        Ok(TransportResponse {
-            status: resp.status,
-            headers: resp.headers,
-            body: axum::body::Body::from(plaintext),
-            trailers: resp.trailers,
+            Ok(TransportResponse {
+                status: resp.status,
+                headers: resp.headers,
+                body: axum::body::Body::from(plaintext),
+                trailers: resp.trailers,
+            })
         })
     }
 }
@@ -201,7 +208,6 @@ impl ObliviousServer {
 mod tests {
     use super::*;
     use crate::connection::{AttestTransport, TransportRequest, TransportResponse};
-    use async_trait::async_trait;
     use http::{Method, StatusCode};
     use std::sync::Arc;
 
@@ -209,21 +215,27 @@ mod tests {
         server_secret_key: <Kem as KemTrait>::PrivateKey,
     }
 
-    #[async_trait]
     impl AttestTransport for MockTransport {
-        async fn send(&self, req: TransportRequest) -> Result<TransportResponse, SendError> {
-            let body_bytes = axum::body::to_bytes(req.body, 1024 * 1024).await.unwrap();
-            let server = ObliviousServer::new(self.server_secret_key.clone());
-            let (plaintext, ctx) = server.decapsulate(&body_bytes).unwrap();
-            assert_eq!(plaintext, b"hello server");
+        fn send(
+            &self,
+            req: TransportRequest,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<TransportResponse, SendError>> + Send + '_>,
+        > {
+            Box::pin(async move {
+                let body_bytes = axum::body::to_bytes(req.body, 1024 * 1024).await.unwrap();
+                let server = ObliviousServer::new(self.server_secret_key.clone());
+                let (plaintext, ctx) = server.decapsulate(&body_bytes).unwrap();
+                assert_eq!(plaintext, b"hello server");
 
-            let resp_bytes = server.encapsulate_response(&ctx, b"hello client").unwrap();
+                let resp_bytes = server.encapsulate_response(&ctx, b"hello client").unwrap();
 
-            Ok(TransportResponse {
-                status: StatusCode::OK,
-                headers: http::HeaderMap::default(),
-                body: axum::body::Body::from(resp_bytes),
-                trailers: None,
+                Ok(TransportResponse {
+                    status: StatusCode::OK,
+                    headers: http::HeaderMap::default(),
+                    body: axum::body::Body::from(resp_bytes),
+                    trailers: None,
+                })
             })
         }
     }

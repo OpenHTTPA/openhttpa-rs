@@ -70,6 +70,9 @@ documentation = "https://docs.rs/openhttpa-core"
 categories  = ["cryptography", "network-programming", "development-tools"]
 keywords    = ["http", "attestation", "tee", "pqc", "security"]
 
+[workspace.lints.clippy]
+async_fn_in_trait = "allow"
+
 [workspace.dependencies]
 # ── async runtime ──────────────────────────────────────────────────────────────
 tokio            = { version = "1", features = ["full"] }
@@ -163,6 +166,7 @@ openhttpa-client     = { path = "crates/openhttpa-client", version = "0.1.1" }
 openhttpa-llm        = { path = "crates/openhttpa-llm", version = "0.1.1" }
 openhttpa-mcp        = { path = "crates/openhttpa-mcp", version = "0.1.1" }
 openhttpa-mesh       = { path = "crates/openhttpa-mesh", version = "0.1.1" }
+openhttpa-fabric     = { path = "crates/openhttpa-fabric", version = "0.1.1" }
 openhttpa-a2a         = { path = "crates/openhttpa-a2a", version = "0.1.1" }
 openhttpa-zk         = { path = "crates/openhttpa-zk", version = "0.1.1" }
 openhttpa-oracle     = { path = "crates/openhttpa-oracle", version = "0.1.1" }

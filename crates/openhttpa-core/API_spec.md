@@ -245,7 +245,6 @@ Maintains a bit-packed array mapping to seen nonces. A default window size of 64
 Defines the interface for multi-node deployments requiring atomic, TOCTOU-safe checks (e.g., via Redis).
 
 ```rust
-#[async_trait]
 pub trait DistributedReplayGuard: Send + Sync {
     async fn check_and_accept(&self, key: &str, nonce: u64) -> Result<(), ReplayError>;
 

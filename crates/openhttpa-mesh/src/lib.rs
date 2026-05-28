@@ -52,7 +52,6 @@ pub enum MeshError {
 mod tests {
     use super::*;
     use crate::registry::MockRegistry;
-    use async_trait::async_trait;
     use openhttpa_attestation::verifier::{QuoteVerifier, VerificationError, VerificationResult};
     use openhttpa_proto::AttestQuote;
     use openhttpa_tee::mock::MockTeeProvider;
@@ -90,70 +89,78 @@ mod tests {
     }
 
     struct MockTransport;
-    #[async_trait]
     impl openhttpa_transport::connection::AttestTransport for MockTransport {
-        async fn send(
+        fn send(
             &self,
             req: openhttpa_transport::connection::TransportRequest,
-        ) -> Result<
-            openhttpa_transport::connection::TransportResponse,
-            openhttpa_transport::connection::SendError,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<
+                            openhttpa_transport::connection::TransportResponse,
+                            openhttpa_transport::connection::SendError,
+                        >,
+                    > + Send
+                    + '_,
+            >,
         > {
-            // Mock ATTEST response
-            if req.method.as_str() == "ATTEST" {
-                let req_hdrs =
-                    openhttpa_headers::attest_headers::AtHsRequestHeaders::decode(&req.headers)
-                        .unwrap();
-                let client_share: openhttpa_core::handshake::ClientKeyShare =
-                    serde_json::from_slice(&req_hdrs.key_shares_json).unwrap();
+            Box::pin(async move {
+                // Mock ATTEST response
+                if req.method.as_str() == "ATTEST" {
+                    let req_hdrs =
+                        openhttpa_headers::attest_headers::AtHsRequestHeaders::decode(&req.headers)
+                            .unwrap();
+                    let client_share: openhttpa_core::handshake::ClientKeyShare =
+                        serde_json::from_slice(&req_hdrs.key_shares_json).unwrap();
 
-                let server_pair =
-                    openhttpa_crypto::key_exchange::HybridKemPair::generate().unwrap();
-                let server_pub = server_pair.public_key_share();
-                let client_ks = openhttpa_crypto::key_exchange::KeyShare {
-                    ecdhe_public: client_share.ecdhe_public,
-                    mlkem_public: client_share.mlkem_public,
-                };
-                let (_, ct) = server_pair.server_combine(&client_ks).unwrap();
+                    let server_pair =
+                        openhttpa_crypto::key_exchange::HybridKemPair::generate().unwrap();
+                    let server_pub = server_pair.public_key_share();
+                    let client_ks = openhttpa_crypto::key_exchange::KeyShare {
+                        ecdhe_public: client_share.ecdhe_public,
+                        mlkem_public: client_share.mlkem_public,
+                    };
+                    let (_, ct) = server_pair.server_combine(&client_ks).unwrap();
 
-                let resp_hdrs = openhttpa_headers::attest_headers::AtHsResponseHeaders {
-                    cipher_suite: openhttpa_proto::CipherSuite::X25519MlKem768Aes256GcmSha384,
-                    random: vec![0u8; 32],
-                    key_share_json: serde_json::to_vec(
-                        &openhttpa_core::handshake::ServerKeyShare {
-                            ecdhe_public: server_pub.ecdhe_public,
-                            mlkem_ciphertext: ct,
-                            mlkem_public: server_pub.mlkem_public,
-                        },
-                    )
-                    .unwrap(),
-                    base_id: openhttpa_proto::AtbId::new(),
-                    version: openhttpa_proto::ProtocolVersion::V2,
-                    expires_secs: 3600,
-                    quotes: vec![openhttpa_proto::AttestQuote {
-                        collateral_uris: vec![],
-                        quote_type: openhttpa_proto::QuoteType::Mock,
-                        raw: bytes::Bytes::from_static(b"mock-quote"),
-                        qudd: bytes::Bytes::from_static(&[0u8; 64]),
-                    }],
-                    secrets: vec![],
-                    cargo: None,
-                    ticket_resumption: None,
-                    server_signatures: vec![],
-                    zk_proof: None,
-                };
-                return Ok(openhttpa_transport::connection::TransportResponse {
+                    let resp_hdrs = openhttpa_headers::attest_headers::AtHsResponseHeaders {
+                        cipher_suite: openhttpa_proto::CipherSuite::X25519MlKem768Aes256GcmSha384,
+                        random: vec![0u8; 32],
+                        key_share_json: serde_json::to_vec(
+                            &openhttpa_core::handshake::ServerKeyShare {
+                                ecdhe_public: server_pub.ecdhe_public,
+                                mlkem_ciphertext: ct,
+                                mlkem_public: server_pub.mlkem_public,
+                            },
+                        )
+                        .unwrap(),
+                        base_id: openhttpa_proto::AtbId::new(),
+                        version: openhttpa_proto::ProtocolVersion::V2,
+                        expires_secs: 3600,
+                        quotes: vec![openhttpa_proto::AttestQuote {
+                            collateral_uris: vec![],
+                            quote_type: openhttpa_proto::QuoteType::Mock,
+                            raw: bytes::Bytes::from_static(b"mock-quote"),
+                            qudd: bytes::Bytes::from_static(&[0u8; 64]),
+                        }],
+                        secrets: vec![],
+                        cargo: None,
+                        ticket_resumption: None,
+                        server_signatures: vec![],
+                        zk_proof: None,
+                    };
+                    return Ok(openhttpa_transport::connection::TransportResponse {
+                        status: http::StatusCode::OK,
+                        headers: resp_hdrs.encode(),
+                        body: axum::body::Body::empty(),
+                        trailers: None,
+                    });
+                }
+                Ok(openhttpa_transport::connection::TransportResponse {
                     status: http::StatusCode::OK,
-                    headers: resp_hdrs.encode(),
-                    body: axum::body::Body::empty(),
+                    headers: http::HeaderMap::new(),
+                    body: axum::body::Body::from("{\"result\": \"success\"}"),
                     trailers: None,
-                });
-            }
-            Ok(openhttpa_transport::connection::TransportResponse {
-                status: http::StatusCode::OK,
-                headers: http::HeaderMap::new(),
-                body: axum::body::Body::from("{\"result\": \"success\"}"),
-                trailers: None,
+                })
             })
         }
     }

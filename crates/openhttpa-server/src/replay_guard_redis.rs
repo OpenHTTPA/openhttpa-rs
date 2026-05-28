@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
-use async_trait::async_trait;
 use openhttpa_core::replay_guard::{DistributedReplayGuard, ReplayError};
 use redis::AsyncCommands;
 use std::time::Duration;
@@ -49,56 +48,77 @@ impl RedisReplayGuard {
     }
 }
 
-#[async_trait]
 impl DistributedReplayGuard for RedisReplayGuard {
     /// Atomically check and record `nonce` in a single `SET NX PX` round-trip.
     ///
     /// This is the only method that should be called in hot-path request
     /// processing. It eliminates the TOCTOU race of a separate check + accept
     /// pair by delegating the entire decision to a Redis atomic command.
-    async fn check_and_accept(&self, key: &str, nonce: u64) -> Result<(), ReplayError> {
-        let start = std::time::Instant::now();
-        let inserted = self.set_nx(key, nonce).await?;
-        // [Security Mitigation: Constant-Time Delay]
-        // Pad to a minimum latency so response timing does not reveal whether
-        // the key pre-existed (i.e. this was a replay).
-        let target = Duration::from_millis(2);
-        if let Some(delay) = target.checked_sub(start.elapsed()) {
-            tokio::time::sleep(delay).await;
-        }
-        if inserted {
-            Ok(())
-        } else {
-            Err(ReplayError::Replay(nonce))
-        }
+    fn check_and_accept(
+        &self,
+        key: &str,
+        nonce: u64,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ReplayError>> + Send + '_>>
+    {
+        let key = key.to_string();
+        Box::pin(async move {
+            let start = std::time::Instant::now();
+            let inserted = self.set_nx(&key, nonce).await?;
+            // [Security Mitigation: Constant-Time Delay]
+            // Pad to a minimum latency so response timing does not reveal whether
+            // the key pre-existed (i.e. this was a replay).
+            let target = Duration::from_millis(2);
+            if let Some(delay) = target.checked_sub(start.elapsed()) {
+                tokio::time::sleep(delay).await;
+            }
+            if inserted {
+                Ok(())
+            } else {
+                Err(ReplayError::Replay(nonce))
+            }
+        })
     }
 
     /// Read-only existence probe. Does **not** commit the nonce.
     ///
     /// Not suitable for request authentication — use `check_and_accept` instead.
-    async fn check(&self, key: &str, nonce: u64) -> Result<(), ReplayError> {
-        let mut conn = self
-            .client
-            .get_multiplexed_async_connection()
-            .await
-            .map_err(|e| ReplayError::StorageError(e.to_string()))?;
-        let redis_key = format!("replay:{key}:{nonce}");
-        let exists: bool = conn
-            .exists(redis_key)
-            .await
-            .map_err(|e| ReplayError::StorageError(e.to_string()))?;
-        if exists {
-            Err(ReplayError::Replay(nonce))
-        } else {
-            Ok(())
-        }
+    fn check(
+        &self,
+        key: &str,
+        nonce: u64,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ReplayError>> + Send + '_>>
+    {
+        let key = key.to_string();
+        Box::pin(async move {
+            let mut conn = self
+                .client
+                .get_multiplexed_async_connection()
+                .await
+                .map_err(|e| ReplayError::StorageError(e.to_string()))?;
+            let redis_key = format!("replay:{key}:{nonce}");
+            let exists: bool = conn
+                .exists(redis_key)
+                .await
+                .map_err(|e| ReplayError::StorageError(e.to_string()))?;
+            if exists {
+                Err(ReplayError::Replay(nonce))
+            } else {
+                Ok(())
+            }
+        })
     }
 
     /// Unconditionally record `nonce` (no prior existence check).
     ///
     /// Not suitable for request authentication — use `check_and_accept` instead.
-    async fn accept(&self, key: &str, nonce: u64) -> Result<(), ReplayError> {
-        self.set_nx(key, nonce).await.map(|_| ())
+    fn accept(
+        &self,
+        key: &str,
+        nonce: u64,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ReplayError>> + Send + '_>>
+    {
+        let key = key.to_string();
+        Box::pin(async move { self.set_nx(&key, nonce).await.map(|_| ()) })
     }
 }
 

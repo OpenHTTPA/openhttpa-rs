@@ -11,7 +11,6 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use http::Uri;
 use quinn::{ClientConfig, Endpoint};
 use tokio::sync::RwLock;
@@ -104,7 +103,6 @@ impl H3Transport {
     }
 }
 
-#[async_trait]
 impl AttestTransport for H3Transport {
     #[instrument(skip_all, fields(uri = %self.base_uri))]
     async fn send(&self, request: TransportRequest) -> Result<TransportResponse, SendError> {

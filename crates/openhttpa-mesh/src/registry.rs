@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
-use async_trait::async_trait;
 use dashmap::DashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -9,16 +8,31 @@ use uuid::Uuid;
 use crate::AgentMetadata;
 
 /// Trait for an agent registry that tracks attested peers.
-#[async_trait]
 pub trait AgentRegistry: Send + Sync {
     /// Register an agent in the mesh.
-    async fn register(&self, metadata: AgentMetadata) -> Result<(), String>;
+    fn register(
+        &self,
+        metadata: AgentMetadata,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + '_>>;
     /// Get an agent's metadata by ID.
-    async fn get_agent(&self, id: Uuid) -> Result<Option<AgentMetadata>, String>;
+    fn get_agent(
+        &self,
+        id: Uuid,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Option<AgentMetadata>, String>> + Send + '_>,
+    >;
     /// Search for agents with specific capabilities.
-    async fn search(&self, capability: &str) -> Result<Vec<AgentMetadata>, String>;
+    fn search(
+        &self,
+        capability: &str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Vec<AgentMetadata>, String>> + Send + '_>,
+    >;
     /// Report presence (heartbeat) to keep the registration active.
-    async fn heartbeat(&self, id: Uuid) -> Result<(), String>;
+    fn heartbeat(
+        &self,
+        id: Uuid,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + '_>>;
 }
 
 /// A simple in-memory mock registry for testing.
@@ -41,29 +55,51 @@ impl Default for MockRegistry {
     }
 }
 
-#[async_trait]
 impl AgentRegistry for MockRegistry {
-    async fn register(&self, metadata: AgentMetadata) -> Result<(), String> {
-        self.agents.insert(metadata.id, metadata);
-        Ok(())
+    fn register(
+        &self,
+        metadata: AgentMetadata,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + '_>> {
+        Box::pin(async move {
+            self.agents.insert(metadata.id, metadata);
+            Ok(())
+        })
     }
 
-    async fn get_agent(&self, id: Uuid) -> Result<Option<AgentMetadata>, String> {
-        Ok(self.agents.get(&id).map(|a| a.clone()))
+    fn get_agent(
+        &self,
+        id: Uuid,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Option<AgentMetadata>, String>> + Send + '_>,
+    > {
+        Box::pin(async move { Ok(self.agents.get(&id).map(|a| a.clone())) })
     }
 
-    async fn search(&self, capability: &str) -> Result<Vec<AgentMetadata>, String> {
-        Ok(self
-            .agents
-            .iter()
-            .filter(|a| a.capabilities.contains(&capability.to_string()))
-            .map(|a| a.clone())
-            .collect())
+    fn search(
+        &self,
+        capability: &str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Vec<AgentMetadata>, String>> + Send + '_>,
+    > {
+        let capability = capability.to_owned();
+        Box::pin(async move {
+            Ok(self
+                .agents
+                .iter()
+                .filter(|a| a.capabilities.contains(&capability))
+                .map(|a| a.clone())
+                .collect())
+        })
     }
 
-    async fn heartbeat(&self, _id: Uuid) -> Result<(), String> {
-        // Mock registry doesn't implement TTL for now
-        Ok(())
+    fn heartbeat(
+        &self,
+        _id: Uuid,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + '_>> {
+        Box::pin(async move {
+            // Mock registry doesn't implement TTL for now
+            Ok(())
+        })
     }
 }
 
@@ -111,39 +147,63 @@ impl ShardedRegistry {
     }
 }
 
-#[async_trait]
 impl AgentRegistry for ShardedRegistry {
-    async fn register(&self, metadata: AgentMetadata) -> Result<(), String> {
-        let shard = self.get_shard(metadata.id);
-        shard.insert(metadata.id, (metadata, std::time::Instant::now()));
-        Ok(())
+    fn register(
+        &self,
+        metadata: AgentMetadata,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + '_>> {
+        Box::pin(async move {
+            let shard = self.get_shard(metadata.id);
+            shard.insert(metadata.id, (metadata, std::time::Instant::now()));
+            Ok(())
+        })
     }
 
-    async fn get_agent(&self, id: Uuid) -> Result<Option<AgentMetadata>, String> {
-        let shard = self.get_shard(id);
-        Ok(shard.get(&id).map(|pair| pair.0.clone()))
+    fn get_agent(
+        &self,
+        id: Uuid,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Option<AgentMetadata>, String>> + Send + '_>,
+    > {
+        Box::pin(async move {
+            let shard = self.get_shard(id);
+            Ok(shard.get(&id).map(|pair| pair.0.clone()))
+        })
     }
 
-    async fn search(&self, capability: &str) -> Result<Vec<AgentMetadata>, String> {
-        let mut results = Vec::new();
-        for shard in &self.shards {
-            for pair in shard {
-                if pair.0.capabilities.contains(&capability.to_string()) {
-                    results.push(pair.0.clone());
+    fn search(
+        &self,
+        capability: &str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Vec<AgentMetadata>, String>> + Send + '_>,
+    > {
+        let capability = capability.to_owned();
+        Box::pin(async move {
+            let mut results = Vec::new();
+            for shard in &self.shards {
+                for pair in shard {
+                    if pair.0.capabilities.contains(&capability) {
+                        results.push(pair.0.clone());
+                    }
                 }
             }
-        }
-        Ok(results)
+            Ok(results)
+        })
     }
 
-    async fn heartbeat(&self, id: Uuid) -> Result<(), String> {
-        let shard = self.get_shard(id);
-        if let Some(mut pair) = shard.get_mut(&id) {
-            pair.1 = std::time::Instant::now();
-            Ok(())
-        } else {
-            Err("Agent not found".to_string())
-        }
+    fn heartbeat(
+        &self,
+        id: Uuid,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + '_>> {
+        Box::pin(async move {
+            let shard = self.get_shard(id);
+            if let Some(mut pair) = shard.get_mut(&id) {
+                pair.1 = std::time::Instant::now();
+                Ok(())
+            } else {
+                Err("Agent not found".to_string())
+            }
+        })
     }
 }
 

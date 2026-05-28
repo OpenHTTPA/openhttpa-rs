@@ -3585,7 +3585,6 @@ checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 name = "openhttpa-a2a"
 version = "0.1.1"
 dependencies = [
- "async-trait",
  "axum",
  "bytes",
  "dashmap",
@@ -3598,7 +3597,6 @@ dependencies = [
  "openhttpa-headers",
  "openhttpa-mcp",
  "openhttpa-proto",
- "openhttpa-server",
  "openhttpa-tee",
  "openhttpa-transport",
  "serde",
@@ -3698,7 +3696,6 @@ dependencies = [
 name = "openhttpa-client"
 version = "0.1.1"
 dependencies = [
- "async-trait",
  "axum",
  "bytes",
  "chrono",
@@ -3727,7 +3724,6 @@ dependencies = [
 name = "openhttpa-core"
 version = "0.1.1"
 dependencies = [
- "async-trait",
  "bytes",
  "futures",
  "http",
@@ -3777,7 +3773,6 @@ dependencies = [
 name = "openhttpa-fabric"
 version = "0.1.1"
 dependencies = [
- "async-trait",
  "hex 0.4.3",
  "lru",
  "openhttpa-a2a",
@@ -3847,7 +3842,6 @@ dependencies = [
 name = "openhttpa-llm"
 version = "0.1.1"
 dependencies = [
- "async-trait",
  "axum",
  "bytes",
  "dashmap",
@@ -3880,7 +3874,6 @@ dependencies = [
  "http",
  "openhttpa-client",
  "openhttpa-core",
- "openhttpa-server",
  "openhttpa-tee",
  "serde",
  "serde_json",
@@ -3894,7 +3887,6 @@ dependencies = [
 name = "openhttpa-mesh"
 version = "0.1.1"
 dependencies = [
- "async-trait",
  "axum",
  "bytes",
  "dashmap",
@@ -4027,7 +4019,6 @@ dependencies = [
 name = "openhttpa-server"
 version = "0.1.1"
 dependencies = [
- "async-trait",
  "axum",
  "base64 0.22.1",
  "bloomfilter",
@@ -4038,12 +4029,17 @@ dependencies = [
  "hex 0.4.3",
  "hmac",
  "http",
+ "openhttpa-a2a",
  "openhttpa-attestation",
+ "openhttpa-client",
  "openhttpa-core",
  "openhttpa-crypto",
+ "openhttpa-fabric",
  "openhttpa-headers",
+ "openhttpa-mesh",
  "openhttpa-proto",
  "openhttpa-tee",
+ "openhttpa-transport",
  "pin-project",
  "rand 0.8.6",
  "redis",
@@ -4089,7 +4085,6 @@ name = "openhttpa-transport"
 version = "0.1.1"
 dependencies = [
  "aes-gcm",
- "async-trait",
  "axum",
  "bytes",
  "h2",

@@ -306,6 +306,10 @@ impl MemoryStore {
         }
     }
 
+    pub fn new_with_backend(topology: Topology, backend: Arc<dyn DataStore>) -> Self {
+        Self { topology, backend }
+    }
+
     pub fn get(&self, namespace: &str, key: &str) -> Option<Vec<u8>> {
         self.backend.get(namespace, key)
     }

@@ -18,14 +18,48 @@ pub struct SyncPayload {
     pub version: VersionVector,
 }
 
+pub trait ReplicationTransport: Send + Sync {
+    fn send_sync<'a>(
+        &'a self,
+        target_url: &'a str,
+        payload: String,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + 'a>>;
+}
+
+impl ReplicationTransport for A2AAgent {
+    fn send_sync<'a>(
+        &'a self,
+        target_url: &'a str,
+        payload: String,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + 'a>> {
+        Box::pin(async move {
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
+            let msg = A2AMessage {
+                sender_id: self.agent_id.clone(),
+                receiver_id: target_url.to_owned(),
+                message_type: "fabric_sync".to_string(),
+                payload: serde_json::Value::String(payload),
+                timestamp,
+            };
+
+            // Send over the attested, PQC-encrypted tunnel
+            self.send_message(target_url, msg).await
+        })
+    }
+}
+
 pub struct ReplicationManager {
     store: MemoryStore,
-    agent: Arc<A2AAgent>,
+    transport: Arc<dyn ReplicationTransport>,
 }
 
 impl ReplicationManager {
-    pub fn new(store: MemoryStore, agent: Arc<A2AAgent>) -> Self {
-        Self { store, agent }
+    pub fn new(store: MemoryStore, transport: Arc<dyn ReplicationTransport>) -> Self {
+        Self { store, transport }
     }
 
     /// Process an incoming replication payload.
@@ -52,21 +86,7 @@ impl ReplicationManager {
         let content = serde_json::to_string(&payload)
             .map_err(|e| format!("Failed to serialize sync payload: {}", e))?;
 
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        let msg = A2AMessage {
-            sender_id: self.agent.agent_id.clone(),
-            receiver_id: target_url.to_owned(),
-            message_type: "fabric_sync".to_string(),
-            payload: serde_json::Value::String(content),
-            timestamp,
-        };
-
-        // Send over the attested, PQC-encrypted tunnel
-        self.agent.send_message(target_url, msg).await
+        self.transport.send_sync(target_url, content).await
     }
 
     /// Epidemic gossip loop: periodically select a random peer and send local updates.

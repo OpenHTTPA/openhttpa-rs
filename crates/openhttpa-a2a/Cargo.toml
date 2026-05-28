@@ -16,9 +16,9 @@ description = "High-level Agent-to-Agent secure messaging over OpenHTTPA"
 [dependencies]
 openhttpa-core = { workspace = true }
 openhttpa-client = { workspace = true }
-openhttpa-server = { workspace = true }
 openhttpa-proto = { workspace = true }
 openhttpa-tee = { workspace = true }
+openhttpa-crypto = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -38,4 +38,4 @@ openhttpa-transport = { workspace = true }
 openhttpa-crypto = { workspace = true }
 hex = { workspace = true }
 dashmap = { workspace = true }
-async-trait = "0.1.89"
+

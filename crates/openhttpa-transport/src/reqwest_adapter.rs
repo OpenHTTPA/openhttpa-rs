@@ -3,7 +3,6 @@
 
 //! HTTP transport adapter using reqwest.
 
-use async_trait::async_trait;
 use tracing::debug;
 
 use crate::connection::{AttestTransport, SendError, TransportRequest, TransportResponse};
@@ -36,42 +35,48 @@ impl ReqwestTransport {
     }
 }
 
-#[async_trait]
 impl AttestTransport for ReqwestTransport {
-    async fn send(&self, request: TransportRequest) -> Result<TransportResponse, SendError> {
-        debug!(
-            "ReqwestTransport::send — {} {}",
-            request.method, request.uri
-        );
+    fn send(
+        &self,
+        request: TransportRequest,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<TransportResponse, SendError>> + Send + '_>,
+    > {
+        Box::pin(async move {
+            debug!(
+                "ReqwestTransport::send — {} {}",
+                request.method, request.uri
+            );
 
-        let mut req_builder = self
-            .client
-            .request(request.method, request.uri.to_string())
-            .headers(request.headers)
-            .body(reqwest::Body::wrap_stream(request.body.into_data_stream()));
+            let mut req_builder = self
+                .client
+                .request(request.method, request.uri.to_string())
+                .headers(request.headers)
+                .body(reqwest::Body::wrap_stream(request.body.into_data_stream()));
 
-        if let Some(trailers) = request.trailers {
-            for (name, value) in trailers {
-                if let Some(name) = name {
-                    req_builder = req_builder.header(name, value);
+            if let Some(trailers) = request.trailers {
+                for (name, value) in trailers {
+                    if let Some(name) = name {
+                        req_builder = req_builder.header(name, value);
+                    }
                 }
             }
-        }
 
-        let resp = req_builder
-            .send()
-            .await
-            .map_err(|e| SendError::Connection(e.to_string()))?;
+            let resp = req_builder
+                .send()
+                .await
+                .map_err(|e| SendError::Connection(e.to_string()))?;
 
-        let status = resp.status();
-        let headers = resp.headers().clone();
-        let body = axum::body::Body::from_stream(resp.bytes_stream());
+            let status = resp.status();
+            let headers = resp.headers().clone();
+            let body = axum::body::Body::from_stream(resp.bytes_stream());
 
-        Ok(TransportResponse {
-            status,
-            headers,
-            body,
-            trailers: None,
+            Ok(TransportResponse {
+                status,
+                headers,
+                body,
+                trailers: None,
+            })
         })
     }
 }

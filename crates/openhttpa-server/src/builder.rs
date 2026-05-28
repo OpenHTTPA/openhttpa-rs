@@ -21,6 +21,12 @@ pub struct OpenHttpaServerBuilder {
     challenge_key: ChallengeKey,
     identity_key: Option<MlDsaKeyPair>,
     rate_limit: Option<RateLimitLayer>,
+    fabric_config: Option<(
+        String,
+        Vec<String>,
+        String,
+        openhttpa_fabric::store::Topology,
+    )>,
 }
 
 impl Default for OpenHttpaServerBuilder {
@@ -41,6 +47,7 @@ impl OpenHttpaServerBuilder {
             challenge_key: ChallengeKey::new([0u8; 32]),
             identity_key: None,
             rate_limit: None,
+            fabric_config: None,
         }
     }
 
@@ -89,6 +96,18 @@ impl OpenHttpaServerBuilder {
     #[must_use]
     pub fn with_rate_limit(mut self, layer: RateLimitLayer) -> Self {
         self.rate_limit = Some(layer);
+        self
+    }
+
+    #[must_use]
+    pub fn with_fabric(
+        mut self,
+        name: String,
+        capabilities: Vec<String>,
+        endpoint: String,
+        topology: openhttpa_fabric::store::Topology,
+    ) -> Self {
+        self.fabric_config = Some((name, capabilities, endpoint, topology));
         self
     }
 
@@ -163,6 +182,72 @@ impl OpenHttpaServerBuilder {
         }
 
         router
+    }
+
+    /// Builds the server router and wires up the Attested Agentic Mesh Fabric.
+    /// Returns a tuple of `(Router, Arc<openhttpa_mesh::AgentNode>)`.
+    ///
+    /// # Panics
+    /// Panics if `fabric_config` or `tee_provider` is not set.
+    pub fn build_fabric(self) -> (Router, Arc<openhttpa_mesh::AgentNode>) {
+        let (name, caps, endpoint, _topology) = self
+            .fabric_config
+            .clone()
+            .expect("fabric_config must be set via with_fabric");
+        let tee_provider = self.tee_provider.clone().expect("tee_provider must be set");
+        let verifier = self.verifier.clone().unwrap_or_else(|| {
+            Arc::new(openhttpa_attestation::mock_verifier::MockVerifier::new(
+                openhttpa_attestation::verifier::VerificationResult::default(),
+            ))
+        });
+
+        let transport = Arc::new(openhttpa_transport::h2_adapter::H2Transport::new(
+            endpoint.parse().unwrap(),
+        ));
+        let policy_engine = Arc::new(openhttpa_mesh::policy::RegoPolicyEngine::permissive());
+        let agent_registry = Arc::new(openhttpa_mesh::registry::MockRegistry::new());
+
+        let agent_node = openhttpa_mesh::AgentNode::new(
+            name,
+            caps,
+            endpoint.clone(),
+            agent_registry,
+            tee_provider,
+            verifier,
+            transport,
+            policy_engine,
+        );
+        let agent_node = Arc::new(agent_node);
+
+        // We use A2AAgent for A2A communication, which ReplicationManager needs.
+        let a2a_client = openhttpa_client::OpenHttpaClient::builder()
+            .server_uri(endpoint.parse().unwrap())
+            .build();
+        let a2a_agent = Arc::new(openhttpa_a2a::A2AAgent::new_with_client(
+            &agent_node.metadata().id.to_string(),
+            a2a_client,
+        ));
+
+        let replication_manager = Arc::new(openhttpa_fabric::ReplicationManager::new(
+            agent_node.fabric_store.clone(),
+            a2a_agent as Arc<dyn openhttpa_fabric::ReplicationTransport>,
+        ));
+
+        let metrics = Arc::new(openhttpa_fabric::metrics::FabricMetrics::default());
+        replication_manager.start_gossip_loop(vec![], metrics);
+
+        // Also register fabric tools on the node's MCP server
+        // In a real app we would await this, but we're in a sync build method.
+        // We'll spawn it.
+        let node_clone = agent_node.clone();
+        tokio::spawn(async move {
+            node_clone.register_fabric_tools().await;
+        });
+
+        let router = self.build();
+        // Here we could mount the node's MCP server into the axum router if we had the routes.
+
+        (router, agent_node)
     }
 }
 

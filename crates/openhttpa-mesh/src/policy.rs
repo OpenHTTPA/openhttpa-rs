@@ -3,24 +3,28 @@
 
 //! Policy Engine — Dynamic Policy-as-Code (`PaC`) using OPA/Rego.
 
-use async_trait::async_trait;
 use regorus::{Engine, Value};
 use std::sync::Arc;
 
 use crate::MeshError;
 
 /// Dynamic policy evaluation engine.
-#[async_trait]
 pub trait PolicyEngine: Send + Sync {
     /// Evaluate a policy against a given input.
-    async fn evaluate(&self, policy_id: &str, input: serde_json::Value) -> Result<bool, MeshError>;
-
-    /// Evaluate a policy and return detailed trace/results.
-    async fn evaluate_ext(
+    fn evaluate(
         &self,
         policy_id: &str,
         input: serde_json::Value,
-    ) -> Result<EvaluationResult, MeshError>;
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<bool, MeshError>> + Send + '_>>;
+
+    /// Evaluate a policy and return detailed trace/results.
+    fn evaluate_ext(
+        &self,
+        policy_id: &str,
+        input: serde_json::Value,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<EvaluationResult, MeshError>> + Send + '_>,
+    >;
 }
 
 /// Detailed result of a policy evaluation.
@@ -138,50 +142,62 @@ impl RegoPolicyEngine {
     }
 }
 
-#[async_trait]
 impl PolicyEngine for RegoPolicyEngine {
-    async fn evaluate(&self, policy_id: &str, input: serde_json::Value) -> Result<bool, MeshError> {
-        let res = self.evaluate_ext(policy_id, input).await?;
-        Ok(res.allow)
-    }
-
-    async fn evaluate_ext(
+    fn evaluate(
         &self,
         policy_id: &str,
         input: serde_json::Value,
-    ) -> Result<EvaluationResult, MeshError> {
-        let rego_input = Value::from_json_str(&input.to_string())
-            .map_err(|e| MeshError::Attestation(format!("Invalid policy input: {e}")))?;
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<bool, MeshError>> + Send + '_>>
+    {
+        let policy_id = policy_id.to_owned();
+        Box::pin(async move {
+            let res = self.evaluate_ext(&policy_id, input).await?;
+            Ok(res.allow)
+        })
+    }
 
-        let mut engine = (*self.engine).clone();
-        engine.set_input(rego_input);
+    fn evaluate_ext(
+        &self,
+        policy_id: &str,
+        input: serde_json::Value,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<EvaluationResult, MeshError>> + Send + '_>,
+    > {
+        let policy_id = policy_id.to_owned();
+        Box::pin(async move {
+            let rego_input = Value::from_json_str(&input.to_string())
+                .map_err(|e| MeshError::Attestation(format!("Invalid policy input: {e}")))?;
 
-        let query = if policy_id == "default" || policy_id.is_empty() {
-            "data.openhttpa.mesh.allow".to_string()
-        } else {
-            format!("data.openhttpa.mesh.{policy_id}.allow")
-        };
+            let mut engine = (*self.engine).clone();
+            engine.set_input(rego_input);
 
-        let results = engine
-            .eval_query(query, false)
-            .map_err(|e| MeshError::Attestation(format!("Policy evaluation failed: {e}")))?;
+            let query = if policy_id == "default" || policy_id.is_empty() {
+                "data.openhttpa.mesh.allow".to_string()
+            } else {
+                format!("data.openhttpa.mesh.{policy_id}.allow")
+            };
 
-        let mut allow = false;
-        if !results.result.is_empty() {
-            for res in results.result {
-                if let Some(val) = res.expressions.first()
-                    && val.value == Value::from(true)
-                {
-                    allow = true;
-                    break;
+            let results = engine
+                .eval_query(query, false)
+                .map_err(|e| MeshError::Attestation(format!("Policy evaluation failed: {e}")))?;
+
+            let mut allow = false;
+            if !results.result.is_empty() {
+                for res in results.result {
+                    if let Some(val) = res.expressions.first()
+                        && val.value == Value::from(true)
+                    {
+                        allow = true;
+                        break;
+                    }
                 }
             }
-        }
 
-        Ok(EvaluationResult {
-            allow,
-            policy_id: policy_id.to_string(),
-            trace: None, // regorus doesn't expose a simple trace string yet
+            Ok(EvaluationResult {
+                allow,
+                policy_id: policy_id.clone(),
+                trace: None, // regorus doesn't expose a simple trace string yet
+            })
         })
     }
 }

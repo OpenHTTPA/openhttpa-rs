@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
-use async_trait::async_trait;
 use openhttpa_a2a::{A2AAgent, A2AMessage};
 use openhttpa_core::handshake::AtHsExecutor;
 use openhttpa_headers::attest_headers::{AtHsRequestHeaders, AtHsResponseHeaders};
@@ -39,133 +38,140 @@ struct MockTransport {
     sessions: Arc<dashmap::DashMap<String, Arc<openhttpa_crypto::hkdf::SessionKeys>>>,
 }
 
-#[async_trait]
 impl AttestTransport for MockTransport {
-    async fn send(&self, request: TransportRequest) -> Result<TransportResponse, SendError> {
-        if request.method.as_str() == "ATTEST" {
-            let req_hdrs = AtHsRequestHeaders::decode(&request.headers)
-                .map_err(|e| SendError::Protocol(e.to_string()))?;
-            let client_share: openhttpa_core::handshake::ClientKeyShare =
-                serde_json::from_slice(&req_hdrs.key_shares_json).unwrap();
-            let client_random: [u8; 32] = req_hdrs.random.as_slice().try_into().unwrap();
+    fn send(
+        &self,
+        request: TransportRequest,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<TransportResponse, SendError>> + Send + '_>,
+    > {
+        Box::pin(async move {
+            if request.method.as_str() == "ATTEST" {
+                let req_hdrs = AtHsRequestHeaders::decode(&request.headers)
+                    .map_err(|e| SendError::Protocol(e.to_string()))?;
+                let client_share: openhttpa_core::handshake::ClientKeyShare =
+                    serde_json::from_slice(&req_hdrs.key_shares_json).unwrap();
+                let client_random: [u8; 32] = req_hdrs.random.as_slice().try_into().unwrap();
 
-            use openhttpa_core::handshake::AtHsRequest;
-            let mut client_challenge_fixed = [0u8; 48];
-            if let Some(ref c) = req_hdrs.challenge {
-                let len = c.len().min(48);
-                client_challenge_fixed[..len].copy_from_slice(&c[..len]);
+                use openhttpa_core::handshake::AtHsRequest;
+                let mut client_challenge_fixed = [0u8; 48];
+                if let Some(ref c) = req_hdrs.challenge {
+                    let len = c.len().min(48);
+                    client_challenge_fixed[..len].copy_from_slice(&c[..len]);
+                }
+
+                let (suite, version, server_share, result) = self
+                    .executor
+                    .execute_server(
+                        &AtHsRequest {
+                            client_suites: &req_hdrs.cipher_suites,
+                            client_versions: &req_hdrs.versions,
+                            client_random: &client_random,
+                            client_challenge: &client_challenge_fixed,
+                            client_share: &client_share,
+                            client_quotes: &req_hdrs.client_quotes,
+                            atb_ttl_secs: 3600,
+                            provenance: None,
+                        },
+                        Some(&openhttpa_tee::mock::MockTeeProvider::default()),
+                        Some(&openhttpa_attestation::MockVerifier::default()),
+                        None,
+                    )
+                    .await
+                    .map_err(|e: openhttpa_core::handshake::HandshakeError| {
+                        SendError::Protocol(e.to_string())
+                    })?;
+
+                let key_share_json = serde_json::to_vec(&server_share).unwrap();
+
+                let keys = result.session_keys.clone();
+                self.sessions
+                    .insert(result.atb_id.to_string(), Arc::new(keys));
+
+                let resp_hdrs = AtHsResponseHeaders {
+                    cipher_suite: suite,
+                    random: result.server_random.to_vec(),
+                    key_share_json,
+                    base_id: result.atb_id.clone(),
+                    version,
+                    expires_secs: 3600,
+                    quotes: result.server_quotes.clone(),
+                    secrets: vec![],
+                    cargo: None,
+                    ticket_resumption: None,
+                    server_signatures: result.server_signatures.clone(),
+                    zk_proof: None,
+                };
+
+                return Ok(TransportResponse {
+                    status: http::StatusCode::OK,
+                    headers: resp_hdrs.encode(),
+                    body: axum::body::Body::empty(),
+                    trailers: None,
+                });
             }
 
-            let (suite, version, server_share, result) = self
-                .executor
-                .execute_server(
-                    &AtHsRequest {
-                        client_suites: &req_hdrs.cipher_suites,
-                        client_versions: &req_hdrs.versions,
-                        client_random: &client_random,
-                        client_challenge: &client_challenge_fixed,
-                        client_share: &client_share,
-                        client_quotes: &req_hdrs.client_quotes,
-                        atb_ttl_secs: 3600,
-                        provenance: None,
-                    },
-                    Some(&openhttpa_tee::mock::MockTeeProvider::default()),
-                    Some(&openhttpa_attestation::MockVerifier::default()),
-                    None,
+            // Handle trusted call with encryption (any path)
+            if request.headers.contains_key("Attest-Ticket") {
+                let base_id_str = request
+                    .headers
+                    .get("Attest-Base-ID")
+                    .unwrap()
+                    .to_str()
+                    .unwrap();
+                let keys = self
+                    .sessions
+                    .get(base_id_str)
+                    .ok_or_else(|| SendError::Protocol("Session not found".to_owned()))?;
+
+                let res_body = json!({
+                    "jsonrpc": "2.0",
+                    "id": "1",
+                    "result": { "status": "success" }
+                });
+                let plaintext = serde_json::to_vec(&res_body).unwrap();
+
+                // Encrypt response
+                let counter = 1u64; // In mock, we use fixed counter for simplicity
+                let mut nonce_bytes = [0u8; 12];
+                nonce_bytes.copy_from_slice(&keys.server_write_iv);
+                let count_bytes = counter.to_be_bytes();
+                for (i, b) in count_bytes.iter().enumerate() {
+                    nonce_bytes[4 + i] ^= b;
+                }
+                let aead_nonce =
+                    openhttpa_crypto::aead::AeadNonce::from_slice(&nonce_bytes).unwrap();
+
+                let mut data = plaintext;
+                let mut aad = b"openhttpa:".to_vec();
+                aad.extend_from_slice(base_id_str.as_bytes());
+
+                let key = openhttpa_crypto::aead::AeadKey::new(
+                    openhttpa_crypto::aead::AeadAlgorithm::Aes256Gcm,
+                    &keys.server_write_key,
                 )
-                .await
-                .map_err(|e: openhttpa_core::handshake::HandshakeError| {
-                    SendError::Protocol(e.to_string())
-                })?;
-
-            let key_share_json = serde_json::to_vec(&server_share).unwrap();
-
-            let keys = result.session_keys.clone();
-            self.sessions
-                .insert(result.atb_id.to_string(), Arc::new(keys));
-
-            let resp_hdrs = AtHsResponseHeaders {
-                cipher_suite: suite,
-                random: result.server_random.to_vec(),
-                key_share_json,
-                base_id: result.atb_id.clone(),
-                version,
-                expires_secs: 3600,
-                quotes: result.server_quotes.clone(),
-                secrets: vec![],
-                cargo: None,
-                ticket_resumption: None,
-                server_signatures: result.server_signatures.clone(),
-                zk_proof: None,
-            };
-
-            return Ok(TransportResponse {
-                status: http::StatusCode::OK,
-                headers: resp_hdrs.encode(),
-                body: axum::body::Body::empty(),
-                trailers: None,
-            });
-        }
-
-        // Handle trusted call with encryption (any path)
-        if request.headers.contains_key("Attest-Ticket") {
-            let base_id_str = request
-                .headers
-                .get("Attest-Base-ID")
-                .unwrap()
-                .to_str()
                 .unwrap();
-            let keys = self
-                .sessions
-                .get(base_id_str)
-                .ok_or_else(|| SendError::Protocol("Session not found".to_owned()))?;
+                key.seal_in_place(&aead_nonce, &aad, &mut data).unwrap();
 
-            let res_body = json!({
-                "jsonrpc": "2.0",
-                "id": "1",
-                "result": { "status": "success" }
-            });
-            let plaintext = serde_json::to_vec(&res_body).unwrap();
-
-            // Encrypt response
-            let counter = 1u64; // In mock, we use fixed counter for simplicity
-            let mut nonce_bytes = [0u8; 12];
-            nonce_bytes.copy_from_slice(&keys.server_write_iv);
-            let count_bytes = counter.to_be_bytes();
-            for (i, b) in count_bytes.iter().enumerate() {
-                nonce_bytes[4 + i] ^= b;
+                return Ok(TransportResponse {
+                    status: http::StatusCode::OK,
+                    headers: http::HeaderMap::new(),
+                    body: axum::body::Body::from(
+                        serde_json::to_vec(&json!({
+                            "ciphertext": hex::encode(data)
+                        }))
+                        .unwrap(),
+                    ),
+                    trailers: None,
+                });
             }
-            let aead_nonce = openhttpa_crypto::aead::AeadNonce::from_slice(&nonce_bytes).unwrap();
 
-            let mut data = plaintext;
-            let mut aad = b"openhttpa:".to_vec();
-            aad.extend_from_slice(base_id_str.as_bytes());
-
-            let key = openhttpa_crypto::aead::AeadKey::new(
-                openhttpa_crypto::aead::AeadAlgorithm::Aes256Gcm,
-                &keys.server_write_key,
-            )
-            .unwrap();
-            key.seal_in_place(&aead_nonce, &aad, &mut data).unwrap();
-
-            return Ok(TransportResponse {
+            Ok(TransportResponse {
                 status: http::StatusCode::OK,
                 headers: http::HeaderMap::new(),
-                body: axum::body::Body::from(
-                    serde_json::to_vec(&json!({
-                        "ciphertext": hex::encode(data)
-                    }))
-                    .unwrap(),
-                ),
+                body: axum::body::Body::empty(),
                 trailers: None,
-            });
-        }
-
-        Ok(TransportResponse {
-            status: http::StatusCode::OK,
-            headers: http::HeaderMap::new(),
-            body: axum::body::Body::empty(),
-            trailers: None,
+            })
         })
     }
 }

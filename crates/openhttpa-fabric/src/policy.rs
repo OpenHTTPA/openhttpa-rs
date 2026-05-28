@@ -15,14 +15,13 @@ pub struct IdentityMeasurement {
 
 // Fallback or mock implementation for now.
 
-#[async_trait::async_trait]
 pub trait AuthorizationPolicy: Send + Sync {
-    async fn is_authorized(
+    fn is_authorized(
         &self,
         measurement: &IdentityMeasurement,
         namespace: &str,
         action: &str,
-    ) -> Result<bool, String>;
+    ) -> impl std::future::Future<Output = Result<bool, String>> + Send + '_;
 }
 
 pub struct OpaPolicyEngine {
@@ -44,46 +43,50 @@ impl OpaPolicyEngine {
     }
 }
 
-#[async_trait::async_trait]
 impl AuthorizationPolicy for OpaPolicyEngine {
-    async fn is_authorized(
+    fn is_authorized(
         &self,
         measurement: &IdentityMeasurement,
         namespace: &str,
         action: &str,
-    ) -> Result<bool, String> {
-        tracing::debug!("OPA policy URL: {}", self.opa_url);
-        if measurement.is_debug {
-            tracing::warn!("Rejecting access: Enclave is in debug mode");
-            return Ok(false);
-        }
+    ) -> impl std::future::Future<Output = Result<bool, String>> + Send + '_ {
+        let measurement = measurement.clone();
+        let namespace = namespace.to_string();
+        let action = action.to_string();
+        async move {
+            tracing::debug!("OPA policy URL: {}", self.opa_url);
+            if measurement.is_debug {
+                tracing::warn!("Rejecting access: Enclave is in debug mode");
+                return Ok(false);
+            }
 
-        if let Some(ref policy) = self.local_rego_policy {
-            let mut engine = regorus::Engine::new();
-            if engine
-                .add_policy("fabric.rego".to_string(), policy.clone())
-                .is_ok()
-            {
-                // Add input bindings if we were fully implementing this
-                // let input = regorus::Value::from_json(...);
-                // engine.set_input(input);
+            if let Some(ref policy) = self.local_rego_policy {
+                let mut engine = regorus::Engine::new();
+                if engine
+                    .add_policy("fabric.rego".to_string(), policy.clone())
+                    .is_ok()
+                {
+                    // Add input bindings if we were fully implementing this
+                    // let input = regorus::Value::from_json(...);
+                    // engine.set_input(input);
 
-                if let Ok(res) = engine.eval_query("data.fabric.allow".to_string(), false) {
-                    if !res.result.is_empty() {
-                        return Ok(true);
-                    } else {
-                        return Ok(false);
+                    if let Ok(res) = engine.eval_query("data.fabric.allow".to_string(), false) {
+                        if !res.result.is_empty() {
+                            return Ok(true);
+                        } else {
+                            return Ok(false);
+                        }
                     }
                 }
             }
-        }
 
-        // Basic mock policy: only specific namespaces allow generic access.
-        if namespace == "public" && action == "read" {
-            return Ok(true);
-        }
+            // Basic mock policy: only specific namespaces allow generic access.
+            if namespace == "public" && action == "read" {
+                return Ok(true);
+            }
 
-        Ok(true) // Default allow for the mock
+            Ok(true) // Default allow for the mock
+        }
     }
 }
 
@@ -241,41 +244,45 @@ impl Default for AiqlPolicyEngine {
     }
 }
 
-#[async_trait::async_trait]
 impl AuthorizationPolicy for AiqlPolicyEngine {
-    async fn is_authorized(
+    fn is_authorized(
         &self,
         measurement: &IdentityMeasurement,
         namespace: &str,
         action: &str,
-    ) -> Result<bool, String> {
-        self.metrics.inc_aiql_evaluations();
-        let cache_key = format!("{}:{}:{}", measurement.is_debug, namespace, action);
+    ) -> impl std::future::Future<Output = Result<bool, String>> + Send + '_ {
+        let measurement = measurement.clone();
+        let namespace = namespace.to_string();
+        let action = action.to_string();
+        async move {
+            self.metrics.inc_aiql_evaluations();
+            let cache_key = format!("{}:{}:{}", measurement.is_debug, namespace, action);
 
-        {
-            let mut cache = self.cache.lock().unwrap();
-            if let Some(&allowed) = cache.get(&cache_key) {
-                tracing::debug!("AIQL intent cache hit for action: {}", action);
-                return Ok(allowed);
+            {
+                let mut cache = self.cache.lock().unwrap();
+                if let Some(&allowed) = cache.get(&cache_key) {
+                    tracing::debug!("AIQL intent cache hit for action: {}", action);
+                    return Ok(allowed);
+                }
             }
+
+            // AIQL leverages the Local LLM embedded within the TEE boundary
+            let response = self
+                .local_llm
+                .evaluate_intent(&measurement, &namespace, &action)
+                .await?;
+            let allowed = response.allowed;
+
+            if !allowed {
+                tracing::warn!("AIQL Engine blocked action. Reason: {}", response.reason);
+            }
+
+            {
+                let mut cache = self.cache.lock().unwrap();
+                cache.put(cache_key, allowed);
+            }
+
+            Ok(allowed)
         }
-
-        // AIQL leverages the Local LLM embedded within the TEE boundary
-        let response = self
-            .local_llm
-            .evaluate_intent(measurement, namespace, action)
-            .await?;
-        let allowed = response.allowed;
-
-        if !allowed {
-            tracing::warn!("AIQL Engine blocked action. Reason: {}", response.reason);
-        }
-
-        {
-            let mut cache = self.cache.lock().unwrap();
-            cache.put(cache_key, allowed);
-        }
-
-        Ok(allowed)
     }
 }

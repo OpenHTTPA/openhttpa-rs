@@ -30,7 +30,7 @@ tokio        = { workspace = true }
 regorus      = "0.2"
 hex          = { workspace = true }
 postcard     = { workspace = true }
-async-trait = "0.1.89"
+
 
 [dev-dependencies]
 openhttpa-tee = { workspace = true }

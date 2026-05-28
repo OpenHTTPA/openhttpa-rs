@@ -383,119 +383,130 @@ mod tests {
     struct DummyTransport {
         sessions: Arc<dashmap::DashMap<String, openhttpa_crypto::hkdf::SessionKeys>>,
     }
-    #[async_trait::async_trait]
     impl openhttpa_transport::connection::AttestTransport for DummyTransport {
-        async fn send(
+        fn send(
             &self,
             req: openhttpa_transport::connection::TransportRequest,
-        ) -> Result<
-            openhttpa_transport::connection::TransportResponse,
-            openhttpa_transport::connection::SendError,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<
+                            openhttpa_transport::connection::TransportResponse,
+                            openhttpa_transport::connection::SendError,
+                        >,
+                    > + Send
+                    + '_,
+            >,
         > {
-            if req.method.as_str() == "ATTEST" {
-                let req_hdrs =
-                    openhttpa_headers::attest_headers::AtHsRequestHeaders::decode(&req.headers)
-                        .unwrap();
-                let client_share: openhttpa_core::handshake::ClientKeyShare =
-                    serde_json::from_slice(&req_hdrs.key_shares_json).unwrap();
-                let server_pair =
-                    openhttpa_crypto::key_exchange::HybridKemPair::generate().unwrap();
-                let server_pub = server_pair.public_key_share();
-                let client_ks = openhttpa_crypto::key_exchange::KeyShare {
-                    ecdhe_public: client_share.ecdhe_public.clone(),
-                    mlkem_public: client_share.mlkem_public,
-                };
-                let (ss, ct) = server_pair.server_combine(&client_ks).unwrap();
-                let server_random: [u8; 32] = [0x99u8; 32];
-                let mut client_random = [0u8; 32];
-                client_random.copy_from_slice(&req_hdrs.random);
+            Box::pin(async move {
+                if req.method.as_str() == "ATTEST" {
+                    let req_hdrs =
+                        openhttpa_headers::attest_headers::AtHsRequestHeaders::decode(&req.headers)
+                            .unwrap();
+                    let client_share: openhttpa_core::handshake::ClientKeyShare =
+                        serde_json::from_slice(&req_hdrs.key_shares_json).unwrap();
+                    let server_pair =
+                        openhttpa_crypto::key_exchange::HybridKemPair::generate().unwrap();
+                    let server_pub = server_pair.public_key_share();
+                    let client_ks = openhttpa_crypto::key_exchange::KeyShare {
+                        ecdhe_public: client_share.ecdhe_public.clone(),
+                        mlkem_public: client_share.mlkem_public,
+                    };
+                    let (ss, ct) = server_pair.server_combine(&client_ks).unwrap();
+                    let server_random: [u8; 32] = [0x99u8; 32];
+                    let mut client_random = [0u8; 32];
+                    client_random.copy_from_slice(&req_hdrs.random);
 
-                let mut challenge_fixed = [0u8; 48];
-                if let Some(c) = req_hdrs.challenge.as_deref() {
-                    let len = c.len().min(48);
-                    challenge_fixed[..len].copy_from_slice(&c[..len]);
+                    let mut challenge_fixed = [0u8; 48];
+                    if let Some(c) = req_hdrs.challenge.as_deref() {
+                        let len = c.len().min(48);
+                        challenge_fixed[..len].copy_from_slice(&c[..len]);
+                    }
+
+                    let transcript_hash = Self::compute_transcript(
+                        client_random,
+                        &challenge_fixed,
+                        &client_ks,
+                        server_random,
+                        &server_pub,
+                        &ct,
+                    );
+
+                    let base_id = openhttpa_proto::AtbId::new();
+                    let keys = openhttpa_crypto::hkdf::SessionKeys::derive(
+                        ss.as_bytes(),
+                        &transcript_hash,
+                    )
+                    .unwrap();
+                    self.sessions.insert(base_id.to_string(), keys);
+
+                    let resp_hdrs = openhttpa_headers::attest_headers::AtHsResponseHeaders {
+                        cipher_suite: openhttpa_proto::CipherSuite::X25519MlKem768Aes256GcmSha384,
+                        random: server_random.to_vec(),
+                        key_share_json: serde_json::to_vec(
+                            &openhttpa_core::handshake::ServerKeyShare {
+                                ecdhe_public: server_pub.ecdhe_public,
+                                mlkem_ciphertext: ct,
+                                mlkem_public: server_pub.mlkem_public,
+                            },
+                        )
+                        .unwrap(),
+                        base_id,
+                        version: openhttpa_proto::ProtocolVersion::V2,
+                        expires_secs: 3600,
+                        quotes: vec![],
+                        secrets: vec![],
+                        cargo: None,
+                        ticket_resumption: None,
+                        server_signatures: vec![],
+                        zk_proof: None,
+                    };
+                    return Ok(openhttpa_transport::connection::TransportResponse {
+                        status: http::StatusCode::OK,
+                        headers: resp_hdrs.encode(),
+                        body: axum::body::Body::empty(),
+                        trailers: None,
+                    });
                 }
 
-                let transcript_hash = Self::compute_transcript(
-                    client_random,
-                    &challenge_fixed,
-                    &client_ks,
-                    server_random,
-                    &server_pub,
-                    &ct,
-                );
+                let base_id_str = req.headers.get("Attest-Base-ID").unwrap().to_str().unwrap();
+                let keys = self.sessions.get(base_id_str).unwrap();
 
-                let base_id = openhttpa_proto::AtbId::new();
-                let keys =
-                    openhttpa_crypto::hkdf::SessionKeys::derive(ss.as_bytes(), &transcript_hash)
-                        .unwrap();
-                self.sessions.insert(base_id.to_string(), keys);
+                let res_body = ::serde_json::json!({ "id": "chat-123", "object": "chat.completion", "created": 123_456_789, "model": "mock-model", "choices": [{ "index": 0, "message": { "role": "assistant", "content": "Mock reply" } }] });
+                let mut data = serde_json::to_vec(&res_body).unwrap();
 
-                let resp_hdrs = openhttpa_headers::attest_headers::AtHsResponseHeaders {
-                    cipher_suite: openhttpa_proto::CipherSuite::X25519MlKem768Aes256GcmSha384,
-                    random: server_random.to_vec(),
-                    key_share_json: serde_json::to_vec(
-                        &openhttpa_core::handshake::ServerKeyShare {
-                            ecdhe_public: server_pub.ecdhe_public,
-                            mlkem_ciphertext: ct,
-                            mlkem_public: server_pub.mlkem_public,
-                        },
-                    )
-                    .unwrap(),
-                    base_id,
-                    version: openhttpa_proto::ProtocolVersion::V2,
-                    expires_secs: 3600,
-                    quotes: vec![],
-                    secrets: vec![],
-                    cargo: None,
-                    ticket_resumption: None,
-                    server_signatures: vec![],
-                    zk_proof: None,
-                };
-                return Ok(openhttpa_transport::connection::TransportResponse {
+                let counter = 1u64;
+                let mut nonce_bytes = [0u8; 12];
+                nonce_bytes.copy_from_slice(&keys.server_write_iv);
+                let count_bytes = counter.to_be_bytes();
+                for (i, b) in count_bytes.iter().enumerate() {
+                    nonce_bytes[4 + i] ^= b;
+                }
+                let aead_nonce =
+                    openhttpa_crypto::aead::AeadNonce::from_slice(&nonce_bytes).unwrap();
+
+                let mut aad = b"openhttpa:".to_vec();
+                aad.extend_from_slice(base_id_str.as_bytes());
+
+                let key = openhttpa_crypto::aead::AeadKey::new(
+                    openhttpa_crypto::aead::AeadAlgorithm::Aes256Gcm,
+                    &keys.server_write_key,
+                )
+                .unwrap();
+                drop(keys);
+                key.seal_in_place(&aead_nonce, &aad, &mut data).unwrap();
+
+                Ok(openhttpa_transport::connection::TransportResponse {
                     status: http::StatusCode::OK,
-                    headers: resp_hdrs.encode(),
-                    body: axum::body::Body::empty(),
+                    headers: http::HeaderMap::new(),
+                    body: axum::body::Body::from(
+                        serde_json::to_vec(&::serde_json::json!({
+                            "ciphertext": hex::encode(data)
+                        }))
+                        .unwrap(),
+                    ),
                     trailers: None,
-                });
-            }
-
-            let base_id_str = req.headers.get("Attest-Base-ID").unwrap().to_str().unwrap();
-            let keys = self.sessions.get(base_id_str).unwrap();
-
-            let res_body = ::serde_json::json!({ "id": "chat-123", "object": "chat.completion", "created": 123_456_789, "model": "mock-model", "choices": [{ "index": 0, "message": { "role": "assistant", "content": "Mock reply" } }] });
-            let mut data = serde_json::to_vec(&res_body).unwrap();
-
-            let counter = 1u64;
-            let mut nonce_bytes = [0u8; 12];
-            nonce_bytes.copy_from_slice(&keys.server_write_iv);
-            let count_bytes = counter.to_be_bytes();
-            for (i, b) in count_bytes.iter().enumerate() {
-                nonce_bytes[4 + i] ^= b;
-            }
-            let aead_nonce = openhttpa_crypto::aead::AeadNonce::from_slice(&nonce_bytes).unwrap();
-
-            let mut aad = b"openhttpa:".to_vec();
-            aad.extend_from_slice(base_id_str.as_bytes());
-
-            let key = openhttpa_crypto::aead::AeadKey::new(
-                openhttpa_crypto::aead::AeadAlgorithm::Aes256Gcm,
-                &keys.server_write_key,
-            )
-            .unwrap();
-            drop(keys);
-            key.seal_in_place(&aead_nonce, &aad, &mut data).unwrap();
-
-            Ok(openhttpa_transport::connection::TransportResponse {
-                status: http::StatusCode::OK,
-                headers: http::HeaderMap::new(),
-                body: axum::body::Body::from(
-                    serde_json::to_vec(&::serde_json::json!({
-                        "ciphertext": hex::encode(data)
-                    }))
-                    .unwrap(),
-                ),
-                trailers: None,
+                })
             })
         }
     }

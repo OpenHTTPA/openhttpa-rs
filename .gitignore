@@ -67,6 +67,8 @@ env/
 .ruff_cache/
 .coverage
 htmlcov/
+/*.py
+
 
 # Shared/dynamic libraries (compiled outputs)
 *.so

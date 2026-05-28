@@ -14,64 +14,74 @@ struct DummyTransport {
     server_random: [u8; 32],
 }
 
-#[async_trait::async_trait]
 impl AttestTransport for DummyTransport {
-    async fn send(
+    fn send(
         &self,
         req: TransportRequest,
-    ) -> Result<TransportResponse, openhttpa_transport::connection::SendError> {
-        if req.method.as_str() == "ATTEST" {
-            let req_hdrs = AtHsRequestHeaders::decode(&req.headers).unwrap();
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<TransportResponse, openhttpa_transport::connection::SendError>,
+                > + Send
+                + '_,
+        >,
+    > {
+        Box::pin(async move {
+            if req.method.as_str() == "ATTEST" {
+                let req_hdrs = AtHsRequestHeaders::decode(&req.headers).unwrap();
 
-            // VERIFY: The client sent TWO quotes (TDX + NVIDIA)
-            assert_eq!(req_hdrs.client_quotes.len(), 2);
-            assert!(
-                req_hdrs
-                    .client_quotes
-                    .iter()
-                    .any(|q| q.quote_type == openhttpa_proto::QuoteType::Mock)
-            );
-            assert!(
-                req_hdrs
-                    .client_quotes
-                    .iter()
-                    .any(|q| q.quote_type == openhttpa_proto::QuoteType::NvidiaGpu)
-            );
+                // VERIFY: The client sent TWO quotes (TDX + NVIDIA)
+                assert_eq!(req_hdrs.client_quotes.len(), 2);
+                assert!(
+                    req_hdrs
+                        .client_quotes
+                        .iter()
+                        .any(|q| q.quote_type == openhttpa_proto::QuoteType::Mock)
+                );
+                assert!(
+                    req_hdrs
+                        .client_quotes
+                        .iter()
+                        .any(|q| q.quote_type == openhttpa_proto::QuoteType::NvidiaGpu)
+                );
 
-            // Respond with a dummy success
-            let resp_hdrs = AtHsResponseHeaders {
-                cipher_suite: CipherSuite::X25519MlKem768Aes256GcmSha384,
-                random: self.server_random.to_vec(),
-                key_share_json: serde_json::to_vec(&openhttpa_core::handshake::ServerKeyShare {
-                    ecdhe_public: vec![0u8; 32],
-                    mlkem_ciphertext: vec![0u8; 1088],
-                    mlkem_public: vec![0u8; 1184],
-                })
-                .unwrap(),
-                base_id: AtbId::new(),
-                version: ProtocolVersion::V2,
-                expires_secs: 3600,
-                quotes: vec![],
-                secrets: vec![],
-                cargo: None,
-                ticket_resumption: None,
-                server_signatures: vec![],
-                zk_proof: None,
-            };
+                // Respond with a dummy success
+                let resp_hdrs = AtHsResponseHeaders {
+                    cipher_suite: CipherSuite::X25519MlKem768Aes256GcmSha384,
+                    random: self.server_random.to_vec(),
+                    key_share_json: serde_json::to_vec(
+                        &openhttpa_core::handshake::ServerKeyShare {
+                            ecdhe_public: vec![0u8; 32],
+                            mlkem_ciphertext: vec![0u8; 1088],
+                            mlkem_public: vec![0u8; 1184],
+                        },
+                    )
+                    .unwrap(),
+                    base_id: AtbId::new(),
+                    version: ProtocolVersion::V2,
+                    expires_secs: 3600,
+                    quotes: vec![],
+                    secrets: vec![],
+                    cargo: None,
+                    ticket_resumption: None,
+                    server_signatures: vec![],
+                    zk_proof: None,
+                };
 
-            return Ok(TransportResponse {
-                status: http::StatusCode::OK,
-                headers: resp_hdrs.encode(),
+                return Ok(TransportResponse {
+                    status: http::StatusCode::OK,
+                    headers: resp_hdrs.encode(),
+                    body: axum::body::Body::empty(),
+                    trailers: None,
+                });
+            }
+
+            Ok(TransportResponse {
+                status: http::StatusCode::NOT_FOUND,
+                headers: http::HeaderMap::new(),
                 body: axum::body::Body::empty(),
                 trailers: None,
-            });
-        }
-
-        Ok(TransportResponse {
-            status: http::StatusCode::NOT_FOUND,
-            headers: http::HeaderMap::new(),
-            body: axum::body::Body::empty(),
-            trailers: None,
+            })
         })
     }
 }

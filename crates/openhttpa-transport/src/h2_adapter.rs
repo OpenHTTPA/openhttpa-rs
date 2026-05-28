@@ -3,7 +3,6 @@
 
 //! HTTP/2 transport adapter using hyper + h2.
 
-use async_trait::async_trait;
 use http::Request;
 use tracing::debug;
 
@@ -22,18 +21,25 @@ impl H2Transport {
     }
 }
 
-#[async_trait]
 impl AttestTransport for H2Transport {
-    async fn send(&self, request: TransportRequest) -> Result<TransportResponse, SendError> {
-        let mut parts = self.base_uri.clone().into_parts();
-        let req_parts = request.uri.into_parts();
-        parts.path_and_query = req_parts.path_and_query;
-        let _uri = http::Uri::from_parts(parts).map_err(|e| SendError::Protocol(e.to_string()))?;
-        let _ = Request::builder().method(request.method);
-        debug!("H2Transport::send — stub; wire a real connector in production");
-        Err(SendError::Connection(
-            "H2Transport stub — connect a TLS connector".to_owned(),
-        ))
+    fn send(
+        &self,
+        request: TransportRequest,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<TransportResponse, SendError>> + Send + '_>,
+    > {
+        Box::pin(async move {
+            let mut parts = self.base_uri.clone().into_parts();
+            let req_parts = request.uri.into_parts();
+            parts.path_and_query = req_parts.path_and_query;
+            let _uri =
+                http::Uri::from_parts(parts).map_err(|e| SendError::Protocol(e.to_string()))?;
+            let _ = Request::builder().method(request.method);
+            debug!("H2Transport::send — stub; wire a real connector in production");
+            Err(SendError::Connection(
+                "H2Transport stub — connect a TLS connector".to_owned(),
+            ))
+        })
     }
 }
 

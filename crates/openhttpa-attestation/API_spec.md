@@ -45,7 +45,6 @@ The `QuoteVerifier` trait is the primary extension point. Implementors are respo
 Source: [verifier.rs](file:///home/ub/tmp/openhttpa-rs/crates/openhttpa-attestation/src/verifier.rs)
 
 ```rust
-#[async_trait]
 pub trait QuoteVerifier: Send + Sync {
     async fn verify(
         &self,
@@ -90,7 +89,6 @@ Verifies a slice of quotes (composite attestation bundle). The default implement
 ## 2. Policy Trait: `PolicyEngine`
 
 ```rust
-#[async_trait]
 pub trait PolicyEngine: Send + Sync + std::fmt::Debug {
     async fn evaluate(&self, result: &VerificationResult) -> Result<(), VerificationError>;
 }
@@ -110,7 +108,6 @@ policy_engine.evaluate(&result).await?;
 ## 3. Revocation Trait: `RevocationProvider`
 
 ```rust
-#[async_trait]
 pub trait RevocationProvider: Send + Sync + std::fmt::Debug {
     async fn check_revocation(&self, result: &VerificationResult) -> Result<(), VerificationError>;
 }

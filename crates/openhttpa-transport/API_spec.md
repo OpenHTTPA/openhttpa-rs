@@ -75,7 +75,6 @@ A transport-level HTTP response.
 The primary extension point for transport adapters. Implementations must be `Send + Sync` for use behind `Arc<dyn AttestTransport>`.
 
 ```rust
-#[async_trait]
 pub trait AttestTransport: Send + Sync {
     async fn send(&self, request: TransportRequest) -> Result<TransportResponse, SendError>;
 }

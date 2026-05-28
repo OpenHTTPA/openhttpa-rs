@@ -19,6 +19,11 @@ openhttpa-headers      = { workspace = true }
 openhttpa-core         = { workspace = true }
 openhttpa-attestation  = { workspace = true }
 openhttpa-tee          = { workspace = true }
+openhttpa-fabric       = { workspace = true }
+openhttpa-mesh         = { workspace = true }
+openhttpa-a2a          = { workspace = true }
+openhttpa-client       = { workspace = true }
+openhttpa-transport    = { workspace = true }
 bytes               = { workspace = true }
 http                = { workspace = true }
 serde               = { workspace = true }
@@ -39,7 +44,7 @@ sha2              = { workspace = true }
 futures           = { workspace = true }
 bloomfilter       = { workspace = true }
 redis             = { workspace = true }
-async-trait = "0.1.89"
+
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

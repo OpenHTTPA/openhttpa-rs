@@ -3,7 +3,6 @@
 
 //! Transport abstraction types and [`AttestTransport`] trait.
 
-use async_trait::async_trait;
 use http::{HeaderMap, Method, StatusCode, Uri};
 use thiserror::Error;
 
@@ -41,10 +40,14 @@ pub struct TransportResponse {
 }
 
 /// Common interface for all transport adapters.
-#[async_trait]
 pub trait AttestTransport: Send + Sync {
     /// Send a request and return the response.
-    async fn send(&self, request: TransportRequest) -> Result<TransportResponse, SendError>;
+    fn send(
+        &self,
+        request: TransportRequest,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<TransportResponse, SendError>> + Send + '_>,
+    >;
 }
 
 #[cfg(test)]

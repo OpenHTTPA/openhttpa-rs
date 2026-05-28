@@ -223,7 +223,6 @@ Source: [policy.rs](file:///home/ub/tmp/openhttpa-rs/crates/openhttpa-mesh/src/p
 The extension point for mesh admission-control policies.
 
 ```rust
-#[async_trait]
 pub trait PolicyEngine: Send + Sync {
     async fn evaluate_ext(
         &self,
@@ -287,7 +286,6 @@ Source: [registry.rs](file:///home/ub/tmp/openhttpa-rs/crates/openhttpa-mesh/src
 Abstracts agent discovery and registration.
 
 ```rust
-#[async_trait]
 pub trait AgentRegistry: Send + Sync {
     async fn register(&self, metadata: AgentMetadata) -> Result<(), String>;
     async fn get_agent(&self, id: Uuid) -> Result<Option<AgentMetadata>, String>;

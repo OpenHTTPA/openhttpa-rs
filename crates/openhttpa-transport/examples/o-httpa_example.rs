@@ -25,48 +25,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         server: Arc<ObliviousServer>,
     }
 
-    #[async_trait::async_trait]
     impl AttestTransport for MockRelay {
-        async fn send(
+        fn send(
             &self,
             req: TransportRequest,
-        ) -> Result<TransportResponse, openhttpa_transport::connection::SendError> {
-            let body_bytes = axum::body::to_bytes(req.body, usize::MAX).await.unwrap();
-            println!(
-                "Relay: Forwarding {} bytes of encrypted payload",
-                body_bytes.len()
-            );
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<
+                            TransportResponse,
+                            openhttpa_transport::connection::SendError,
+                        >,
+                    > + Send
+                    + '_,
+            >,
+        > {
+            Box::pin(async move {
+                let body_bytes = axum::body::to_bytes(req.body, usize::MAX).await.unwrap();
+                println!(
+                    "Relay: Forwarding {} bytes of encrypted payload",
+                    body_bytes.len()
+                );
 
-            // Decapsulate on the server side
-            let (plaintext, receiver_ctx) = self.server.decapsulate(&body_bytes).map_err(|e| {
-                openhttpa_transport::connection::SendError::Connection(format!(
-                    "Server decapsulate failed: {:?}",
-                    e
-                ))
-            })?;
+                // Decapsulate on the server side
+                let (plaintext, receiver_ctx) =
+                    self.server.decapsulate(&body_bytes).map_err(|e| {
+                        openhttpa_transport::connection::SendError::Connection(format!(
+                            "Server decapsulate failed: {:?}",
+                            e
+                        ))
+                    })?;
 
-            println!(
-                "Server: Received decrypted request: {}",
-                String::from_utf8_lossy(&plaintext)
-            );
+                println!(
+                    "Server: Received decrypted request: {}",
+                    String::from_utf8_lossy(&plaintext)
+                );
 
-            // Generate response
-            let response_body = b"Confidential response from TEE";
-            let enc_resp = self
-                .server
-                .encapsulate_response(&receiver_ctx, response_body)
-                .map_err(|e| {
-                    openhttpa_transport::connection::SendError::Connection(format!(
-                        "Server encapsulate failed: {:?}",
-                        e
-                    ))
-                })?;
+                // Generate response
+                let response_body = b"Confidential response from TEE";
+                let enc_resp = self
+                    .server
+                    .encapsulate_response(&receiver_ctx, response_body)
+                    .map_err(|e| {
+                        openhttpa_transport::connection::SendError::Connection(format!(
+                            "Server encapsulate failed: {:?}",
+                            e
+                        ))
+                    })?;
 
-            Ok(TransportResponse {
-                status: http::StatusCode::OK,
-                headers: http::HeaderMap::new(),
-                body: axum::body::Body::from(enc_resp),
-                trailers: None,
+                Ok(TransportResponse {
+                    status: http::StatusCode::OK,
+                    headers: http::HeaderMap::new(),
+                    body: axum::body::Body::from(enc_resp),
+                    trailers: None,
+                })
             })
         }
     }

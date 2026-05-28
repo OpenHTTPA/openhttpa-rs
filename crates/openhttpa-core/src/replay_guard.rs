@@ -6,7 +6,6 @@
 //! Uses a sliding bit-window to efficiently track which 64-bit nonces have
 //! been seen within the recent window, without unbounded memory growth.
 
-use async_trait::async_trait;
 use std::sync::Mutex;
 
 use thiserror::Error;
@@ -25,7 +24,6 @@ pub enum ReplayError {
 }
 
 /// A trait for anti-replay guards that can be used in distributed environments.
-#[async_trait]
 pub trait DistributedReplayGuard: Send + Sync {
     /// Atomically check that `nonce` has not been seen before **and** record it
     /// as seen in a single operation.
@@ -38,7 +36,11 @@ pub trait DistributedReplayGuard: Send + Sync {
     /// # Errors
     /// Returns `ReplayError::Replay` if the nonce has already been accepted, or
     /// `ReplayError::StorageError` if the backing store is unavailable.
-    async fn check_and_accept(&self, key: &str, nonce: u64) -> Result<(), ReplayError>;
+    fn check_and_accept(
+        &self,
+        key: &str,
+        nonce: u64,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ReplayError>> + Send + '_>>;
 
     /// Check if a nonce is valid **without** recording it.
     ///
@@ -47,13 +49,21 @@ pub trait DistributedReplayGuard: Send + Sync {
     /// separate `accept` introduces a TOCTOU race in distributed deployments.
     /// This method is retained only for use-cases that genuinely need a
     /// read-only probe (e.g. metrics/diagnostics).
-    async fn check(&self, key: &str, nonce: u64) -> Result<(), ReplayError>;
+    fn check(
+        &self,
+        key: &str,
+        nonce: u64,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ReplayError>> + Send + '_>>;
 
     /// Record `nonce` as seen **without** checking first.
     ///
     /// # Deprecated
     /// Prefer [`Self::check_and_accept`]. See [`Self::check`] for rationale.
-    async fn accept(&self, key: &str, nonce: u64) -> Result<(), ReplayError>;
+    fn accept(
+        &self,
+        key: &str,
+        nonce: u64,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ReplayError>> + Send + '_>>;
 }
 
 /// A bitmask anti-replay window.

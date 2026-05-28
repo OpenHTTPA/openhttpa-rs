@@ -16,7 +16,6 @@ This crate provides a pluggable system for verifying attestation quotes from var
 The central abstraction is the `QuoteVerifier` trait:
 
 ```rust
-#[async_trait]
 pub trait QuoteVerifier: Send + Sync {
     async fn verify(
         &self,
