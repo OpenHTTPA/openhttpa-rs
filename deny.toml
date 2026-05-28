@@ -38,6 +38,7 @@ allow = [
     "CDLA-Permissive-2.0",
     "OpenSSL",        # aws-lc / liboqs
     "LGPL-3.0-or-later", # downloader (build-tool for risc0)
+    "LGPL-3.0-only",  # malachite (risc0 dependency)
     "Zlib",           # konst_macro_rules (regorus dependency)
     "MIT-0",          # borrow-or-share (regorus dependency)
     # L-01: NCSA (University of Illinois/NCSA Open Source License).
@@ -47,18 +48,6 @@ allow = [
     "NCSA",
 ]
 confidence-threshold = 0.8
-
-# L-02: Per-crate license exceptions for packages that specify a license file
-# rather than an SPDX expression.  cargo-deny cannot synthesise the SPDX id
-# from a `license-file` field, so the crate appears unlicensed without an
-# explicit exception.  Each exception is audited manually and documented here.
-[[licenses.exceptions]]
-# regorus v0.2.8 (Microsoft OPA/Rego interpreter) — MIT per LICENSE file:
-#   https://github.com/microsoft/regorus/blob/main/LICENSE
-# The crate uses `license-file = "LICENSE"` instead of `license = "MIT"`.
-allow  = ["MIT"]
-name   = "regorus"
-version = "=0.2.8"
 
 [bans]
 multiple-versions = "warn"
@@ -125,7 +114,6 @@ skip = [
     # ── Group A-6: hashbrown 0.13 ─────────────────────────────────────────────
     # ark-ec 0.4 (risc0-groth16 / ark-bn254) uses hashbrown 0.13.
     # Current ecosystem is on 0.14 / 0.17.
-    { name = "hashbrown",          version = "0.13" },
     { name = "hashbrown",          version = "0.14" }, # transitional; 0.17 is latest
 
     # ── Group A-7: itertools ──────────────────────────────────────────────────
@@ -142,11 +130,6 @@ skip = [
     # chacha20poly1305 0.10 (risc0 crypto path) requires chacha20 0.9.
     { name = "chacha20",           version = "0.9"  },
 
-    # ── Group A-10: risc0-build-kernel dual version ────────────────────────────
-    # risc0-build 1.2.6 pulls risc0-build-kernel 1.2.6; our nvidia_gpu feature
-    # also pulls 2.0.1.  Both are required simultaneously.
-    { name = "risc0-build-kernel", version = "1"    },
-
     # ── Group A-11: toml_datetime 0.7 ─────────────────────────────────────────
     # cbindgen 0.29 (risc0 build-dep) depends on toml 0.9 → toml_datetime 0.7.
     # The wider ecosystem uses toml_edit 0.25 → toml_datetime 1.x.
@@ -159,7 +142,6 @@ skip = [
     # ── Group A-13: directories / dirs-sys ────────────────────────────────────
     # risc0-build-kernel 1.x pulls directories 5 → dirs-sys 0.4.
     # risc0-build-kernel 2.x uses directories 6 → dirs-sys 0.5.
-    { name = "directories",        version = "5"    },
     { name = "dirs-sys",           version = "0.4"  },
 
     # ── Group A-14: bit-vec 0.7 ───────────────────────────────────────────────

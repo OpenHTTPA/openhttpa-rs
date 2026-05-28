@@ -27,12 +27,12 @@ tracing      = { workspace = true }
 dashmap      = { workspace = true }
 uuid         = { workspace = true, features = ["v4", "serde"] }
 tokio        = { workspace = true }
-regorus      = "0.2"
+regorus      = "0.10"
 hex          = { workspace = true }
 postcard     = { workspace = true }
 
 
 [dev-dependencies]
 openhttpa-tee = { workspace = true }
-tracing-subscriber = "0.3"
+tracing-subscriber = "0.3.20"
 rand = "0.8"

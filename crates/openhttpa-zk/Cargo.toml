@@ -36,5 +36,5 @@ risc0-build = { version = "2.3.2", default-features = false, optional = true }
 [dev-dependencies]
 tokio = { workspace = true }
 sha2 = "0.10"
-tracing-subscriber = "0.3"
+tracing-subscriber = "0.3.20"
 risc0-zkvm = { version = "2.3.2", default-features = false, features = ["std", "prove", "client"] }

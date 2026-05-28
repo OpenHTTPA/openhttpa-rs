@@ -61,7 +61,7 @@ impl Default for RegoPolicyEngine {
             
             default allow = false
             
-            allow {
+            allow if {
                 lib.is_trusted_tee(input.claims)
                 lib.is_tcb_uptodate(input.tcb_status)
                 lib.is_pqc_bound(input)
@@ -236,7 +236,7 @@ mod tests {
         let audit_rego = r#"
             package openhttpa.mesh.audit
             default allow = false
-            allow {
+            allow if {
                 input.action == "read"
             }
         "#;

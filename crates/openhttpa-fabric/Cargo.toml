@@ -21,7 +21,7 @@ tracing = { workspace = true }
 zeroize = { workspace = true }
 
 hex = { workspace = true }
-regorus = "0.2.8"
+regorus = "0.10"
 lru = "0.16.3"
 rand = { workspace = true }
 
