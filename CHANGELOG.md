@@ -146,6 +146,13 @@ is still allowed (for unauthenticated modes).
 
 ### Added
 
+- `openhttpa-fabric` crate for distributed memory synchronization and integration with mesh node via MCP tools.
+- Auto-attestation with hardware TEE federation and optional ZAA compression support.
+- Configurable policy engine with namespace, debug, and keyword intent enforcement.
+- AMD SEV-SNP verifier and federated verification support.
+- Comprehensive unit and integration test suites for ZK verification, gRPC attestation, and LLM error handling.
+- Provenance signing to `AgentMetadata` and expanded `EatClaims` with expiry.
+- Interactive version bumping and package publication wizards in Makefile.
 - `docs/adr/ADR-001-key-schedule-wire-break.md` — Architecture Decision Record
   documenting the SA-02 wire-format break, security analysis, RFC alignment, formal proof
   sketches, and rollout procedure.
@@ -153,6 +160,15 @@ is still allowed (for unauthenticated modes).
 
 ### Changed
 
+- Implemented A2A handshake logic and migrated trait definitions to use native async functions.
+- Replaced `innerHTML` with DOM API elements in session list rendering to improve security and performance.
+- Improved security for PSK storage and added comprehensive unit tests across transportation, attestation, and middleware modules.
+- Updated `nsm-api` dependency and refined ephemeral key generation warning in backend.
+- Removed `async-trait` dependency in favor of manual pinning and added `non_exhaustive` to `TicketEngineError`.
+- Modularized verification targets in Makefile and excluded additional WASM artifacts from Prettier.
+- Enhanced devcontainer and setup scripts with browser extension support, Trivy, Foundry, and cargo tools.
+- Hardened WebSocket AAD with response size configuration.
+- Added TMPDIR export to Makefile for CI environment consistency.
 - `crates/openhttpa-crypto/src/hkdf.rs` — Module documentation updated to describe the
   corrected key schedule with full RFC 5869 alignment rationale.
 - `crates/openhttpa-crypto/src/key_exchange.rs` — Module documentation updated to describe

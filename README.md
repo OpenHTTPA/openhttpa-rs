@@ -98,7 +98,9 @@ crates/
   openhttpa-mesh/                    Attested Agent Mesh (AAM) & Swarm orchestration
   openhttpa-oracle/                  Confidential Web2-to-Web3 Oracle Bridge
   openhttpa-contract/                On-chain verifiers (Solidity, Bitcoin Taproot)
-  openhttpa-a2a/                      High-level Agent-to-Agent secure messaging
+  openhttpa-a2a/                     High-level Agent-to-Agent secure messaging
+  openhttpa-fabric/                  Distributed memory synchronization for AI agents
+  openhttpa-zk/                      Zero-Knowledge succinct proof generation and verification
 bindings/
   ...
 modules/

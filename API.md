@@ -193,17 +193,17 @@ The info string enforces three independent domain-separation properties:
 
 All `OpenHTTPA` headers follow **RFC 8941** (Structured Field Values for HTTP).
 
-| Header                 | Type                | Description                                                        |
-| ---------------------- | ------------------- | ------------------------------------------------------------------ |
-| `Attest-Base-ID`       | String              | Unique session identifier (UUID v4).                               |
-| `Attest-Versions`      | List                | Negotiated protocol versions.                                      |
-| `Attest-Cipher-Suites` | List                | Negotiated cipher suites.                                          |
-| `Attest-Quotes`        | List of Inner Lists | One or more TEE quotes, encoded as `(type_token bytes_sequence)`.  |
-| `Attest-Ticket`        | Byte Sequence       | Binary trailer: `BE_u64(counter)` ‖ `HMAC_SHA384(AHL)`.            |
-| `Attest-Binder`        | Byte Sequence       | Binary trailer: `BE_u64(req_counter)` ‖ `HMAC_SHA384(resp_AHL)`.   |
-| `Attest-Provenance`    | List                | JSON-encoded list of `AgentMetadata` for multi-hop tracking.       |
-| `Attest-EAT`           | Byte Sequence       | CBOR-encoded Entity Attestation Token (RFC 9334).                  |
-| `Attest-Policies`      | Dictionary          | Policy flags: `direct=?1`, `allow-untrusted=?0`, `sig-binding=?1`. |
+| Header                 | Type                | Description                                                                                |
+| ---------------------- | ------------------- | ------------------------------------------------------------------------------------------ |
+| `Attest-Base-ID`       | String              | Unique session identifier (UUID v4).                                                       |
+| `Attest-Versions`      | List                | Negotiated protocol versions.                                                              |
+| `Attest-Cipher-Suites` | List                | Negotiated cipher suites.                                                                  |
+| `Attest-Quotes`        | List of Inner Lists | One or more TEE quotes, encoded as `(type_token bytes_sequence)`.                          |
+| `Attest-Ticket`        | Byte Sequence       | Binary trailer: `BE_u64(counter)` ‖ `HMAC_SHA384(AHL)`.                                    |
+| `Attest-Binder`        | Byte Sequence       | Binary trailer: `BE_u64(req_counter)` ‖ `HMAC_SHA384(resp_AHL)`.                           |
+| `Attest-Provenance`    | List                | JSON-encoded list of `AgentMetadata` for multi-hop tracking.                               |
+| `Attest-EAT`           | Byte Sequence       | CBOR-encoded Entity Attestation Token (RFC 9334).                                          |
+| `Attest-Policies`      | Dictionary          | Policy flags: `namespace="mcp"`, `debug=?0`, `keyword-intent="execute"`, `sig-binding=?1`. |
 
 ### Attested Provenance (P-01)
 
@@ -310,3 +310,15 @@ This prevents Agent B from using its attested session with Agent C to execute un
 
 The `Attest-Provenance` header maintains an immutable log of the delegation path. Each node appends an entry:
 `ProvEntry = { NodeID, Capability, TranscriptHash, Signature(NodeSecret, TranscriptHash ‖ PrevEntryHash) }`
+
+## 8. Configurable Policy Engine (P-02)
+
+`OpenHTTPA` provides a strict, configurable policy engine to enforce domain-specific rules during the attestation handshake. Policies are transmitted in the `Attest-Policies` dictionary.
+
+- **Namespace Enforcement**: Isolates requests to explicit authorized boundaries (e.g., `namespace="mcp"`).
+- **Debug Prevention**: Explicitly rejects attestation from hardware running in debug or developer mode (`debug=?0`), mitigating vulnerability surfaces.
+- **Keyword Intent**: Enforces application-layer operations (e.g., `keyword-intent="execute"`), ensuring the agent's intent is cryptographically bound to the session.
+
+## 9. ZAA Compression & Optimization
+
+To reduce the bandwidth overhead of large hardware attestation quotes (e.g. AMD SEV-SNP or composite quotes), `OpenHTTPA` supports optional ZAA (Zstandard Attestation Archival) compression over the attestation payload. This drastically reduces the size of the `Attest-Quotes` header during the Preflight and Handshake phases.

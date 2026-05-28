@@ -34,10 +34,11 @@ export OPTEE_CLIENT_EXPORT ?= /tmp
 DEMO_DIR := demo/multiparty-webapp
 DEMO_MAKE := $(MAKE) -C $(DEMO_DIR)
 
-.PHONY: all build build-release test test-release clean demo clippy fmt format check check-bindings audit test-web check-examples e2e test-all-examples example-resumption example-ohttpa example-attestation example-oblivious example-gpu example-hub example-orchestration example-oracle example-federation native-build native-demo native-test ci docs demo-stable-up demo-stable-down test-contracts build-contracts formal formal-verify formal-pv formal-tamarin test-zk-compression audit-zk-scalability status publish-python publish-npm publish-wasm publish-go publish-crates publish-github publish-all verify-core verify-bindings verify-examples verify-demo verify-all
 
+.PHONY: all
 all: build test
 
+.PHONY: setup
 setup: ## Install dependencies (pnpm + system libraries)
 ifeq ($(OS),Linux)
 	@$(MAKE) linux-setup
@@ -48,10 +49,12 @@ endif
 	pnpm install
 	@echo "Ready to build! Run 'make build' or 'make demo-up'."
 
+.PHONY: linux-setup
 linux-setup: ## Install system dependencies on Ubuntu/Debian
 	@echo "Delegating system setup to scripts/setup_linux_env.sh..."
 	@bash scripts/setup_linux_env.sh
 
+.PHONY: darwin-setup
 darwin-setup: ## Install system dependencies on macOS
 	@echo "Delegating system setup to scripts/setup_macos_env.sh..."
 	@bash scripts/setup_macos_env.sh
@@ -59,32 +62,56 @@ darwin-setup: ## Install system dependencies on macOS
 ## -- CI / Verification --
 
 # Full CI pipeline locally
+.PHONY: ci
 ci: ## Run all standard CI checks
-	@echo "--- Running CI Checks in Parallel ---"
-	$(MAKE) -j4 ci-parallel
+	@echo "--- Running CI Checks ---"
+	@$(MAKE) -j3 ci-tools
+	@$(MAKE) ci-rust
 	@echo "All CI checks passed locally!"
 
+.PHONY: ci-tools
+ci-tools: fmt audit check-bindings
+
+.PHONY: ci-rust
+ci-rust: clippy test test-rust-examples test-contracts
+
+.PHONY: verify-core
 verify-core: format clippy build build-release test test-release ## Verify core Rust crates
 	@echo "--- CORE VERIFICATION COMPLETED ---"
 
+.PHONY: verify-bindings
 verify-bindings: check-bindings test-bindings ## Verify multi-language bindings and FFI
 	@echo "--- BINDINGS VERIFICATION COMPLETED ---"
 
+.PHONY: verify-examples
 verify-examples: check-examples test-rust-examples ## Verify all interactive and non-interactive examples
 	@echo "--- EXAMPLES VERIFICATION COMPLETED ---"
 
+.PHONY: verify-demo-run
+verify-demo-run:
+	$(DEMO_MAKE) e2e-run
+
+.PHONY: verify-demo
 verify-demo: ## Verify E2E demo stack functionality
 	@echo "Starting E2E stack for project: $(COMPOSE_PROJECT_NAME) for verify-demo"
 	@set -e; \
 	trap '$(MAKE) demo-down' EXIT; \
 	$(MAKE) demo-up; \
-	$(DEMO_MAKE) e2e-run
+	$(MAKE) verify-demo-run
 	@echo "--- DEMO VERIFICATION COMPLETED ---"
 
-verify-all: verify-core verify-bindings verify-examples verify-demo ci ## Exhaustive formal validation and verification suite
+.PHONY: verify-all
+verify-all: verify-core check-bindings verify-examples ci ## Exhaustive formal validation and verification suite
+	@echo "--- STARTING SHARED DEMO STACK FOR VERIFY-ALL ---"
+	@set -e; \
+	trap '$(MAKE) demo-down' EXIT; \
+	$(MAKE) demo-up; \
+	$(MAKE) test-bindings-run; \
+	$(MAKE) verify-demo-run
 	@echo "--- ALL FORMAL VALIDATION AND VERIFICATION COMPLETED SUCCESSFULLY ---"
 	@echo "The OpenHTTPA project stack is verified for production readiness."
 
+.PHONY: ci-parallel
 ci-parallel: fmt audit clippy test test-rust-examples check-bindings test-contracts
 
 ## -- Development --
@@ -168,11 +195,13 @@ else
 endif
 
 # Autonomous ZK-Compression Verification (ZAA)
+.PHONY: test-zk-compression
 test-zk-compression: ## Verify ZK-DCAP compression ratio and guest logic
 	@echo "--- Verifying ZK-DCAP Compression (ZAA) ---"
 	+OPENHTTPA_SKIP_ZK_BUILD=1 RISC0_SKIP_BUILD_KERNELS=1 cargo test -p openhttpa-zk --test integration -- test_zk_dcap_compression
 	@echo "ZAA autonomous verification passed!"
 
+.PHONY: audit-zk-scalability
 audit-zk-scalability: ## Profile ZK guest cycle counts for scalability audit
 	@echo "--- Profiling ZK Guest Scalability ---"
 	@if [ "$(OPENHTTPA_SKIP_ZK_BUILD)" = "1" ]; then \
@@ -185,41 +214,50 @@ audit-zk-scalability: ## Profile ZK guest cycle counts for scalability audit
 # RISC0_SKIP_BUILD_KERNELS is set automatically above by the Metal/CUDA probe.
 # It is forwarded explicitly here so all child cargo invocations see the same value,
 # even when invoked via recursive make or with a different environment.
+.PHONY: build
 build: ## Build all Rust crates (debug)
 	+RISC0_SKIP_BUILD_KERNELS=$(RISC0_SKIP_BUILD_KERNELS) cargo build --workspace --features $(FEATURES)
 
+.PHONY: build-release
 build-release: ## Build all Rust crates (release)
 	+RISC0_SKIP_BUILD_KERNELS=$(RISC0_SKIP_BUILD_KERNELS) cargo build --workspace --features $(FEATURES) --release
 
 # Run all Rust tests.
 # Forwards RISC0_SKIP_BUILD_KERNELS so test compilation is consistent with the build.
+.PHONY: test
 test: ## Run all Rust tests (debug)
 	+RISC0_SKIP_BUILD_KERNELS=$(RISC0_SKIP_BUILD_KERNELS) cargo test --workspace --features $(FEATURES)
 
+.PHONY: test-release
 test-release: ## Run all Rust tests (release)
 	+RISC0_SKIP_BUILD_KERNELS=$(RISC0_SKIP_BUILD_KERNELS) cargo test --workspace --features $(FEATURES) --release
 
 # Run all Playwright E2E tests (requires running stack)
+.PHONY: test-web
 test-web: ## Run Playwright E2E tests (individual)
 	pnpm test
 
 # Run full E2E suite (starts demo stack + tests)
+.PHONY: e2e
 e2e: ## Run full E2E suite (starts demo stack + tests)
 	@echo "Starting E2E stack for project: $(COMPOSE_PROJECT_NAME)"
 	@set -e; \
 	trap '$(MAKE) demo-down' EXIT; \
 	$(MAKE) demo-up; \
-	$(DEMO_MAKE) e2e-run; \
-	$(MAKE) test-bindings
+	$(MAKE) verify-demo-run; \
+	$(MAKE) test-bindings-run
 
 # Fast workspace check
+.PHONY: check
 check: ## Run cargo check on workspace
 	+cargo check --workspace
 
 # Verify all examples compile (software-safe features)
+.PHONY: check-examples
 check-examples: ## Verify all examples compile
 	+cargo check --examples --workspace --features openhttpa-attestation/ita,openhttpa-attestation/maa,openhttpa-tee/mock,openhttpa-tee/nvidia_gpu
 
+.PHONY: clippy
 clippy: ## Run clippy lints (all features)
 	@mkdir -p /tmp/usr/lib
 	+OPENHTTPA_SKIP_ZK_BUILD=$(OPENHTTPA_SKIP_ZK_BUILD) RISC0_SKIP_BUILD=1 RISC0_SKIP_BUILD_KERNELS=1 rustup run stable cargo clippy --workspace --all-targets $(CLIPPY_FEATURES) -- -D warnings
@@ -228,6 +266,7 @@ node_modules: package.json pnpm-lock.yaml ## Ensure Node.js dependencies are ins
 	pnpm install
 	@touch node_modules
 
+.PHONY: fmt
 fmt: node_modules ## Check code formatting
 	+rustup run stable cargo fmt --all -- --check
 	@if command -v forge >/dev/null 2>&1; then \
@@ -235,6 +274,7 @@ fmt: node_modules ## Check code formatting
 	fi
 	pnpm run fmt:check
 
+.PHONY: format
 format: node_modules ## Apply code formatting
 	+rustup run stable cargo fmt --all
 	@if command -v forge >/dev/null 2>&1; then \
@@ -243,6 +283,7 @@ format: node_modules ## Apply code formatting
 	pnpm run fmt
 
 # Audit dependencies for vulnerabilities and licenses
+.PHONY: audit
 audit: ## Audit dependencies (cargo-deny + cargo-audit + pnpm + uv)
 	@command -v cargo-deny >/dev/null 2>&1 || cargo install cargo-deny --locked
 	cargo deny check
@@ -254,12 +295,15 @@ audit: ## Audit dependencies (cargo-deny + cargo-audit + pnpm + uv)
 	cd bindings/python && uv lock --check
 
 # Verify all language bindings compile
+.PHONY: check-bindings
 check-bindings: check-python-bindings check-node-bindings check-go-bindings ## Verify all language bindings compile
 
+.PHONY: check-python-bindings
 check-python-bindings:
 	@echo "Checking Python bindings..."
 	+@command -v uv >/dev/null 2>&1 && uvx maturin build -m bindings/python/Cargo.toml --release --auditwheel repair || { cd bindings/python && maturin build --release --auditwheel repair; }
 
+.PHONY: check-node-bindings
 check-node-bindings:
 	@echo "Checking Node.js bindings..."
 	# bindings/nodejs is a pnpm workspace member; deps are managed by the root pnpm-lock.yaml.
@@ -268,20 +312,24 @@ check-node-bindings:
 	pnpm install --frozen-lockfile --filter @openhttpa/core
 	cd bindings/nodejs && pnpm build
 
+.PHONY: check-go-bindings
 check-go-bindings:
 	@echo "Checking Go bindings..."
 	+cargo build -p openhttpa-c --release
 	cd bindings/go && go build ./...
 
 # Generate documentation and check for broken links
+.PHONY: docs
 docs: ## Generate workspace documentation
 	@mkdir -p /tmp/usr/lib
 	+OPENHTTPA_SKIP_ZK_BUILD=$(OPENHTTPA_SKIP_ZK_BUILD) RUSTDOCFLAGS="-D warnings" cargo doc --workspace $(CLIPPY_FEATURES) --no-deps
 
 # Clean build artifacts
+.PHONY: clean
 clean: ## Remove basic build artifacts
 	cargo clean || rm -rf target/
 
+.PHONY: deep-clean
 deep-clean: clean ## Remove ALL artifacts (node_modules, wasm, etc.)
 	rm -rf node_modules/
 	rm -rf bindings/nodejs/node_modules/
@@ -291,6 +339,7 @@ deep-clean: clean ## Remove ALL artifacts (node_modules, wasm, etc.)
 	find . -name "dist" -type d -exec rm -rf {} +
 	find . -name ".turbo" -type d -exec rm -rf {} +
 
+.PHONY: doctor
 doctor: ## Check system dependencies and environment readiness
 	@echo "=== OpenHTTPA System Doctor ==="
 	@echo -n "Rust: " && cargo --version || echo "MISSING"
@@ -304,6 +353,7 @@ doctor: ## Check system dependencies and environment readiness
 	@echo "============================="
 	@$(MAKE) repair-rust
 
+.PHONY: repair-rust
 repair-rust: ## Repair corrupted Rust toolchain and components
 	@echo "Repairing Rust toolchain (stable)..."
 	@if command -v rustup >/dev/null 2>&1; then \
@@ -316,6 +366,7 @@ repair-rust: ## Repair corrupted Rust toolchain and components
 		exit 1; \
 	fi
 
+.PHONY: formal
 formal: ## Run formal verification models (ProVerif)
 	@echo "Running formal verification..."
 	@if ! command -v proverif >/dev/null 2>&1; then \
@@ -331,28 +382,35 @@ formal: ## Run formal verification models (ProVerif)
 ## -- Demo --
 
 # Start the full demo stack (backend + frontend)
+.PHONY: demo-up
 demo-up: build wasm ## Launch the MPC demo via Docker
 	$(DEMO_MAKE) up
 
 # Stop the demo stack
+.PHONY: demo-down
 demo-down: ## Stop the demo stack
 	$(DEMO_MAKE) down
 
 # Start the stable demo instance (port 3001, isolated)
+.PHONY: demo-stable-up
 demo-stable-up: build wasm ## Start the stable demo instance (port 3001, isolated)
 	$(DEMO_MAKE) stable-up
 
 # Stop the stable demo instance
+.PHONY: demo-stable-down
 demo-stable-down: ## Stop the stable demo instance
 	$(DEMO_MAKE) stable-down
 
 # Restart the stable demo instance (clean refresh)
+.PHONY: demo-stable-restart
 demo-stable-restart: demo-stable-down demo-stable-up ## Restart the stable demo instance (clean refresh)
 
 # Show status of the stable demo instance
+.PHONY: demo-stable-status
 demo-stable-status: ## Show status of the stable demo instance
 	$(DEMO_MAKE) stable-status
 
+.PHONY: status
 status: ## Show complete status of project workspace, Git, Husky hooks, and stable docker stack
 	@echo "\033[1;34m=== OpenHTTPA Project Status ===\033[0m"
 	@echo ""
@@ -372,85 +430,108 @@ status: ## Show complete status of project workspace, Git, Husky hooks, and stab
 	@echo "\033[1;34m================================\033[0m"
 
 # Follow logs from the stable demo instance
+.PHONY: demo-stable-logs
 demo-stable-logs: ## Follow logs from the stable demo instance
 	COMPOSE_PROJECT_NAME=openhttpa-stable docker compose -f $(DEMO_DIR)/docker-compose.yml logs -f
 
 # Launch the native Nginx/Caddy module demo stack
+.PHONY: demo-native-up
 demo-native-up: native-build ## Launch the native module demo stack
 	cd demo/native-modules && docker-compose up -d
 
 # Stop the native module demo stack
+.PHONY: demo-native-down
 demo-native-down: ## Stop the native module demo stack
 	cd demo/native-modules && docker-compose down
 
 ## -- Agentic Mesh --
 
 # Run the basic 2-agent swarm simulation
+.PHONY: swarm
 swarm: swarm-basic
+.PHONY: swarm-basic
 swarm-basic: ## Run basic 2-agent swarm simulation
 	cargo run --example basic_swarm -p openhttpa-mesh
 
 # Run the massive 100-agent swarm simulation
+.PHONY: swarm-massive
 swarm-massive: ## Run massive 100-agent swarm simulation
 	cargo run --example massive_swarm -p openhttpa-mesh
 
 # Run the complex 10+ agent delegation demo
+.PHONY: swarm-complex
 swarm-complex: ## Run complex 10+ agent delegation demo
 	cargo run --example complex_delegation -p openhttpa-mesh
 
 ## -- Examples --
 
 # Run all non-interactive examples and verify others
+.PHONY: test-all-examples
 test-all-examples: check-examples test-rust-examples test-bindings ## Run all non-interactive examples
 	@echo "All verified examples passed."
 
+.PHONY: test-rust-examples
 test-rust-examples: example-resumption example-ohttpa example-attestation example-gpu example-oblivious example-orchestration example-hub example-oracle example-swarm example-llm example-crypto example-federation ## Run only Rust-based non-interactive examples
 	@echo "All Rust examples passed."
 
 # Individual Rust examples (root moved to crates)
+.PHONY: example-resumption
 example-resumption: ## Run the session resumption example
 	+cargo run --example resumption_example -p openhttpa-core
 
+.PHONY: example-ohttpa
 example-ohttpa: ## Run the O-HTTPA oblivious example
 	+cargo run --example o-httpa_example -p openhttpa-transport
 
+.PHONY: example-attestation
 example-attestation: ## Run the remote attestation config example
 	+OpenHTTPA_ITA_API_KEY=mock cargo run --example remote_attestation -p openhttpa-server --features ita
 
+.PHONY: example-oblivious
 example-oblivious: ## Run the full oblivious client example
 	+cargo run --example full_oblivious_client -p openhttpa-client
 
 # Individual Rust examples (crates)
+.PHONY: example-gpu
 example-gpu: ## Run the NVIDIA GPU attestation example
 	+cargo run --example nvidia_gpu_attestation -p openhttpa-client --features nvidia_gpu
 
+.PHONY: example-hub
 example-hub: ## Run the attestation hub server example (timeout 5s)
 	@echo "Starting Hub (will stop after 5s)..."
 	+-timeout 5 cargo run --example attestation_hub -p openhttpa-server || true
 
+.PHONY: example-federation
 example-federation: ## Run the autonomous cross-vendor federation demo
 	+cargo run --example federated_mock_mesh -p openhttpa-attestation --features mock
 
+.PHONY: example-orchestration
 example-orchestration: ## Run the agent orchestration example
 	+cargo run --example orchestration -p openhttpa-a2a
 
+.PHONY: example-oracle
 example-oracle: ## Run the Web3 Oracle integration tests
 	+RISC0_SKIP_BUILD_KERNELS=1 cargo test -p openhttpa-oracle
 
+.PHONY: example-swarm
 example-swarm: ## Run basic swarm simulation
 	+cargo run --example basic_swarm -p openhttpa-mesh
 
+.PHONY: example-llm
 example-llm: ## Run verified AI chat example
 	+cargo run --example verified_ai -p openhttpa-llm
 
+.PHONY: example-crypto
 example-crypto: ## Run crypto test vector generation example
 	+cargo run --example gen_vectors -p openhttpa-crypto
 
+.PHONY: build-contracts
 build-contracts: ## Build Solidity contracts
 	@if command -v forge >/dev/null 2>&1; then \
 		cd crates/openhttpa-contract && forge build; \
 	fi
 
+.PHONY: test-contracts
 test-contracts: ## Run Solidity contract tests
 	@if command -v forge >/dev/null 2>&1; then \
 		cd crates/openhttpa-contract && forge test; \
@@ -459,34 +540,47 @@ test-contracts: ## Run Solidity contract tests
 ## -- Bindings --
 
 # Run all language binding examples (requires Docker)
+.PHONY: test-bindings-run
+test-bindings-run:
+	./bindings/run_examples.sh
+
+.PHONY: test-bindings
 test-bindings: test-all-bindings ## Alias for test-all-bindings
+.PHONY: test-all-bindings
 test-all-bindings: ## Run all language binding integration tests
 	@set -e; \
 	trap '$(MAKE) demo-down' EXIT; \
 	$(MAKE) demo-up; \
-	./bindings/run_examples.sh
+	$(MAKE) test-bindings-run
 
 # Individual binding shortcuts
+.PHONY: bind-python
 bind-python: ## Build Python bindings
 	cd bindings/python && maturin develop
 
+.PHONY: bind-nodejs
 bind-nodejs: ## Build Node.js bindings
 	# bindings/nodejs is a pnpm workspace member; use --filter from workspace root to avoid
 	# interactive "recreate node_modules?" prompts caused by running pnpm install inside the subdir.
 	pnpm install --filter @openhttpa/core
 	cd bindings/nodejs && pnpm run build
 
+.PHONY: bind-go
 bind-go: ## Build Go bindings
 	cd bindings/go && go build ./...
 
+.PHONY: bind-c
 bind-c: ## Build C bindings
 	+cargo build -p openhttpa-c --release
 
+.PHONY: wasm
 wasm: wasm-demo wasm-extension ## Build both browser and extension Wasm bindings
 
+.PHONY: wasm-demo
 wasm-demo:
 	$(DEMO_MAKE) wasm
 
+.PHONY: wasm-extension
 wasm-extension: ## Build browser extension Wasm bindings
 	@command -v wasm-pack >/dev/null 2>&1 || { \
 		echo "wasm-pack not found. Install with:  cargo install wasm-pack"; \
@@ -502,63 +596,82 @@ wasm-extension: ## Build browser extension Wasm bindings
 
 ## -- Publish / Distribution --
 
+.PHONY: bump
 bump: version ## Alias for version
+.PHONY: version
 version: ## Interactive wizard to bump semantic version
 	uv run scripts/bump.py
 
+.PHONY: publish
 publish: publish-wizard ## Alias for publish-wizard
+.PHONY: publish-wizard
 publish-wizard: ## Interactive wizard to publish packages smoothly
 	uv run scripts/publish.py
 
+.PHONY: publish-python
 publish-python: ## Publish Python bindings to PyPI
 	@bash scripts/publish_python.sh
 
+.PHONY: publish-npm
 publish-npm: ## Publish Node.js bindings to npm
 	@bash scripts/publish_npm.sh
 
+.PHONY: publish-wasm
 publish-wasm: ## Publish WASM bindings to npm
 	@bash scripts/publish_wasm.sh
 
+.PHONY: publish-go
 publish-go: ## Publish Go FFI module to Git/Go Proxy
 	@bash scripts/publish_go.sh
 
+.PHONY: publish-crates
 publish-crates: ## Publish workspace Rust crates to crates.io
 	@bash scripts/publish_crates.sh
 
+.PHONY: publish-github
 publish-github: ## Build hardened production binary, SBOM, and publish GitHub Release
 	@bash scripts/publish_github.sh
 
+.PHONY: publish-all
 publish-all: publish-crates publish-python publish-npm publish-wasm publish-go publish-github ## Publish to all destinations sequentially
 
 ## -- Native Infrastructure --
 
+.PHONY: native-build
 native-build: bind-c bind-go ## Build native Nginx and Caddy modules
 	+cd modules/nginx && cargo build --release
 	cd modules/caddy && go build -o openhttpa-caddy main.go
 
+.PHONY: native-demo
 native-demo: demo-native-up ## Alias for demo-native-up
 
+.PHONY: native-test
 native-test: demo-native-up ## Run autonomous E2E tests for native modules
 	cd demo/native-modules && pnpm install && pnpm test
 
+.PHONY: native-down
 native-down: demo-native-down ## Alias for demo-native-down
 
 ## -- Formal Verification --
 
 # Run all formal security proofs
+.PHONY: formal-verify
 formal-verify: formal-pv formal-tamarin ## Run all formal proofs
 	@echo "All formal proofs complete."
 
 # Run ProVerif symbolic analysis
+.PHONY: formal-pv
 formal-pv: ## Run ProVerif symbolic analysis
 	@echo "Running ProVerif... (If not found, try: eval \$$(opam env))"
 	proverif formal/handshake.pv
 
 # Run Tamarin temporal logic analysis (CLI mode)
+.PHONY: formal-tamarin
 formal-tamarin: ## Run Tamarin temporal logic analysis
 	tamarin-prover --prove --heuristic=s formal/handshake.spthy +RTS -N -RTS
 
 # Start Tamarin interactive web UI
+.PHONY: formal-tamarin-ui
 formal-tamarin-ui: ## Start Tamarin interactive web UI
 	tamarin-prover interactive formal/
 
@@ -566,6 +679,7 @@ formal-tamarin-ui: ## Start Tamarin interactive web UI
 
 # Convert any Markdown file to PDF
 # Usage: make pdf FILE=API.md
+.PHONY: pdf
 pdf: ## Convert Markdown to PDF (Usage: make pdf FILE=README.md)
 	@if [ -z "$(FILE)" ]; then echo "Error: Please specify FILE=... (e.g., make pdf FILE=API.md)"; exit 1; fi
 	@echo "Rendering $(FILE) to PDF..."
@@ -574,6 +688,7 @@ pdf: ## Convert Markdown to PDF (Usage: make pdf FILE=README.md)
 
 ## -- Help --
 
+.PHONY: help
 help: ## Show this help message
 	@echo "\033[1;34mOpenHTTPA Monorepo Management\033[0m"
 	@echo ""
