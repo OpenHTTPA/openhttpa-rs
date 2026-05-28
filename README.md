@@ -58,6 +58,7 @@ Traditional Transport Layer Security (TLS) terminates at the network edge (e.g.,
 - **Transport Layer Independence**: Designed for agnostic multiplexing over HTTP/2 (`hyper`/`h2`), HTTP/3 (`quinn`/`h3`), and Remote Procedure Calls via gRPC (`tonic`).
 - **Comprehensive FFI Binding Surface**: Exposes memory-safe Foreign Function Interfaces for Python (`PyO3`/`maturin`), Node.js (`napi-rs`), ANSI C (`cbindgen`), and Go (`cgo`).
 - **Autonomous Agentic Architectures**: Natively provisions the Attested Agent Mesh (AAM) and Model Context Protocol (MCP) enabling secure, confidential multi-hop tool delegation among decentralized AI agents.
+- **TEE-Native Orchestration Layer**: Dual-component ingress controller (`openhttpa-ingress`) and event broker (`openhttpa-broker`) executing entirely within the TEE boundary to terminate sessions natively and eliminate host OS exposure.
 - **Production-Grade Resilience**: Implements durable cryptographic nonce persistence, real-time Attestation Revocation List (ARL) evaluations, and strict monotonic counter synchronization to preclude replay vectors.
 - **Cryptographic Semantic Context**: Integrates the Attest Header List (AHL) to mathematically bind Application Layer (L7) semantics (HTTP Method, Request-URI) to the session MAC, definitively neutralizing semantic re-routing and confused deputy attacks.
 - **Trustless Blockchain Oracles**: Bridges deterministic Web2 API responses to EVM/Bitcoin networks utilizing TEE-attested provenance derivations coupled with Zero-Knowledge (ZK-STARK) succinct execution proofs.
@@ -101,6 +102,8 @@ crates/
   openhttpa-a2a/                     High-level Agent-to-Agent secure messaging
   openhttpa-fabric/                  Distributed memory synchronization for AI agents
   openhttpa-zk/                      Zero-Knowledge succinct proof generation and verification
+  openhttpa-ingress/                 TEE-native HTTP Reverse Proxy for orchestration
+  openhttpa-broker/                  TEE-native Event Bus for secure session termination
 bindings/
   ...
 modules/

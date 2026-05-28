@@ -81,7 +81,7 @@ wasm:
 	}
 	@echo "Building Wasm bindings..."
 	@mkdir -p $(WASM_OUTDIR)
-	+wasm-pack build "$(WASM_PKGDIR)" \
+	cd $(WORKSPACE) && wasm-pack build bindings/wasm \
 		--target web \
 		--out-dir "$(CURDIR)/$(WASM_OUTDIR)" \
 		--release

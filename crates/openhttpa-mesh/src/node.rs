@@ -76,6 +76,11 @@ impl AgentNode {
         &self.metadata
     }
 
+    /// Check if this node acts as a TEE-native Gateway / Ingress controller.
+    pub fn is_gateway(&self) -> bool {
+        self.metadata.capabilities.iter().any(|c| c == "gateway")
+    }
+
     /// Get the internal MCP server to add tools.
     pub fn mcp_server(&self) -> Arc<OpenHttpaMcpServer> {
         self.mcp_server.clone()

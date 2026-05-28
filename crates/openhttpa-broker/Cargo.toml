@@ -1,0 +1,40 @@
+[package]
+name = "openhttpa-broker"
+version = "0.1.1"
+edition = "2024"
+publish = false
+description = "TEE-native event-driven ingress controller for OpenHTTPA"
+license = "Apache-2.0 OR MIT"
+
+[dependencies]
+openhttpa-server = { workspace = true }
+openhttpa-core = { workspace = true }
+openhttpa-tee = { workspace = true }
+openhttpa-proto = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+hyper = { workspace = true, features = ["full"] }
+hyper-util = { workspace = true, features = ["full"] }
+http-body-util = "0.1"
+bytes = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
+dashmap = { workspace = true }
+
+[dev-dependencies]
+reqwest = { workspace = true }
+openhttpa-tee = { workspace = true, features = ["mock"] }
+openhttpa-mesh = { workspace = true }
+
+# Used to dispatch internal decrypted events to legacy/internal messaging queue
+# Removed rdkafka for now to avoid C-dependency requirements (curl/curl.h)
+# rdkafka = { version = "0.36", features = ["cmake-build"] }
+
+[features]
+default = []
+sgx = ["openhttpa-tee/sgx"]
+tdx = ["openhttpa-tee/tdx"]
+

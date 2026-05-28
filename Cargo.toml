@@ -16,6 +16,8 @@ members = [
     "crates/openhttpa-mesh",
     "crates/openhttpa-a2a",
     "crates/openhttpa-zk",
+    "crates/openhttpa-ingress",
+    "crates/openhttpa-broker",
     "bindings/c",
     "bindings/nodejs",
     "bindings/python",
@@ -52,6 +54,8 @@ default-members = [
     "crates/openhttpa-mesh",
     "crates/openhttpa-a2a",
     "crates/openhttpa-zk",
+    "crates/openhttpa-ingress",
+    "crates/openhttpa-broker",
     "bindings/c",
     "bindings/nodejs",
     "demo/multiparty-webapp/backend",
@@ -170,6 +174,8 @@ openhttpa-fabric     = { path = "crates/openhttpa-fabric", version = "0.1.1" }
 openhttpa-a2a         = { path = "crates/openhttpa-a2a", version = "0.1.1" }
 openhttpa-zk         = { path = "crates/openhttpa-zk", version = "0.1.1" }
 openhttpa-oracle     = { path = "crates/openhttpa-oracle", version = "0.1.1" }
+openhttpa-ingress    = { path = "crates/openhttpa-ingress", version = "0.1.1" }
+openhttpa-broker     = { path = "crates/openhttpa-broker", version = "0.1.1" }
 
 
 [profile.release]

@@ -2647,9 +2647,12 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "socket2 0.6.4",
+ "system-configuration",
  "tokio",
+ "tower-layer",
  "tower-service",
  "tracing",
+ "windows-registry",
 ]
 
 [[package]]
@@ -3841,6 +3844,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "openhttpa-broker"
+version = "0.1.1"
+dependencies = [
+ "bytes",
+ "dashmap",
+ "hex 0.4.3",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "openhttpa-core",
+ "openhttpa-mesh",
+ "openhttpa-proto",
+ "openhttpa-server",
+ "openhttpa-tee",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.23",
+]
+
+[[package]]
 name = "openhttpa-c"
 version = "0.1.1"
 dependencies = [
@@ -4038,6 +4065,30 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "uuid 1.23.1",
+]
+
+[[package]]
+name = "openhttpa-ingress"
+version = "0.1.1"
+dependencies = [
+ "bytes",
+ "dashmap",
+ "hex 0.4.3",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "openhttpa-core",
+ "openhttpa-mesh",
+ "openhttpa-proto",
+ "openhttpa-server",
+ "openhttpa-tee",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.23",
 ]
 
 [[package]]
@@ -6402,6 +6453,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "system-configuration"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a13f3d0daba03132c0aa9767f98351b3488edc2c100cda2d2ec2b04f3d8d3c8b"
+dependencies = [
+ "bitflags 2.11.1",
+ "core-foundation 0.9.4",
+ "system-configuration-sys",
+]
+
+[[package]]
+name = "system-configuration-sys"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+]
+
+[[package]]
 name = "tap"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7414,6 +7486,17 @@ name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
+
+[[package]]
+name = "windows-registry"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02752bf7fbdcce7f2a27a742f798510f3e5ad88dbe84871e5168e2120c3d5720"
+dependencies = [
+ "windows-link",
+ "windows-result",
+ "windows-strings",
+]
 
 [[package]]
 name = "windows-result"
