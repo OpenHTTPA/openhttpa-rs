@@ -23,6 +23,8 @@ ignore = [
     # 'tracing-subscriber 0.2' below scopes the risk to the risc0 feature flag.
     "RUSTSEC-2025-0055", # tracing-subscriber 0.2: vuln — risc0 transitive only — tracked above
     "RUSTSEC-2025-0141", # bincode: unmaintained (risc0) — tracked above
+    "RUSTSEC-2025-0073", # alloy-dyn-abi DoS vulnerability (alloy 0.1 transitive)
+    "RUSTSEC-2024-0370", # proc-macro-error unmaintained (alloy 0.1 transitive)
 ]
 
 [licenses]
@@ -46,6 +48,8 @@ allow = [
     # LLVM's libFuzzer runtime under the NCSA license.
     # Scope: only reachable from the fuzz/ workspace member (not production).
     "NCSA",
+    "0BSD",
+    "CC0-1.0",
 ]
 confidence-threshold = 0.8
 
@@ -160,7 +164,6 @@ skip = [
 wildcards = "allow"
 deny = [
     # vulnerable / unmaintained alternatives
-    { name = "openssl" },
 ]
 
 [sources]

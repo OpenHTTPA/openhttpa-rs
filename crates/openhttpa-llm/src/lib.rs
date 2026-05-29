@@ -44,6 +44,7 @@
 #![forbid(unsafe_code)]
 
 pub mod client;
+pub mod enclave_inference;
 pub mod types;
 
 pub use client::ConfidentialLlmClient;

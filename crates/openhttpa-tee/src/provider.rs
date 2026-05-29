@@ -110,6 +110,17 @@ pub trait TeeProvider: Send + Sync {
             "Unsealing not implemented".to_owned(),
         ))
     }
+
+    /// Dynamically derive a 32-byte cryptographic key bound to the TEE hardware and the given context.
+    /// Default implementation returns an error.
+    ///
+    /// # Errors
+    /// Returns [`TeeProviderError`] if hardware key derivation fails.
+    fn derive_key(&self, _context: &[u8]) -> Result<[u8; 32], TeeProviderError> {
+        Err(TeeProviderError::NotAvailable(
+            "Key derivation not implemented".to_owned(),
+        ))
+    }
 }
 
 /// A modern adapter for TEE hardware that produces structured evidence.
@@ -512,6 +523,13 @@ impl TeeProvider for CompositeTeeProvider {
             .ok_or_else(|| TeeProviderError::NotAvailable("no providers in composite".to_owned()))?
             .unseal_data(ciphertext)
     }
+
+    fn derive_key(&self, context: &[u8]) -> Result<[u8; 32], TeeProviderError> {
+        self.providers
+            .first()
+            .ok_or_else(|| TeeProviderError::NotAvailable("no providers in composite".to_owned()))?
+            .derive_key(context)
+    }
 }
 
 /// A TEE provider that wraps another provider and compresses its quotes into ZK-SNARKs.
@@ -578,5 +596,9 @@ impl TeeProvider for ZkCompressedTeeProvider {
 
     fn is_available(&self) -> bool {
         self.inner.is_available()
+    }
+
+    fn derive_key(&self, context: &[u8]) -> Result<[u8; 32], TeeProviderError> {
+        self.inner.derive_key(context)
     }
 }

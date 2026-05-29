@@ -33,6 +33,7 @@ thiserror    = { workspace = true }
 tracing      = { workspace = true }
 zeroize      = { workspace = true }
 hex          = { workspace = true }
+hkdf         = "0.12"
 sha2         = "0.10"
 bincode      = "1"
 serde_bytes  = "0.11"

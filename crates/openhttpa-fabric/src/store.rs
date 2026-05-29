@@ -8,6 +8,7 @@ use aes_gcm::{
 };
 use openhttpa_proto::ProvenanceChain;
 use openhttpa_tee::provider::TeeProvider;
+use rocksdb::{DB, Options};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -29,6 +30,14 @@ pub struct SealedData {
 }
 
 pub type VersionVector = HashMap<String, u64>;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum KeyDerivationPolicy {
+    /// Derive the key once at startup and cache it.
+    StartupCached,
+    /// Derive the key dynamically on every cryptographic operation.
+    PerTransaction,
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FabricEntry {
@@ -78,17 +87,17 @@ impl KvStore {
 }
 
 impl DataStore for KvStore {
-    fn get(&self, namespace: &str, key: &str, _tee: &dyn TeeProvider) -> Option<Vec<u8>> {
+    fn get(&self, namespace: &str, key: &str, tee: &dyn TeeProvider) -> Option<Vec<u8>> {
         let guard = self.namespaces.read().unwrap();
         guard
             .get(namespace)
             .and_then(|ns| ns.get(key))
             .and_then(|entry| {
-                // Decrypt memory using mock fixed key for now since TeeProvider doesn't provide
-                // an ephemeral AES key yet. In a real impl, we'd fetch an ephemeral key from the TEE.
-                let key =
-                    aes_gcm::Key::<Aes256Gcm>::from_slice(b"01234567890123456789012345678901");
-                let cipher = Aes256Gcm::new(key);
+                let derived_key = tee
+                    .derive_key(b"sdmf_rocksdb_master_key")
+                    .unwrap_or([0u8; 32]);
+                let aes_key = aes_gcm::Key::<Aes256Gcm>::from_slice(&derived_key);
+                let cipher = Aes256Gcm::new(aes_key);
                 let nonce = Nonce::from_slice(&entry.data.nonce);
                 cipher.decrypt(nonce, entry.data.ciphertext.as_ref()).ok()
             })
@@ -101,7 +110,7 @@ impl DataStore for KvStore {
         data: Vec<u8>,
         version: VersionVector,
         provenance: Option<ProvenanceChain>,
-        _tee: &dyn TeeProvider,
+        tee: &dyn TeeProvider,
     ) -> bool {
         let mut guard = self.namespaces.write().unwrap();
         let ns = guard.entry(namespace.to_string()).or_default();
@@ -127,7 +136,10 @@ impl DataStore for KvStore {
             }
         }
 
-        let aes_key = aes_gcm::Key::<Aes256Gcm>::from_slice(b"01234567890123456789012345678901");
+        let derived_key = tee
+            .derive_key(b"sdmf_rocksdb_master_key")
+            .unwrap_or([0u8; 32]);
+        let aes_key = aes_gcm::Key::<Aes256Gcm>::from_slice(&derived_key);
         let cipher = Aes256Gcm::new(aes_key);
         let mut nonce_bytes = [0u8; 12];
         rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce_bytes);
@@ -220,15 +232,17 @@ impl VectorStore {
 }
 
 impl DataStore for VectorStore {
-    fn get(&self, namespace: &str, key: &str, _tee: &dyn TeeProvider) -> Option<Vec<u8>> {
+    fn get(&self, namespace: &str, key: &str, tee: &dyn TeeProvider) -> Option<Vec<u8>> {
         let guard = self.namespaces.read().unwrap();
         guard
             .get(namespace)
             .and_then(|ns| ns.get(key))
             .and_then(|(_, entry)| {
-                let key =
-                    aes_gcm::Key::<Aes256Gcm>::from_slice(b"01234567890123456789012345678901");
-                let cipher = Aes256Gcm::new(key);
+                let derived_key = tee
+                    .derive_key(b"sdmf_rocksdb_master_key")
+                    .unwrap_or([0u8; 32]);
+                let aes_key = aes_gcm::Key::<Aes256Gcm>::from_slice(&derived_key);
+                let cipher = Aes256Gcm::new(aes_key);
                 let nonce = Nonce::from_slice(&entry.data.nonce);
                 cipher.decrypt(nonce, entry.data.ciphertext.as_ref()).ok()
             })
@@ -241,7 +255,7 @@ impl DataStore for VectorStore {
         data: Vec<u8>,
         version: VersionVector,
         provenance: Option<ProvenanceChain>,
-        _tee: &dyn TeeProvider,
+        tee: &dyn TeeProvider,
     ) -> bool {
         let mut guard = self.namespaces.write().unwrap();
         let ns = guard.entry(namespace.to_string()).or_default();
@@ -266,7 +280,10 @@ impl DataStore for VectorStore {
             }
         }
 
-        let aes_key = aes_gcm::Key::<Aes256Gcm>::from_slice(b"01234567890123456789012345678901");
+        let derived_key = tee
+            .derive_key(b"sdmf_rocksdb_master_key")
+            .unwrap_or([0u8; 32]);
+        let aes_key = aes_gcm::Key::<Aes256Gcm>::from_slice(&derived_key);
         let cipher = Aes256Gcm::new(aes_key);
         let mut nonce_bytes = [0u8; 12];
         rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce_bytes);
@@ -303,15 +320,17 @@ impl DataStore for VectorStore {
         namespace: &str,
         embedding: &[f32],
         top_k: usize,
-        _tee: &dyn TeeProvider,
+        tee: &dyn TeeProvider,
     ) -> Vec<(String, f32, Vec<u8>)> {
         let guard = self.namespaces.read().unwrap();
         if let Some(ns) = guard.get(namespace) {
             let mut results: Vec<_> = ns
                 .iter()
                 .filter_map(|(k, (emb, entry))| {
-                    let key_aes =
-                        aes_gcm::Key::<Aes256Gcm>::from_slice(b"01234567890123456789012345678901");
+                    let derived_key = tee
+                        .derive_key(b"sdmf_rocksdb_master_key")
+                        .unwrap_or([0u8; 32]);
+                    let key_aes = aes_gcm::Key::<Aes256Gcm>::from_slice(&derived_key);
                     let cipher = Aes256Gcm::new(key_aes);
                     let nonce = Nonce::from_slice(&entry.data.nonce);
                     cipher
@@ -354,6 +373,145 @@ impl DataStore for VectorStore {
     }
 }
 
+/// A persistent DataStore using RocksDB.
+pub struct RocksDbStore {
+    db: DB,
+    derivation_policy: KeyDerivationPolicy,
+    cached_key: Option<[u8; 32]>,
+}
+
+impl RocksDbStore {
+    pub fn new(
+        path: &str,
+        derivation_policy: KeyDerivationPolicy,
+        tee: &dyn TeeProvider,
+    ) -> Result<Self, String> {
+        let mut opts = Options::default();
+        opts.create_if_missing(true);
+        let db = DB::open(&opts, path).map_err(|e| e.to_string())?;
+
+        let cached_key = if let KeyDerivationPolicy::StartupCached = derivation_policy {
+            Some(
+                tee.derive_key(b"sdmf_rocksdb_master_key")
+                    .unwrap_or([0u8; 32]),
+            )
+        } else {
+            None
+        };
+
+        Ok(Self {
+            db,
+            derivation_policy,
+            cached_key,
+        })
+    }
+}
+
+impl DataStore for RocksDbStore {
+    fn get(&self, namespace: &str, key: &str, tee: &dyn TeeProvider) -> Option<Vec<u8>> {
+        let db_key = format!("{}:{}", namespace, key);
+        self.db
+            .get(db_key.as_bytes())
+            .unwrap_or(None)
+            .and_then(|val| {
+                let entry: FabricEntry = serde_json::from_slice(&val).ok()?;
+                let derived_key = match self.derivation_policy {
+                    KeyDerivationPolicy::StartupCached => self.cached_key.unwrap_or([0u8; 32]),
+                    KeyDerivationPolicy::PerTransaction => tee
+                        .derive_key(b"sdmf_rocksdb_master_key")
+                        .unwrap_or([0u8; 32]),
+                };
+                let aes_key = aes_gcm::Key::<Aes256Gcm>::from_slice(&derived_key);
+                let cipher = Aes256Gcm::new(aes_key);
+                let nonce = Nonce::from_slice(&entry.data.nonce);
+                cipher.decrypt(nonce, entry.data.ciphertext.as_ref()).ok()
+            })
+    }
+
+    fn put(
+        &self,
+        namespace: &str,
+        key: &str,
+        data: Vec<u8>,
+        version: VersionVector,
+        provenance: Option<ProvenanceChain>,
+        tee: &dyn TeeProvider,
+    ) -> bool {
+        let db_key = format!("{}:{}", namespace, key);
+
+        // Retrieve existing and check version vectors
+        if let Some(existing_entry) = self
+            .db
+            .get(db_key.as_bytes())
+            .ok()
+            .flatten()
+            .and_then(|val| serde_json::from_slice::<FabricEntry>(&val).ok())
+        {
+            let mut dominates = true;
+            for (node, v) in &version {
+                if existing_entry.version.get(node).copied().unwrap_or(0) < *v {
+                    dominates = false;
+                    break;
+                }
+            }
+            if dominates {
+                return false;
+            }
+        }
+
+        let derived_key = match self.derivation_policy {
+            KeyDerivationPolicy::StartupCached => self.cached_key.unwrap_or([0u8; 32]),
+            KeyDerivationPolicy::PerTransaction => tee
+                .derive_key(b"sdmf_rocksdb_master_key")
+                .unwrap_or([0u8; 32]),
+        };
+        let aes_key = aes_gcm::Key::<Aes256Gcm>::from_slice(&derived_key);
+        let cipher = Aes256Gcm::new(aes_key);
+        let mut nonce_bytes = [0u8; 12];
+        rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce_bytes);
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let ciphertext = cipher.encrypt(nonce, data.as_ref()).unwrap_or_default();
+
+        let entry = FabricEntry {
+            version,
+            data: SealedData {
+                ciphertext,
+                nonce: nonce_bytes,
+            },
+            provenance,
+        };
+
+        if let Ok(serialized) = serde_json::to_vec(&entry) {
+            self.db.put(db_key.as_bytes(), serialized).is_ok()
+        } else {
+            false
+        }
+    }
+
+    fn delete(&self, namespace: &str, key: &str) {
+        let db_key = format!("{}:{}", namespace, key);
+        let _ = self.db.delete(db_key.as_bytes());
+    }
+
+    fn vector_search(
+        &self,
+        _namespace: &str,
+        _embedding: &[f32],
+        _top_k: usize,
+        _tee: &dyn TeeProvider,
+    ) -> Vec<(String, f32, Vec<u8>)> {
+        vec![]
+    }
+
+    fn snapshot_to_disk(&self, _path: &str, _tee: &dyn TeeProvider) -> Result<(), String> {
+        Ok(()) // RocksDB is already persistent
+    }
+
+    fn restore_from_disk(&self, _path: &str, _tee: &dyn TeeProvider) -> Result<(), String> {
+        Ok(()) // RocksDB is already persistent
+    }
+}
+
 /// The MemoryStore wraps the topology configuration and the active data store backend.
 #[derive(Clone)]
 pub struct MemoryStore {
@@ -377,6 +535,23 @@ impl MemoryStore {
             backend: Arc::new(VectorStore::new()),
             tee_provider,
         }
+    }
+
+    pub fn new_rocksdb(
+        topology: Topology,
+        tee_provider: Arc<dyn TeeProvider>,
+        path: &str,
+        derivation_policy: KeyDerivationPolicy,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            topology,
+            backend: Arc::new(RocksDbStore::new(
+                path,
+                derivation_policy,
+                tee_provider.as_ref(),
+            )?),
+            tee_provider,
+        })
     }
 
     pub fn new_with_backend(

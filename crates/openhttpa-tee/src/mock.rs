@@ -12,6 +12,7 @@
 //! secure. It MUST NOT be used in production environments.
 
 use bytes::Bytes;
+use hkdf::Hkdf;
 use sha2::{Digest, Sha384};
 
 use openhttpa_proto::{AttestQuote, QuoteType};
@@ -293,6 +294,16 @@ impl TeeProvider for MockTeeProvider {
                 "Invalid mock sealed data".to_owned(),
             ))
         }
+    }
+
+    fn derive_key(&self, context: &[u8]) -> Result<[u8; 32], TeeProviderError> {
+        let hardware_secret = b"MOCK_HARDWARE_SECRET_KEY_1234567890";
+        let hkdf = Hkdf::<Sha384>::new(Some(b"mock_salt"), hardware_secret);
+        let mut okm = [0u8; 32];
+        hkdf.expand(context, &mut okm).map_err(|_| {
+            TeeProviderError::Enclave("HKDF expansion failed for mock key derivation".to_owned())
+        })?;
+        Ok(okm)
     }
 }
 

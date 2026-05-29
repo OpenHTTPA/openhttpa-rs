@@ -38,4 +38,6 @@ openhttpa-transport = { workspace = true }
 openhttpa-crypto = { workspace = true }
 hex = { workspace = true }
 dashmap = { workspace = true }
-
+openhttpa-fabric = { workspace = true }
+openhttpa-aiql = { workspace = true }
+tempfile = "3.10"
