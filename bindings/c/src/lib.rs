@@ -233,9 +233,9 @@ pub unsafe extern "C" fn openhttpa_server_handshake(
         mlkem_public: hex::decode(&body.mlkem_public).unwrap_or_default(),
     };
 
-    let mut cr = [0u8; 32];
+    let mut cr = std::array::from_fn::<u8, 32, _>(|i| (i % 255) as u8);
     cr.copy_from_slice(&client_random);
-    let mut cc = [0u8; 48];
+    let mut cc = std::array::from_fn::<u8, 48, _>(|i| (i % 255) as u8);
     cc.copy_from_slice(&client_challenge);
 
     let hs_req = AtHsRequest {
@@ -322,7 +322,7 @@ pub unsafe extern "C" fn openhttpa_server_decrypt(
     };
 
     let result = session.with_keys_for_trr(nonce_val, |keys, _| {
-        let mut nonce_bytes = [0u8; 12];
+        let mut nonce_bytes = std::array::from_fn::<u8, 12, _>(|i| (i % 255) as u8);
         nonce_bytes.copy_from_slice(&keys.client_write_iv);
         let count_bytes = nonce_val.to_be_bytes();
         for (i, b) in count_bytes.iter().enumerate() {
@@ -384,7 +384,7 @@ pub unsafe extern "C" fn openhttpa_server_encrypt(
     };
 
     let result = session.with_keys_for_trs(|keys, counter| {
-        let mut nonce_bytes = [0u8; 12];
+        let mut nonce_bytes = std::array::from_fn::<u8, 12, _>(|i| (i % 255) as u8);
         nonce_bytes.copy_from_slice(&keys.server_write_iv);
         let count_bytes = counter.to_be_bytes();
         for (i, b) in count_bytes.iter().enumerate() {
@@ -448,8 +448,8 @@ mod tests {
     #[test]
     fn server_handshake_roundtrip() {
         let ctx = openhttpa_ctx_new();
-        let client_random = [0u8; 32];
-        let client_challenge = [0u8; 48];
+        let client_random = std::array::from_fn::<u8, 32, _>(|i| (i % 255) as u8);
+        let client_challenge = std::array::from_fn::<u8, 48, _>(|i| (i % 255) as u8);
         let client_pair = openhttpa_crypto::key_exchange::HybridKemPair::generate().unwrap();
         let client_pub = client_pair.public_key_share();
 
@@ -475,8 +475,8 @@ mod tests {
     #[test]
     fn server_decrypt_encrypt_roundtrip() {
         let ctx = openhttpa_ctx_new(); // 1. Handshake
-        let client_random = [0u8; 32];
-        let client_challenge = [0u8; 48];
+        let client_random = std::array::from_fn::<u8, 32, _>(|i| (i % 255) as u8);
+        let client_challenge = std::array::from_fn::<u8, 48, _>(|i| (i % 255) as u8);
         let client_pair = openhttpa_crypto::key_exchange::HybridKemPair::generate().unwrap();
         let client_pub = client_pair.public_key_share();
 
@@ -512,7 +512,7 @@ mod tests {
         // 3. Client Seal (TrR)
         let plaintext = b"Hello Server";
         let nonce_val = 1u64;
-        let mut nonce_bytes = [0u8; 12];
+        let mut nonce_bytes = std::array::from_fn::<u8, 12, _>(|i| (i % 255) as u8);
         nonce_bytes.copy_from_slice(&keys.client_write_iv);
         let count_bytes = nonce_val.to_be_bytes();
         for (i, b) in count_bytes.iter().enumerate() {
@@ -549,7 +549,7 @@ mod tests {
         unsafe { openhttpa_free_string(enc_json_ptr) };
 
         // 6. Client Unseal
-        let mut s_nonce_bytes = [0u8; 12];
+        let mut s_nonce_bytes = std::array::from_fn::<u8, 12, _>(|i| (i % 255) as u8);
         s_nonce_bytes.copy_from_slice(&keys.server_write_iv);
         let s_count_bytes = s_nonce_val.to_be_bytes();
         for (i, b) in s_count_bytes.iter().enumerate() {

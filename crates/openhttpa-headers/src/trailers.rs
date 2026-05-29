@@ -163,10 +163,9 @@ pub fn decode_attest_binder(map: &HeaderMap) -> Result<(u64, Vec<u8>), TrailerEr
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
     fn ticket_round_trip() {
-        let mac = vec![0x01u8; 48];
+        let mac = std::array::from_fn::<u8, 48, _>(|i| u8::try_from(i % 255).unwrap()).to_vec();
         let hv = encode_attest_ticket(42, &mac, None);
         let mut map = HeaderMap::new();
         map.insert(HDR_ATTEST_TICKET.clone(), hv);
@@ -178,8 +177,8 @@ mod tests {
 
     #[test]
     fn ticket_0rtt_round_trip() {
-        let mac = vec![0xAAu8; 48];
-        let salt = [0xBBu8; 16];
+        let mac = std::array::from_fn::<u8, 48, _>(|i| u8::try_from(i % 255).unwrap()).to_vec();
+        let salt = std::array::from_fn::<u8, 16, _>(|i| u8::try_from(i % 255).unwrap());
         let hv = encode_attest_ticket(123, &mac, Some(salt));
         let mut map = HeaderMap::new();
         map.insert(HDR_ATTEST_TICKET.clone(), hv);
@@ -191,7 +190,7 @@ mod tests {
 
     #[test]
     fn binder_round_trip() {
-        let mac = vec![0x02u8; 48];
+        let mac = std::array::from_fn::<u8, 48, _>(|i| u8::try_from(i % 255).unwrap()).to_vec();
         let hv = encode_attest_binder(7, &mac);
         let mut map = HeaderMap::new();
         map.insert(HDR_ATTEST_BINDER.clone(), hv);

@@ -254,7 +254,7 @@ mod tests {
 
     #[test]
     fn aead_nonce_construction() {
-        let iv = [0xaau8; 12];
+        let iv = std::array::from_fn::<u8, 12, _>(|_| rand::random());
         let nonce = NonceManager::build_aead_nonce(1, &iv);
         // Bytes 0..4 unchanged; bytes 4..12 XOR'd with counter=1 big-endian
         assert_eq!(&nonce[..4], &iv[..4]);

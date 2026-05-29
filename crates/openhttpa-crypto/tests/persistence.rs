@@ -8,7 +8,7 @@ use tempfile::tempdir;
 fn test_file_nonce_persistence() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("nonce.bin");
-    let iv = [0xAAu8; NONCE_LEN];
+    let iv: [u8; NONCE_LEN] = rand::random();
 
     {
         let seq = FileNonceSequence::new(path.clone()).unwrap();
@@ -40,7 +40,7 @@ fn test_file_nonce_persistence() {
 fn test_file_nonce_locking() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("nonce_lock.bin");
-    let iv = [0xAAu8; NONCE_LEN];
+    let iv: [u8; NONCE_LEN] = rand::random();
 
     let seq1 = FileNonceSequence::new(path.clone()).unwrap();
     let seq2 = FileNonceSequence::new(path.clone()).unwrap();

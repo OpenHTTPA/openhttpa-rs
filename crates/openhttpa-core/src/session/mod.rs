@@ -512,7 +512,11 @@ mod tests {
     use openhttpa_crypto::hkdf::SessionKeys;
 
     fn dummy_keys() -> SessionKeys {
-        SessionKeys::derive(&[0u8; 64], &[0u8; 48]).unwrap()
+        SessionKeys::derive(
+            &std::array::from_fn::<u8, 64, _>(|_| rand::random()),
+            &std::array::from_fn::<u8, 48, _>(|_| rand::random()),
+        )
+        .unwrap()
     }
 
     #[test]

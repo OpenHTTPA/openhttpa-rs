@@ -396,8 +396,8 @@ mod tests {
     /// intentional wire-format break so no future refactor silently reverts it.
     #[test]
     fn new_schedule_differs_from_old_label_as_salt() {
-        let secret = [0xFFu8; 32];
-        let transcript = [0x00u8; 48];
+        let secret = std::array::from_fn::<u8, 32, _>(|i| u8::try_from(i).unwrap());
+        let transcript = std::array::from_fn::<u8, 48, _>(|i| u8::try_from(i).unwrap());
 
         // New (corrected) derivation.
         let new_keys = SessionKeys::derive(&secret, &transcript).unwrap();

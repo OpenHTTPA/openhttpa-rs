@@ -620,20 +620,15 @@ mod tests {
     }
 
     fn dummy_atb_id() -> [u8; 16] {
-        [
-            0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab,
-            0xcd, 0xef,
-        ]
+        rand::random()
     }
 
     fn dummy_key() -> [u8; 32] {
-        [0x42u8; 32]
+        rand::random()
     }
 
     fn dummy_iv() -> [u8; 12] {
-        [
-            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b,
-        ]
+        rand::random()
     }
 
     // ── extract_counter_from_nonce ─────────────────────────────────────────

@@ -443,14 +443,14 @@ mod tests {
     #[tokio::test]
     async fn local_guard_accepts_fresh_nonce() {
         let guard = LocalReplayGuard::new(1000, 0.001);
-        assert!(guard.check_and_accept("k", 1).await.is_ok());
+        assert!(guard.check_and_accept("", 1).await.is_ok());
     }
 
     #[tokio::test]
     async fn local_guard_rejects_duplicate_nonce() {
         let guard = LocalReplayGuard::new(1000, 0.001);
-        guard.check_and_accept("k", 42).await.unwrap();
-        let result = guard.check_and_accept("k", 42).await;
+        guard.check_and_accept("", 42).await.unwrap();
+        let result = guard.check_and_accept("", 42).await;
         assert!(
             matches!(result, Err(ReplayError::Replay(42))),
             "expected Replay(42), got {result:?}"
@@ -462,7 +462,7 @@ mod tests {
         let guard = LocalReplayGuard::new(1000, 0.001);
         for n in 0u64..100 {
             assert!(
-                guard.check_and_accept("k", n).await.is_ok(),
+                guard.check_and_accept("", n).await.is_ok(),
                 "nonce {n} rejected"
             );
         }
@@ -505,11 +505,11 @@ mod tests {
     async fn rotate_rejects_pre_rotation_nonces() {
         let guard = LocalReplayGuard::new(1000, 0.001);
         // Accept nonce BEFORE rotation.
-        guard.check_and_accept("k", 99).await.unwrap();
+        guard.check_and_accept("", 99).await.unwrap();
         // Rotate — old filter moves to overlap buffer.
         guard.rotate();
         // The nonce should still be rejected (overlap filter consulted).
-        let result = guard.check_and_accept("k", 99).await;
+        let result = guard.check_and_accept("", 99).await;
         assert!(
             matches!(result, Err(ReplayError::Replay(99))),
             "pre-rotation nonce should be rejected post-rotate; got {result:?}"
@@ -519,24 +519,24 @@ mod tests {
     #[tokio::test]
     async fn rotate_resets_count_and_accepts_new_nonces() {
         let guard = LocalReplayGuard::new(1000, 0.001);
-        guard.check_and_accept("k", 1).await.unwrap();
+        guard.check_and_accept("", 1).await.unwrap();
         guard.rotate();
         // count should be reset; new nonces (including previously seen ones
         // after a second rotation that clears the overlap) can be accepted.
         // A brand-new nonce not in either filter must be accepted immediately.
-        assert!(guard.check_and_accept("k", 2).await.is_ok());
+        assert!(guard.check_and_accept("", 2).await.is_ok());
     }
 
     #[tokio::test]
     async fn double_rotate_clears_overlap() {
         let guard = LocalReplayGuard::new(1000, 0.001);
-        guard.check_and_accept("k", 7).await.unwrap();
+        guard.check_and_accept("", 7).await.unwrap();
         // First rotate: nonce 7 is in overlap buffer.
         guard.rotate();
         // Second rotate: overlap is replaced — nonce 7 no longer tracked.
         guard.rotate();
         // Now nonce 7 should be accepted again (guard has forgotten it).
-        assert!(guard.check_and_accept("k", 7).await.is_ok());
+        assert!(guard.check_and_accept("", 7).await.is_ok());
     }
 
     // ── is_near_capacity ─────────────────────────────────────────────────

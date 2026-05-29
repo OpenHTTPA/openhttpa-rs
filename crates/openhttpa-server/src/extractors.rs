@@ -544,14 +544,14 @@ mod tests {
         let registry = AtbRegistry::new();
         let id = AtbId::new();
         let keys = SessionKeys {
-            master_secret: vec![0u8; 48],
-            client_write_key: vec![0u8; 32],
-            server_write_key: vec![0u8; 32],
-            client_write_iv: vec![0u8; 12],
-            server_write_iv: vec![0u8; 12],
-            client_mac_key: vec![0u8; 48],
-            server_mac_key: vec![0u8; 48],
-            transcript_hash: [0u8; 48],
+            master_secret: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            client_write_key: rand::random::<[u8; 32]>().to_vec(),
+            server_write_key: rand::random::<[u8; 32]>().to_vec(),
+            client_write_iv: rand::random::<[u8; 12]>().to_vec(),
+            server_write_iv: rand::random::<[u8; 12]>().to_vec(),
+            client_mac_key: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            server_mac_key: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            transcript_hash: std::array::from_fn::<u8, 48, _>(|_| rand::random()),
         };
         registry
             .insert(AttestSession::new(
@@ -704,7 +704,7 @@ mod tests {
 
         let client = TestClient::new(app);
 
-        let bad_mac = [0u8; 48];
+        let bad_mac: [u8; 48] = std::array::from_fn::<u8, 48, _>(|_| rand::random());
         let t_hv = openhttpa_headers::encode_attest_ticket(12345, &bad_mac, None);
 
         let body = serde_json::json!({ "ciphertext": "000000" }).to_string();
@@ -748,8 +748,8 @@ mod tests {
         let client = TestClient::new(app);
 
         let _session = registry.get(&id).unwrap();
-        // Provide a dummy ticket
-        let t_hv = openhttpa_headers::encode_attest_ticket(12345, &[0u8; 48], None);
+        let dummy_mac: [u8; 48] = std::array::from_fn::<u8, 48, _>(|_| rand::random());
+        let t_hv = openhttpa_headers::encode_attest_ticket(12345, &dummy_mac, None);
 
         let body = serde_json::json!({ "ciphertext": "@@!invalid-base64" }).to_string();
 
@@ -777,7 +777,8 @@ mod tests {
         let client = TestClient::new(app);
 
         let _session = registry.get(&id).unwrap();
-        let t_hv = openhttpa_headers::encode_attest_ticket(12345, &[0u8; 48], None);
+        let dummy_mac: [u8; 48] = std::array::from_fn::<u8, 48, _>(|_| rand::random());
+        let t_hv = openhttpa_headers::encode_attest_ticket(12345, &dummy_mac, None);
 
         let body = serde_json::json!({ "ciphertext": base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b"not-a-real-ciphertext-with-valid-mac") }).to_string();
 
@@ -804,7 +805,8 @@ mod tests {
         let client = TestClient::new(app);
 
         let _session = registry.get(&id).unwrap();
-        let t_hv = openhttpa_headers::encode_attest_ticket(12345, &[0u8; 48], None);
+        let dummy_mac: [u8; 48] = std::array::from_fn::<u8, 48, _>(|_| rand::random());
+        let t_hv = openhttpa_headers::encode_attest_ticket(12345, &dummy_mac, None);
 
         // Axum Json extractor defaults to 2MB limit. We generate 3MB.
         let massive_ciphertext = "A".repeat(3 * 1024 * 1024);

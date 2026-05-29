@@ -1206,15 +1206,21 @@ mod tests {
             .with_state(state.clone());
 
         let base_id = openhttpa_proto::AtbId::new();
+        let c_write_key: [u8; 32] = rand::random();
+        let s_write_key: [u8; 32] = rand::random();
+        let c_write_iv: [u8; 12] = rand::random();
+        let s_write_iv: [u8; 12] = rand::random();
+        let c_mac_key: [u8; 48] = std::array::from_fn::<u8, 48, _>(|_| rand::random());
+
         let keys = SessionKeys {
-            master_secret: vec![0u8; 48],
-            client_write_key: vec![1u8; 32],
-            server_write_key: vec![2u8; 32],
-            client_write_iv: vec![3u8; 12],
-            server_write_iv: vec![4u8; 12],
-            client_mac_key: vec![5u8; 48],
-            server_mac_key: vec![6u8; 48],
-            transcript_hash: [0u8; 48],
+            master_secret: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            client_write_key: c_write_key.to_vec(),
+            server_write_key: s_write_key.to_vec(),
+            client_write_iv: c_write_iv.to_vec(),
+            server_write_iv: s_write_iv.to_vec(),
+            client_mac_key: c_mac_key.to_vec(),
+            server_mac_key: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            transcript_hash: std::array::from_fn::<u8, 48, _>(|_| rand::random()),
         };
         let session = AttestSession::new(
             base_id.clone(),
@@ -1234,8 +1240,8 @@ mod tests {
         let plaintext = serde_json::json!({ "party_id": "alice", "value": 42 }).to_string();
 
         use openhttpa_crypto::aead::{AeadAlgorithm, BoundAeadKey};
-        let client_key_bytes = vec![1u8; 32];
-        let client_iv_bytes: [u8; 12] = [3u8; 12];
+        let client_key_bytes = c_write_key.to_vec();
+        let client_iv_bytes: [u8; 12] = c_write_iv;
         let sealer =
             BoundAeadKey::new(AeadAlgorithm::Aes256Gcm, &client_key_bytes, client_iv_bytes)
                 .unwrap();
@@ -1250,7 +1256,7 @@ mod tests {
         // Calculate correct MAC for Attest-Ticket
         use hmac::{Hmac, Mac};
         use sha2::Sha384;
-        let mut hmac = Hmac::<Sha384>::new_from_slice(&[5u8; 48]).unwrap();
+        let mut hmac = Hmac::<Sha384>::new_from_slice(&c_mac_key).unwrap();
         // Use production canonicalization logic
         let mut header_map = http::HeaderMap::new();
         header_map.insert("Attest-Base-ID", base_id_str.parse().unwrap());
@@ -1294,15 +1300,21 @@ mod tests {
             .with_state(state.clone());
 
         let base_id = openhttpa_proto::AtbId::new();
+        let c_write_key: [u8; 32] = rand::random();
+        let s_write_key: [u8; 32] = rand::random();
+        let c_write_iv: [u8; 12] = rand::random();
+        let s_write_iv: [u8; 12] = rand::random();
+        let c_mac_key: [u8; 48] = std::array::from_fn::<u8, 48, _>(|_| rand::random());
+
         let keys = SessionKeys {
-            master_secret: vec![0u8; 48],
-            client_write_key: vec![1u8; 32],
-            server_write_key: vec![2u8; 32],
-            client_write_iv: vec![3u8; 12],
-            server_write_iv: vec![4u8; 12],
-            client_mac_key: vec![5u8; 48],
-            server_mac_key: vec![6u8; 48],
-            transcript_hash: [0u8; 48],
+            master_secret: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            client_write_key: c_write_key.to_vec(),
+            server_write_key: s_write_key.to_vec(),
+            client_write_iv: c_write_iv.to_vec(),
+            server_write_iv: s_write_iv.to_vec(),
+            client_mac_key: c_mac_key.to_vec(),
+            server_mac_key: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            transcript_hash: std::array::from_fn::<u8, 48, _>(|_| rand::random()),
         };
         let session = AttestSession::new(
             base_id.clone(),
@@ -1319,12 +1331,12 @@ mod tests {
             .expect("test session insert failed");
 
         let base_id_str = base_id.to_string();
-        let client_mac_key = vec![5u8; 48];
+        let client_mac_key = c_mac_key.to_vec();
         let plaintext = serde_json::json!({ "party_id": "alice", "value": 42 }).to_string();
 
         use openhttpa_crypto::aead::{AeadAlgorithm, BoundAeadKey};
-        let client_key_bytes = vec![1u8; 32];
-        let client_iv_bytes: [u8; 12] = [3u8; 12];
+        let client_key_bytes = c_write_key.to_vec();
+        let client_iv_bytes: [u8; 12] = c_write_iv;
         let sealer =
             BoundAeadKey::new(AeadAlgorithm::Aes256Gcm, &client_key_bytes, client_iv_bytes)
                 .unwrap();
@@ -1393,8 +1405,8 @@ mod tests {
         let mut ciphertext = hex::decode(ciphertext_hex).unwrap();
 
         // If we try to decrypt with nonce 1, it should FAIL because server used nonce 2
-        let server_key_bytes = vec![2u8; 32];
-        let server_iv_bytes: [u8; 12] = [4u8; 12];
+        let server_key_bytes = s_write_key.to_vec();
+        let server_iv_bytes: [u8; 12] = s_write_iv;
         let unsealer =
             BoundAeadKey::new(AeadAlgorithm::Aes256Gcm, &server_key_bytes, server_iv_bytes)
                 .unwrap();
@@ -1438,15 +1450,21 @@ mod tests {
             .with_state(state.clone());
 
         let base_id = openhttpa_proto::AtbId::new();
+        let c_write_key: [u8; 32] = rand::random();
+        let s_write_key: [u8; 32] = rand::random();
+        let c_write_iv: [u8; 12] = rand::random();
+        let s_write_iv: [u8; 12] = rand::random();
+        let c_mac_key: [u8; 48] = std::array::from_fn::<u8, 48, _>(|_| rand::random());
+
         let keys = SessionKeys {
-            master_secret: vec![0u8; 48],
-            client_write_key: vec![1u8; 32],
-            server_write_key: vec![2u8; 32],
-            client_write_iv: vec![3u8; 12],
-            server_write_iv: vec![4u8; 12],
-            client_mac_key: vec![5u8; 48],
-            server_mac_key: vec![6u8; 48],
-            transcript_hash: [0u8; 48],
+            master_secret: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            client_write_key: c_write_key.to_vec(),
+            server_write_key: s_write_key.to_vec(),
+            client_write_iv: c_write_iv.to_vec(),
+            server_write_iv: s_write_iv.to_vec(),
+            client_mac_key: c_mac_key.to_vec(),
+            server_mac_key: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            transcript_hash: std::array::from_fn::<u8, 48, _>(|_| rand::random()),
         };
         state
             .registry
@@ -1473,7 +1491,7 @@ mod tests {
 
         // Seal the RPC request
         use openhttpa_crypto::aead::{AeadAlgorithm, BoundAeadKey};
-        let sealer = BoundAeadKey::new(AeadAlgorithm::Aes256Gcm, &[1u8; 32], [3u8; 12]).unwrap();
+        let sealer = BoundAeadKey::new(AeadAlgorithm::Aes256Gcm, &c_write_key, c_write_iv).unwrap();
         let mut aad = b"openhttpa:".to_vec();
         aad.extend_from_slice(base_id.to_string().as_bytes());
         let mut data = serde_json::to_vec(&rpc_req).unwrap();
@@ -1482,7 +1500,7 @@ mod tests {
         // We need a real MAC for the test to pass the extractor verification
         use hmac::{Hmac, Mac};
         use sha2::Sha384;
-        let mut hmac = Hmac::<Sha384>::new_from_slice(&[5u8; 48]).unwrap();
+        let mut hmac = Hmac::<Sha384>::new_from_slice(&c_mac_key).unwrap();
         let mut header_map = http::HeaderMap::new();
         header_map.insert("Attest-Base-ID", base_id.to_string().parse().unwrap());
         header_map.insert("content-type", "application/json".parse().unwrap());
@@ -1526,15 +1544,21 @@ mod tests {
             .with_state(state.clone());
 
         let base_id = openhttpa_proto::AtbId::new();
+        let c_write_key: [u8; 32] = rand::random();
+        let s_write_key: [u8; 32] = rand::random();
+        let c_write_iv: [u8; 12] = rand::random();
+        let s_write_iv: [u8; 12] = rand::random();
+        let c_mac_key: [u8; 48] = std::array::from_fn::<u8, 48, _>(|_| rand::random());
+
         let keys = SessionKeys {
-            master_secret: vec![0u8; 48],
-            client_write_key: vec![1u8; 32],
-            server_write_key: vec![2u8; 32],
-            client_write_iv: vec![3u8; 12],
-            server_write_iv: vec![4u8; 12],
-            client_mac_key: vec![5u8; 48],
-            server_mac_key: vec![6u8; 48],
-            transcript_hash: [0u8; 48],
+            master_secret: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            client_write_key: c_write_key.to_vec(),
+            server_write_key: s_write_key.to_vec(),
+            client_write_iv: c_write_iv.to_vec(),
+            server_write_iv: s_write_iv.to_vec(),
+            client_mac_key: c_mac_key.to_vec(),
+            server_mac_key: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            transcript_hash: std::array::from_fn::<u8, 48, _>(|_| rand::random()),
         };
         state
             .registry
@@ -1555,7 +1579,7 @@ mod tests {
 
         // Seal the request
         use openhttpa_crypto::aead::{AeadAlgorithm, BoundAeadKey};
-        let sealer = BoundAeadKey::new(AeadAlgorithm::Aes256Gcm, &[1u8; 32], [3u8; 12]).unwrap();
+        let sealer = BoundAeadKey::new(AeadAlgorithm::Aes256Gcm, &c_write_key, c_write_iv).unwrap();
         let mut aad = b"openhttpa:".to_vec();
         aad.extend_from_slice(base_id.to_string().as_bytes());
         let mut data = serde_json::to_vec(&oracle_req).unwrap();
@@ -1564,7 +1588,7 @@ mod tests {
         // Bind and MAC
         use hmac::{Hmac, Mac};
         use sha2::Sha384;
-        let mut hmac = Hmac::<Sha384>::new_from_slice(&[5u8; 48]).unwrap();
+        let mut hmac = Hmac::<Sha384>::new_from_slice(&c_mac_key).unwrap();
         let mut header_map = http::HeaderMap::new();
         header_map.insert("Attest-Base-ID", base_id.to_string().parse().unwrap());
         header_map.insert("content-type", "application/json".parse().unwrap());
