@@ -252,7 +252,11 @@ impl AgentNode {
 
         // Prepare extra headers for provenance.
         let mut extra_headers = http::HeaderMap::new();
-        let prov_bytes = serde_json::to_vec(&provenance)
+        // M3: Privacy & Provenance Minimization (P-02)
+        // Anonymize the provenance chain before sending it over the wire
+        // to prevent topology leakage.
+        let out_provenance = provenance.anonymize();
+        let prov_bytes = serde_json::to_vec(&out_provenance)
             .map_err(|e| MeshError::Handshake(format!("Provenance serialization failed: {e}")))?;
 
         // `OpenHTTPA` requires all Attest-* headers to be SFV-encoded (Byte Sequence).

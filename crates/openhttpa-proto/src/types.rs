@@ -827,6 +827,24 @@ pub struct AgentMetadata {
     pub prev_hash: Option<Vec<u8>>,
 }
 
+impl AgentMetadata {
+    /// Returns an anonymized version of this metadata to prevent mesh topology leakage.
+    /// This strips identifiable information and replaces the UUID with an ephemeral one.
+    #[must_use]
+    pub fn anonymize(&self) -> Self {
+        Self {
+            id: Uuid::new_v4(), // Ephemeral ID
+            name: "anonymous_agent".to_owned(),
+            capabilities: self.capabilities.clone(),
+            endpoint: String::new(),
+            public_key: self.public_key.clone(), // Keep public key for signature verification
+            last_quote: None, // Strip quote to prevent hardware tracking (P-01/P-03)
+            signature: self.signature.clone(),
+            prev_hash: self.prev_hash.clone(),
+        }
+    }
+}
+
 /// A chain of agents that have handled a request.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProvenanceChain {
@@ -856,6 +874,14 @@ impl ProvenanceChain {
     #[must_use]
     pub fn previous(&self) -> Option<&AgentMetadata> {
         self.hops.last()
+    }
+
+    /// Returns a new `ProvenanceChain` where all agent metadata has been anonymized.
+    #[must_use]
+    pub fn anonymize(&self) -> Self {
+        Self {
+            hops: self.hops.iter().map(AgentMetadata::anonymize).collect(),
+        }
     }
 }
 

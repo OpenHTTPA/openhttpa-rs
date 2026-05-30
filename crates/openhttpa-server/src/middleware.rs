@@ -20,16 +20,36 @@ use bloomfilter::Bloom;
 use openhttpa_core::replay_guard::{DistributedReplayGuard, ReplayError};
 use std::sync::Mutex;
 
+/// Trait for evaluating per-request authorization policies based on session state.
+pub trait RequestPolicy: Send + Sync {
+    /// Evaluate whether the given request should be allowed under the authenticated session.
+    fn evaluate(
+        &self,
+        req: &Request<Body>,
+        session: &openhttpa_core::session::AttestSession,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send + '_>>;
+}
+
 /// Tower [`Layer`] that injects `AtB` session validation before the inner service.
 #[derive(Clone)]
 pub struct TrRequestLayer {
     registry: AtbRegistry,
+    policy: Option<Arc<dyn RequestPolicy>>,
 }
 
 impl TrRequestLayer {
     #[must_use]
     pub const fn new(registry: AtbRegistry) -> Self {
-        Self { registry }
+        Self {
+            registry,
+            policy: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_policy(mut self, policy: Arc<dyn RequestPolicy>) -> Self {
+        self.policy = Some(policy);
+        self
     }
 }
 
@@ -40,6 +60,7 @@ impl<S> Layer<S> for TrRequestLayer {
         TrRequestMiddleware {
             inner,
             registry: self.registry.clone(),
+            policy: self.policy.clone(),
         }
     }
 }
@@ -49,6 +70,7 @@ impl<S> Layer<S> for TrRequestLayer {
 pub struct TrRequestMiddleware<S> {
     inner: S,
     registry: AtbRegistry,
+    policy: Option<Arc<dyn RequestPolicy>>,
 }
 
 impl<S> Service<Request<Body>> for TrRequestMiddleware<S>
@@ -72,6 +94,7 @@ where
         use openhttpa_proto::AtbId;
 
         let registry = self.registry.clone();
+        let policy = self.policy.clone();
         let mut inner = self.inner.clone();
 
         Box::pin(async move {
@@ -82,6 +105,18 @@ where
                 .and_then(|id| registry.get(&id));
 
             if let Some(sess) = session {
+                // M3: Per-request policy enforcement.
+                if let Some(ref p) = policy
+                    && !p.evaluate(&req, &sess).await
+                {
+                    tracing::warn!(base_id = %sess.state().id, "Middleware: Request rejected by policy");
+                    let resp = Response::builder()
+                        .status(StatusCode::FORBIDDEN)
+                        .body(Body::empty())
+                        .unwrap();
+                    return Ok(resp);
+                }
+
                 let mut req = req;
                 req.extensions_mut().insert(sess.state().id);
                 req.extensions_mut().insert(sess);
@@ -594,7 +629,11 @@ mod tests {
             Ok::<_, std::convert::Infallible>(http::Response::new(Body::empty()))
         });
 
-        let mut svc = TrRequestMiddleware { inner, registry };
+        let mut svc = TrRequestMiddleware {
+            inner,
+            registry,
+            policy: None,
+        };
 
         let mut cx = dummy_cx();
         assert!(svc.poll_ready(&mut cx).is_ready());

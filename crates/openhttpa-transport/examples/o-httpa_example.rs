@@ -3,39 +3,30 @@
 
 //! Example demonstrating Oblivious `OpenHTTPA` (O-HTTPA).
 //!
-//! In this flow, the client encapsulates its request using HPKE,
-//! hiding its IP address from the TEE server.
+//! In this flow, the client encapsulates its request using ML-KEM-768 (FIPS 203),
+//! hiding its IP address from the TEE server while preserving Post-Quantum security.
 
-use hpke::kem::Kem;
+use openhttpa_crypto::pqc::MlKemPair;
 use openhttpa_transport::connection::{AttestTransport, TransportRequest, TransportResponse};
 use openhttpa_transport::oblivious::{ObliviousClient, ObliviousServer};
 use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. Server Setup (In a real TEE, the private key would be protected)
-    struct HpkeRng;
-    impl hpke::rand_core::RngCore for HpkeRng {
-        fn next_u32(&mut self) -> u32 {
-            0
-        }
-        fn next_u64(&mut self) -> u64 {
-            0
-        }
-        fn fill_bytes(&mut self, dest: &mut [u8]) {
-            use rand::RngExt;
-            rand::rng().fill(dest);
-        }
-    }
-    impl hpke::rand_core::CryptoRng for HpkeRng {}
+    // 1. Server Setup
+    //    In a real TEE deployment the ML-KEM key pair would be generated inside
+    //    the enclave and the decapsulation key would never leave it.
+    let server_pair = MlKemPair::generate()?;
+    let server_pk_bytes = server_pair.public_encap_key().to_vec();
+    let server = Arc::new(ObliviousServer::new(server_pair));
 
-    let mut rng = HpkeRng;
-    let (server_sk, server_pk) = hpke::kem::X25519HkdfSha256::gen_keypair(&mut rng);
-    let server_pk_bytes = hpke::Serializable::to_bytes(&server_pk).to_vec();
-
-    let server = ObliviousServer::new(server_sk);
+    println!(
+        "Server: ML-KEM-768 encapsulation key ready ({} bytes)",
+        server_pk_bytes.len()
+    );
 
     // 2. Mock Inner Transport (The Relay)
+    //    The relay forwards encrypted blobs without being able to read them.
     struct MockRelay {
         server: Arc<ObliviousServer>,
     }
@@ -55,6 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     + '_,
             >,
         > {
+            let server = Arc::clone(&self.server);
             Box::pin(async move {
                 let body_bytes = axum::body::to_bytes(req.body, usize::MAX).await.unwrap();
                 println!(
@@ -62,29 +54,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     body_bytes.len()
                 );
 
-                // Decapsulate on the server side
-                let (plaintext, receiver_ctx) =
-                    self.server.decapsulate(&body_bytes).map_err(|e| {
-                        openhttpa_transport::connection::SendError::Connection(format!(
-                            "Server decapsulate failed: {:?}",
-                            e
-                        ))
-                    })?;
+                // Decapsulate on the server side (ML-KEM + HKDF + AES-256-GCM).
+                let (plaintext, resp_key) = server.decapsulate(&body_bytes).map_err(|e| {
+                    openhttpa_transport::connection::SendError::Connection(format!(
+                        "Server decapsulate failed: {e:?}"
+                    ))
+                })?;
 
                 println!(
                     "Server: Received decrypted request: {}",
                     String::from_utf8_lossy(&plaintext)
                 );
 
-                // Generate response
+                // Generate and encrypt the response.
                 let response_body = b"Confidential response from TEE";
-                let enc_resp = self
-                    .server
-                    .encapsulate_response(&receiver_ctx, response_body)
+                let enc_resp = server
+                    .encapsulate_response(&resp_key, response_body)
                     .map_err(|e| {
                         openhttpa_transport::connection::SendError::Connection(format!(
-                            "Server encapsulate failed: {:?}",
-                            e
+                            "Server encapsulate failed: {e:?}"
                         ))
                     })?;
 
@@ -99,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let relay = Arc::new(MockRelay {
-        server: Arc::new(server),
+        server: Arc::clone(&server),
     });
 
     // 3. Client Setup
