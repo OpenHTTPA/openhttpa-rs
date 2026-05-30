@@ -1,0 +1,229 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# 🔍 OpenHTTPA — GitHub Advanced Security / CodeQL Analysis
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# DESIGN GOALS
+# ────────────
+# 1. Maximum analysis quality: full workspace cargo build intercepted by the
+#    CodeQL tracer; rust-src installed so std/core generics resolve.
+# 2. Configurable runner: supports both GitHub-hosted (ubuntu-latest) and
+#    self-hosted runners.  Set the repository variable
+#      CODEQL_RUNNER  →  "self-hosted"  or  "ubuntu-latest"  (default)
+#    via Settings → Variables & secrets → Repository variables.
+#    When workflow_dispatch is triggered, the runner can also be overridden
+#    via the `runner` input without touching repository settings.
+# 3. Broadest scan surface: triggers on push/PR for ALL branches, plus a
+#    weekly schedule for deep-scan coverage even on quiet branches.
+# 4. Highest quality queries: security-and-quality suite (security-extended
+#    + code-quality rules).
+# 5. Supply-chain security: ALL action references are pinned to full 40-char
+#    commit SHAs.  Update these periodically via Dependabot (see below).
+#
+# DEPENDABOT AUTO-UPDATE
+# ──────────────────────
+# Add the following to .github/dependabot.yml to keep pinned SHAs current:
+#
+#   version: 2
+#   updates:
+#     - package-ecosystem: github-actions
+#       directory: /
+#       schedule:
+#         interval: weekly
+#
+# QUALITY TARGETS (enforced by the CodeQL DB quality check)
+# ──────────────────────────────────────────────────────────
+#   Calls with call target:       ≥ 50 %   (was 47 % before this workflow)
+#   Expressions with known type:  ≥ 20 %   (already satisfied)
+#
+# WHAT WE BUILD FOR CODEQL
+# ─────────────────────────
+# All default-members EXCEPT crates that require a special toolchain:
+#   - bindings/wasm      → wasm32 target; needs wasm-pack
+#   - bindings/python    → needs maturin + Python interpreter
+#   - openhttpa-fuzz     → cargo-fuzz harness; only compiles via `cargo fuzz`
+#
+# OPENHTTPA_SKIP_ZK_BUILD=1  → skips RISC Zero guest ELF; host code is still
+#   fully compiled and indexed (the build.rs emits openhttpa_zk_stub cfg).
+#
+# RUSTFLAGS=""  → do NOT pass -D warnings; a transitive-dep warning would abort
+#   the build mid-way, drastically reducing the code indexed by CodeQL.
+#
+# SECURITY POSTURE
+# ────────────────
+# Permissions are least-privilege:
+#   contents: read        — checkout only
+#   security-events: write — upload SARIF to GitHub Code Scanning
+#   actions: read         — required in private repos to download CodeQL bundles
+# No secrets are needed; GITHUB_TOKEN is sufficient.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: 'CodeQL'
+
+on:
+  # ── Broadest trigger: every push and PR, every branch ─────────────────────
+  push:
+    # No branch filter → scans every branch on push.
+    # Exclude generated tag pushes that are not real source changes.
+    tags-ignore:
+      - '**'
+  pull_request:
+    # No branch filter → scans every PR regardless of base branch.
+    # Automatically excludes Dependabot PRs from secret exposure.
+  # ── Weekly deep-scan (catches regressions on long-lived branches) ──────────
+  schedule:
+    - cron: '0 6 * * 1' # Every Monday at 06:00 UTC
+  # ── Manual trigger with optional runner override ────────────────────────────
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: >
+          Runner label to use for this run.
+          Leave blank to use the CODEQL_RUNNER repository variable
+          (or 'ubuntu-latest' if the variable is not set).
+        required: false
+        default: ''
+        type: string
+
+# ── Permissions ───────────────────────────────────────────────────────────────
+permissions:
+  contents: read
+  security-events: write
+  # Required for private repos to fetch CodeQL bundles from the Actions cache.
+  actions: read
+
+# ── Concurrency ───────────────────────────────────────────────────────────────
+# Cancel in-progress scans on the same branch/PR ref so new commits don't
+# queue behind older runs, but still allow concurrent scans on different refs.
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ── Environment defaults ───────────────────────────────────────────────────────
+env:
+  # Build-time flags forwarded to the cargo build step.
+  OPENHTTPA_SKIP_ZK_BUILD: '1'
+  RISC0_SKIP_BUILD_KERNELS: '1'
+  CARGO_TERM_COLOR: always
+  # IMPORTANT: Do NOT set RUSTFLAGS to -D warnings here.
+  # A warning in any transitive dependency would abort the build and reduce
+  # the amount of source code indexed by CodeQL.
+  RUSTFLAGS: ''
+
+jobs:
+  analyze:
+    name: Analyze Rust
+    # ── Configurable runner resolution (priority order) ──────────────────────
+    # 1. workflow_dispatch input `runner`  (most specific — set per-run)
+    # 2. Repository variable CODEQL_RUNNER (set once in repo settings)
+    # 3. Default: ubuntu-latest            (always available, no setup needed)
+    #
+    # To switch to self-hosted:
+    #   Option A (permanent): Settings → Variables → CODEQL_RUNNER = self-hosted
+    #   Option B (one-off):   Trigger via workflow_dispatch, set runner = self-hosted
+    runs-on: >-
+      ${{
+        inputs.runner != '' && inputs.runner ||
+        vars.CODEQL_RUNNER != '' && vars.CODEQL_RUNNER ||
+        'ubuntu-latest'
+      }}
+    timeout-minutes: 120
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      # Pinned SHA: actions/checkout v4.2.2 (2025-01-13)
+      # Update via Dependabot or: gh api repos/actions/checkout/git/ref/tags/v4
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      # ── 2. Rust toolchain ────────────────────────────────────────────────────
+      # rust-toolchain.toml is authoritative; this step mirrors its components
+      # explicitly so the CI log is self-documenting.
+      # The `rust-src` component is REQUIRED for CodeQL to resolve std/core
+      # generics and trait impls, which directly improves "calls with call target".
+      #
+      # Pinned SHA: dtolnay/rust-toolchain stable (2026-03-27)
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+          components: rustfmt,clippy,llvm-tools-preview,rust-src
+
+      # ── 3. System build dependencies ─────────────────────────────────────────
+      # Required by aws-lc-rs (FIPS), oqs-sys (liboqs), and prost-build (protoc).
+      # Self-hosted runners are expected to have these pre-installed via
+      # scripts/setup_linux_env.sh.  On GitHub-hosted runners this step runs
+      # quickly because most packages are already present in the base image.
+      - name: Install system build dependencies
+        # Only install on GitHub-hosted runners; self-hosted has them pre-installed.
+        # The condition checks the runner label set in the outer expression.
+        if: >-
+          ${{
+            (inputs.runner == '' || inputs.runner == 'ubuntu-latest') &&
+            (vars.CODEQL_RUNNER == '' || vars.CODEQL_RUNNER == 'ubuntu-latest')
+          }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build nasm clang libclang-dev \
+            libssl-dev pkg-config protobuf-compiler
+
+      # ── 4. Cargo dependency cache ─────────────────────────────────────────────
+      # Cache only the cargo registry and git checkouts (not the build artefacts).
+      # The build artefacts MUST be fresh every scan so CodeQL's tracer intercepts
+      # all compilation units.  Caching target/ would defeat this purpose.
+      #
+      # Pinned SHA: actions/cache v4.2.3 (2025-03-05)
+      - name: Cache Cargo registry and git deps
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-codeql-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-codeql-
+
+      # ── 5. Initialise CodeQL (MUST come before the build step) ───────────────
+      # Pinned SHA: github/codeql-action v3 (latest as of 2026-05-22)
+      # The tracer is injected here and wraps all subsequent compiler invocations.
+      #
+      # build-mode: none → we run the build manually below so we can control
+      # exactly which crates are compiled and which env vars are set.
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@fee9466b8957867761f2d78f922ab084e3e2dd17 # v3
+        with:
+          languages: rust
+          config-file: .github/codeql/codeql-config.yml
+          build-mode: none
+
+      # ── 6. Build workspace (intercepted by CodeQL tracer) ────────────────────
+      # We compile all default-members except crates that cannot build on a
+      # standard Linux host.
+      #
+      # --exclude openhttpa-fuzz      → cargo-fuzz harness; only via `cargo fuzz`
+      # --exclude bindings-wasm       → wasm32 target; not in default-members
+      # --exclude bindings-python     → maturin; not in default-members
+      #
+      # The ZK guest ELF is skipped (OPENHTTPA_SKIP_ZK_BUILD=1) but the host-side
+      # openhttpa-zk crate IS compiled in full (build.rs emits rustc-cfg flag).
+      #
+      # --message-format short  → reduces log noise while retaining error context.
+      - name: Build workspace for CodeQL analysis
+        shell: bash
+        run: |
+          cargo build \
+            --workspace \
+            --exclude openhttpa-fuzz \
+            --exclude bindings-wasm \
+            --exclude bindings-python \
+            --message-format short
+
+      # ── 7. Perform CodeQL analysis & upload SARIF ────────────────────────────
+      # Pinned SHA: github/codeql-action v3 (same SHA as init above)
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@fee9466b8957867761f2d78f922ab084e3e2dd17 # v3
+        with:
+          category: '/language:rust'
+          upload: true

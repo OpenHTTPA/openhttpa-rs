@@ -1,0 +1,60 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Dependabot configuration for openhttpa-rs
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# Dependabot keeps pinned GitHub Actions SHA references up to date.
+# This is REQUIRED because the CodeQL workflow (and other workflows) pin all
+# action references to full 40-char commit SHAs for supply-chain security.
+# Without Dependabot, those SHAs would never receive security updates.
+#
+# Dependabot also monitors Cargo dependencies for known vulnerabilities
+# (complements `cargo audit` / `cargo deny`).
+#
+# References:
+#   https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+# ──────────────────────────────────────────────────────────────────────────────
+
+version: 2
+
+updates:
+  # ── GitHub Actions (SHA-pinned) ────────────────────────────────────────────
+  # Keeps the pinned SHAs in .github/workflows/*.yml current.
+  # Dependabot creates PRs that bump both the SHA and the human-readable
+  # version comment (e.g. `# v4`) in one atomic change.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:30'
+      timezone: 'UTC'
+    # Group all action bumps into a single PR to reduce review noise.
+    groups:
+      github-actions-all:
+        patterns:
+          - '*'
+    # Limit open PRs so the queue doesn't grow unbounded.
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+
+  # ── Cargo / Rust dependencies ──────────────────────────────────────────────
+  # Complements `cargo audit` and `cargo deny`; catches version-constraint
+  # drift that audit misses (e.g., transitive dep updates without advisory).
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: 'UTC'
+    # Group patch-level bumps to keep the queue manageable.
+    groups:
+      cargo-patch:
+        update-types:
+          - 'patch'
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - rust

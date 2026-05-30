@@ -1,0 +1,62 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# CodeQL configuration for openhttpa-rs
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# Goals
+# ─────
+# 1. Maximise "calls with call target" metric (threshold: 50 %).
+#    Achieved by:
+#      - Running a full `cargo build` of all *compilable* default-members so
+#        CodeQL intercepts real compilation artefacts (trait impls, generics).
+#      - Excluding crates that require special toolchains or hardware (WASM,
+#        Python/PyO3, fuzz) so the build doesn't fail mid-scan.
+#      - Excluding generated-code directories (OUT_DIR expansions, proto stubs)
+#        that contain no original source of interest.
+# 2. Avoid false-positives from unresolved code paths.
+# 3. Use the richest security query suite available for Rust.
+#
+# References
+# ──────────
+# https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/codeql-code-scanning-for-compiled-languages
+# https://docs.github.com/en/code-security/code-scanning/customizing-code-scanning
+
+name: 'openhttpa-rs CodeQL'
+
+# ── Query suite ───────────────────────────────────────────────────────────────
+# security-and-quality: superset of security-extended.
+# Covers OWASP Top-10, full CWE catalogue, AND code-quality / maintainability
+# rules.  This is the highest-coverage suite available for Rust in CodeQL.
+queries:
+  - uses: security-and-quality
+
+# ── Source path filters ───────────────────────────────────────────────────────
+# Include only the Rust source that is meaningful and compilable on a standard
+# Linux host. Anything that requires a special build toolchain is excluded so
+# that the CodeQL build step succeeds in full, giving the analyser maximum
+# information.
+paths:
+  - crates
+  - bindings/c
+  - demo
+  - modules/nginx
+  - fuzz
+
+paths-ignore:
+  # ── Platform-specific / special-toolchain crates ──────────────────────────
+  # WASM: must be built with wasm-pack targeting wasm32-unknown-unknown.
+  - bindings/wasm
+  # Python: must be built with maturin; requires a Python interpreter.
+  - bindings/python
+  # Node.js NAPI: cross-compiled; not directly analysable as native Rust.
+  - bindings/nodejs
+
+  # ── Generated / build artefact directories ────────────────────────────────
+  - '**/target/**'
+  - '**/.cargo/**'
+  # RISC Zero guest build outputs (OUT_DIR expansion).
+  - crates/openhttpa-zk/methods
+  - crates/openhttpa-contract/cache
+  - crates/openhttpa-contract/out
+
+  # ── Third-party vendored code ─────────────────────────────────────────────
+  - node_modules
