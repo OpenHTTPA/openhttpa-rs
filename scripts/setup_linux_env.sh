@@ -162,6 +162,8 @@ else
     if ! has_cmd cargo-deny; then TO_INSTALL+=("cargo-deny"); fi
     if ! has_cmd maturin; then TO_INSTALL+=("maturin"); fi
     if ! has_cmd cargo-cyclonedx; then TO_INSTALL+=("cargo-cyclonedx"); fi
+    if ! has_cmd cargo-outdated; then TO_INSTALL+=("cargo-outdated"); fi
+    if ! has_cmd cargo-upgrade; then TO_INSTALL+=("cargo-edit"); fi
     
     if [ ${#TO_INSTALL[@]} -ne 0 ]; then
         echo "Installing missing Cargo tools: ${TO_INSTALL[*]}"

@@ -14,7 +14,22 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Server Setup (In a real TEE, the private key would be protected)
-    let mut rng = rand::thread_rng();
+    struct HpkeRng;
+    impl hpke::rand_core::RngCore for HpkeRng {
+        fn next_u32(&mut self) -> u32 {
+            0
+        }
+        fn next_u64(&mut self) -> u64 {
+            0
+        }
+        fn fill_bytes(&mut self, dest: &mut [u8]) {
+            use rand::RngExt;
+            rand::rng().fill(dest);
+        }
+    }
+    impl hpke::rand_core::CryptoRng for HpkeRng {}
+
+    let mut rng = HpkeRng;
     let (server_sk, server_pk) = hpke::kem::X25519HkdfSha256::gen_keypair(&mut rng);
     let server_pk_bytes = hpke::Serializable::to_bytes(&server_pk).to_vec();
 

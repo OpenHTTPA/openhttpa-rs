@@ -35,15 +35,16 @@ base64ct           = { workspace = true }
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 
 # Post-quantum KEM (ML-KEM-768, FIPS 203)
-ml-kem = "0.2"
+ml-kem = "0.3"
 
 # HKDF + SHA-2
 hkdf = { workspace = true }
 sha2 = { workspace = true }
 
 # Secure random entropy in the browser.
-getrandom = { workspace = true, features = ["js"] }
-rand_core = { version = "0.6", features = ["getrandom"] }
+getrandom = { workspace = true, features = ["wasm_js"] }
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
+rand_core = { version = "0.10" }
 
 # Hex encoding / decoding
 hex = { workspace = true }

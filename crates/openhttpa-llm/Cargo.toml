@@ -32,7 +32,7 @@ futures             = { workspace = true }
 axum                = { workspace = true }
 hex                 = { workspace = true }
 strum               = { workspace = true, features = ["derive"] }
-candle-core         = "0.8.2"
+candle-core         = "0.10.2"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

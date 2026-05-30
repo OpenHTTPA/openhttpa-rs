@@ -67,7 +67,7 @@ fi
 
 # 7. Install Cargo Tools
 echo "🛡️ Installing cargo-audit, cargo-deny, maturin, and cargo-cyclonedx..."
-cargo install cargo-audit cargo-deny maturin cargo-cyclonedx --locked
+cargo install cargo-audit cargo-deny maturin cargo-cyclonedx cargo-edit cargo-outdated --locked
 
 # 8. Install Trivy (Container Scanner)
 echo "🔍 Installing Trivy..."

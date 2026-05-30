@@ -14,10 +14,10 @@ risc0_zkvm::guest::entry!(main);
 extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
-use der::{Decode, Encode};
 use p256::ecdsa::signature::Verifier;
 use p256::ecdsa::{Signature, VerifyingKey};
 use x509_cert::Certificate;
+use x509_cert::der::{Decode, Encode};
 
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
 enum ZkMode {

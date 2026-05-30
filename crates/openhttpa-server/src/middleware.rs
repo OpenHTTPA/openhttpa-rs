@@ -148,10 +148,13 @@ impl LocalReplayGuard {
     /// * `items` — expected number of unique nonces per rotation period.
     ///   Size to at least `2 × peak_requests_per_TTL`.
     /// * `fp_rate` — desired false-positive rate at `items` capacity (e.g. `0.001`).
+    ///
+    /// # Panics
+    /// Panics if `items == 0` or if `fp_rate` is not strictly between `0.0` and `1.0`.
     #[must_use]
     pub fn new(items: usize, fp_rate: f64) -> Self {
         Self {
-            bloom: Mutex::new(Bloom::new_for_fp_rate(items, fp_rate)),
+            bloom: Mutex::new(Bloom::new_for_fp_rate(items, fp_rate).unwrap()),
             prev_bloom: Mutex::new(None),
             capacity: items,
             count: std::sync::atomic::AtomicUsize::new(0),
@@ -213,7 +216,7 @@ impl LocalReplayGuard {
     /// # Panics
     /// Panics if either internal `Mutex` is poisoned.
     pub fn rotate(&self) {
-        let new_filter = Bloom::new_for_fp_rate(self.capacity, 1e-3);
+        let new_filter = Bloom::new_for_fp_rate(self.capacity, 1e-3).unwrap();
         let mut bloom = self.bloom.lock().expect("bloom mutex poisoned");
         let old = std::mem::replace(&mut *bloom, new_filter);
         drop(bloom);

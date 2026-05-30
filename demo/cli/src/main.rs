@@ -201,7 +201,7 @@ async fn run_client(url: String, message: String, mutual: bool) -> anyhow::Resul
                     nonce: nonce_val,
                     rtt0_salt: None,
                     mac: {
-                        use hmac::{Hmac, Mac};
+                        use hmac::{Hmac, KeyInit, Mac};
                         use sha2::Sha384;
                         type HmacSha384 = Hmac<Sha384>;
                         let mut hmac = HmacSha384::new_from_slice(&keys.client_mac_key).unwrap();
@@ -357,7 +357,7 @@ fn demo_challenge_key(env_var: &str) -> [u8; 32] {
         env_var = env_var
     );
     let mut key = [0u8; 32];
-    getrandom::getrandom(&mut key).expect("OS CSPRNG unavailable");
+    getrandom::fill(&mut key).expect("OS CSPRNG unavailable");
     key
 }
 

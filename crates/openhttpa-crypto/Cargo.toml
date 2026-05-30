@@ -17,8 +17,8 @@ openhttpa-proto = { workspace = true }
 aws-lc-rs    = { workspace = true }
 oqs          = { workspace = true }
 hex          = "0.4"
-hkdf         = "0.12"
-sha2         = "0.10"
+hkdf         = "0.13"
+sha2         = "0.11"
 zeroize      = { workspace = true }
 rand         = { workspace = true }
 thiserror    = { workspace = true }

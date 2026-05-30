@@ -142,7 +142,10 @@ impl DataStore for KvStore {
         let aes_key = aes_gcm::Key::<Aes256Gcm>::from_slice(&derived_key);
         let cipher = Aes256Gcm::new(aes_key);
         let mut nonce_bytes = [0u8; 12];
-        rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce_bytes);
+        {
+            use rand::RngExt;
+            rand::rng().fill(&mut nonce_bytes);
+        }
         let nonce = Nonce::from_slice(&nonce_bytes);
         let ciphertext = cipher.encrypt(nonce, data.as_ref()).unwrap_or_default();
 
@@ -286,7 +289,10 @@ impl DataStore for VectorStore {
         let aes_key = aes_gcm::Key::<Aes256Gcm>::from_slice(&derived_key);
         let cipher = Aes256Gcm::new(aes_key);
         let mut nonce_bytes = [0u8; 12];
-        rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce_bytes);
+        {
+            use rand::RngExt;
+            rand::rng().fill(&mut nonce_bytes);
+        }
         let nonce = Nonce::from_slice(&nonce_bytes);
         let ciphertext = cipher.encrypt(nonce, data.as_ref()).unwrap_or_default();
 
@@ -468,7 +474,10 @@ impl DataStore for RocksDbStore {
         let aes_key = aes_gcm::Key::<Aes256Gcm>::from_slice(&derived_key);
         let cipher = Aes256Gcm::new(aes_key);
         let mut nonce_bytes = [0u8; 12];
-        rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce_bytes);
+        {
+            use rand::RngExt;
+            rand::rng().fill(&mut nonce_bytes);
+        }
         let nonce = Nonce::from_slice(&nonce_bytes);
         let ciphertext = cipher.encrypt(nonce, data.as_ref()).unwrap_or_default();
 

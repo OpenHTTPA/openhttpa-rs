@@ -26,7 +26,7 @@ use std::time::Duration;
 /// has a unique, unpredictable HMAC key.
 fn random_challenge_key() -> [u8; 32] {
     let mut key = [0u8; 32];
-    getrandom::getrandom(&mut key).expect("OS CSPRNG unavailable — cannot generate challenge key");
+    getrandom::fill(&mut key).expect("OS CSPRNG unavailable — cannot generate challenge key");
     key
 }
 use tokio::net::TcpListener;

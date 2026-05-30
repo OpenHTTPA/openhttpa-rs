@@ -1068,7 +1068,7 @@ fn demo_challenge_key(env_var: &str) -> [u8; 32] {
         env_var
     );
     let mut key = [0u8; 32];
-    getrandom::getrandom(&mut key).expect("OS CSPRNG unavailable");
+    getrandom::fill(&mut key).expect("OS CSPRNG unavailable");
     key
 }
 
@@ -1254,7 +1254,7 @@ mod tests {
         let body = serde_json::json!({ "ciphertext": hex::encode(data) }).to_string();
 
         // Calculate correct MAC for Attest-Ticket
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha384;
         let mut hmac = Hmac::<Sha384>::new_from_slice(&c_mac_key).unwrap();
         // Use production canonicalization logic
@@ -1348,7 +1348,7 @@ mod tests {
 
         let body = serde_json::json!({ "ciphertext": hex::encode(data) }).to_string();
 
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha384;
         let mut hmac = Hmac::<Sha384>::new_from_slice(&client_mac_key).unwrap();
         let mut header_map = http::HeaderMap::new();
@@ -1498,7 +1498,7 @@ mod tests {
         sealer.seal(&aad, &mut data).unwrap();
 
         // We need a real MAC for the test to pass the extractor verification
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha384;
         let mut hmac = Hmac::<Sha384>::new_from_slice(&c_mac_key).unwrap();
         let mut header_map = http::HeaderMap::new();
@@ -1586,7 +1586,7 @@ mod tests {
         sealer.seal(&aad, &mut data).unwrap();
 
         // Bind and MAC
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha384;
         let mut hmac = Hmac::<Sha384>::new_from_slice(&c_mac_key).unwrap();
         let mut header_map = http::HeaderMap::new();

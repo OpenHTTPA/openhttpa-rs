@@ -265,7 +265,7 @@ where
             nonce_val,
             |keys, _counter: u64| -> Result<Vec<u8>, Box<Response>> {
                 // 1. Verify Attest-Ticket MAC (HMAC-SHA-384 of AHL).
-                use hmac::{Hmac, Mac};
+                use hmac::{Hmac, KeyInit, Mac};
                 use sha2::Sha384;
                 type HmacSha384 = Hmac<Sha384>;
 

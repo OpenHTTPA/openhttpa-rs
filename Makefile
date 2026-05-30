@@ -294,6 +294,15 @@ audit: ## Audit dependencies (cargo-deny + cargo-audit + pnpm + uv)
 	@echo "Auditing Python dependencies..."
 	cd bindings/python && uv lock --check
 
+.PHONY: upgrade-outdated
+upgrade-outdated: ## Identify outdated crates and upgrade them all autonomously
+	@echo "Identifying and upgrading outdated crates..."
+	@command -v cargo-outdated >/dev/null 2>&1 || cargo install cargo-outdated
+	@command -v cargo-upgrade >/dev/null 2>&1 || cargo install cargo-edit
+	cargo outdated || true
+	cargo upgrade -i --exclude teaclave-sgx-sdk --exclude sgx_types
+	cargo update
+
 # Verify all language bindings compile
 .PHONY: check-bindings
 check-bindings: check-python-bindings check-node-bindings check-go-bindings ## Verify all language bindings compile

@@ -21,7 +21,7 @@ metal = ["zk", "risc0-zkvm/metal"]
 [dependencies]
 openhttpa-proto = { workspace = true }
 openhttpa-crypto = { workspace = true }
-risc0-zkvm = { version = "2.3.2", default-features = false, features = ["prove"], optional = true }
+risc0-zkvm = { version = "3.0.5", default-features = false, features = ["prove"], optional = true }
 serde = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
@@ -31,10 +31,10 @@ serde_json = { workspace = true }
 postcard = { workspace = true }
 
 [build-dependencies]
-risc0-build = { version = "2.3.2", default-features = false, optional = true }
+risc0-build = { version = "3.0.5", default-features = false, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
-sha2 = "0.10"
-tracing-subscriber = "0.3.20"
-risc0-zkvm = { version = "2.3.2", default-features = false, features = ["std", "prove", "client"] }
+sha2 = "0.11"
+tracing-subscriber = "0.3.23"
+risc0-zkvm = { version = "3.0.5", default-features = false, features = ["std", "prove", "client"] }

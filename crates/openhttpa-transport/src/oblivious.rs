@@ -7,11 +7,27 @@
 
 use aes_gcm::{Aes256Gcm, KeyInit, aead::Aead as _};
 use hpke::{Deserializable, OpModeR, OpModeS, Serializable, aead::AeadCtxR, kem::Kem as KemTrait};
-use rand::thread_rng;
+
 use std::sync::Arc;
 use thiserror::Error;
 
 use crate::connection::{AttestTransport, SendError, TransportRequest, TransportResponse};
+
+struct HpkeRng;
+
+impl hpke::rand_core::RngCore for HpkeRng {
+    fn next_u32(&mut self) -> u32 {
+        0
+    }
+    fn next_u64(&mut self) -> u64 {
+        0
+    }
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        use rand::RngExt;
+        rand::rng().fill(dest);
+    }
+}
+impl hpke::rand_core::CryptoRng for HpkeRng {}
 
 /// HPKE Cipher Suite for O-HTTPA.
 type Kem = hpke::kem::X25519HkdfSha256;
@@ -58,7 +74,7 @@ impl AttestTransport for ObliviousClient {
     > {
         Box::pin(async move {
             let (encap, mut sender_ctx) = {
-                let mut rng = thread_rng();
+                let mut rng = HpkeRng;
 
                 // 1. HPKE Setup
                 let pk_server = <Kem as KemTrait>::PublicKey::from_bytes(&self.server_public_key)
@@ -252,7 +268,7 @@ mod tests {
 
     #[test]
     fn test_oblivious_server_malformed() {
-        let (sk, _pk) = <Kem as KemTrait>::gen_keypair(&mut rand::thread_rng());
+        let (sk, _pk) = <Kem as KemTrait>::gen_keypair(&mut HpkeRng);
         let server = ObliviousServer::new(sk);
 
         let result = server.decapsulate(b"short");
@@ -265,7 +281,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_oblivious_client_server_round_trip() {
-        let (sk, pk) = <Kem as KemTrait>::gen_keypair(&mut rand::thread_rng());
+        let (sk, pk) = <Kem as KemTrait>::gen_keypair(&mut HpkeRng);
         let pk_bytes = pk.to_bytes().to_vec();
 
         let mock = Arc::new(MockTransport {
@@ -294,7 +310,7 @@ mod tests {
         // Invalid key length/format
         let pk_bytes = vec![0u8; 10];
         let mock = Arc::new(MockTransport {
-            server_secret_key: <Kem as KemTrait>::gen_keypair(&mut rand::thread_rng()).0,
+            server_secret_key: <Kem as KemTrait>::gen_keypair(&mut HpkeRng).0,
         });
 
         let client = ObliviousClient::new(mock, pk_bytes, 0x01);

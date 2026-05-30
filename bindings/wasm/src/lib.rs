@@ -35,8 +35,10 @@ use aes_gcm::{
     Aes256Gcm, Nonce as GcmNonce,
     aead::{Aead, KeyInit, Payload},
 };
-use ml_kem::{Ciphertext, EncodedSizeUser, KemCore, MlKem768};
-use rand_core::OsRng;
+use ml_kem::{
+    Ciphertext, MlKem768,
+    kem::{Kem, KeyExport},
+};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use wasm_bindgen::prelude::*;
@@ -54,7 +56,7 @@ struct ClientState {
     client_challenge: [u8; 48],
     ecdhe_secret: StaticSecret,
     ecdhe_public_bytes: [u8; 32],
-    dk: <MlKem768 as KemCore>::DecapsulationKey,
+    dk: <MlKem768 as Kem>::DecapsulationKey,
     ek_bytes: Vec<u8>,
 }
 
@@ -377,19 +379,24 @@ pub fn openhttpa_ws_reset(base_id: &str) -> Result<(), JsValue> {
 #[wasm_bindgen]
 pub fn openhttpa_initiate_attest() -> Result<String, JsValue> {
     let mut client_random = [0u8; 32];
-    getrandom::getrandom(&mut client_random)
+    getrandom::fill(&mut client_random)
         .map_err(|e| JsValue::from_str(&format!("getrandom: {e}")))?;
 
     let mut client_challenge = [0u8; 48];
-    getrandom::getrandom(&mut client_challenge)
+    getrandom::fill(&mut client_challenge)
         .map_err(|e| JsValue::from_str(&format!("getrandom: {e}")))?;
 
-    let ecdhe_secret = StaticSecret::random_from_rng(OsRng);
+    let mut ecdhe_bytes = [0u8; 32];
+    getrandom::fill(&mut ecdhe_bytes).map_err(|e| JsValue::from_str(&format!("getrandom: {e}")))?;
+    let ecdhe_secret = StaticSecret::from(ecdhe_bytes);
     let ecdhe_public = PublicKey::from(&ecdhe_secret);
     let ecdhe_public_bytes = ecdhe_public.to_bytes();
 
-    let (dk, ek) = MlKem768::generate(&mut OsRng);
-    let ek_bytes: Vec<u8> = AsRef::<[u8]>::as_ref(&ek.as_bytes()).to_vec();
+    let mut seed = [0u8; 64];
+    getrandom::fill(&mut seed).map_err(|e| JsValue::from_str(&format!("getrandom: {e}")))?;
+    let dk = ml_kem::DecapsulationKey::<ml_kem::MlKem768>::from_seed(seed.into());
+    let ek = dk.encapsulation_key().clone();
+    let ek_bytes: Vec<u8> = AsRef::<[u8]>::as_ref(&ek.to_bytes()).to_vec();
 
     CLIENT.with(|c| {
         *c.borrow_mut() = Some(ClientState {
@@ -439,10 +446,7 @@ pub fn openhttpa_derive_session(server_json: &str) -> Result<String, JsValue> {
     let ct = Ciphertext::<MlKem768>::try_from(ct_bytes.as_slice()).map_err(|_| {
         JsValue::from_str("mlkem_ciphertext has wrong length (expected 1088 bytes)")
     })?;
-    let mlkem_ss = state
-        .dk
-        .decapsulate(&ct)
-        .map_err(|_| JsValue::from_str("ML-KEM-768 decapsulation failed"))?;
+    let mlkem_ss = state.dk.decapsulate(&ct);
 
     let combined = crypto::combine(
         ecdhe_ss.as_bytes(),
@@ -582,7 +586,7 @@ pub fn openhttpa_compute_ticket(
         use sha2::Sha384;
         type HmacSha384 = Hmac<Sha384>;
 
-        let mut mac = <HmacSha384 as Mac>::new_from_slice(&s.keys.client_mac_key)
+        let mut mac = <HmacSha384 as hmac::digest::KeyInit>::new_from_slice(&s.keys.client_mac_key)
             .map_err(|_| JsValue::from_str("HMAC init failed"))?;
         // Bind nonce and AHL to prevent replay and semantic re-routing (H-01/M-01).
         mac.update(&nonce.to_be_bytes());
@@ -693,7 +697,7 @@ pub fn openhttpa_seal_with_ahl(
         use sha2::Sha384;
         type HmacSha384 = Hmac<Sha384>;
 
-        let mut mac = <HmacSha384 as Mac>::new_from_slice(&s.keys.client_mac_key)
+        let mut mac = <HmacSha384 as hmac::digest::KeyInit>::new_from_slice(&s.keys.client_mac_key)
             .map_err(|_| JsValue::from_str("HMAC init failed"))?;
         mac.update(&count.to_be_bytes());
         mac.update(&ahl);

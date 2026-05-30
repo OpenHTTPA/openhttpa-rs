@@ -40,4 +40,4 @@ hex = { workspace = true }
 dashmap = { workspace = true }
 openhttpa-fabric = { workspace = true }
 openhttpa-aiql = { workspace = true }
-tempfile = "3.10"
+tempfile = "3.27"

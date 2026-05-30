@@ -27,9 +27,9 @@ aes-gcm = { workspace = true }
 
 hex = { workspace = true }
 regorus = "0.10"
-lru = "0.16.3"
+lru = "0.18.0"
 rand = { workspace = true }
-rocksdb = "0.21.0"
+rocksdb = "0.24.0"
 
 [dev-dependencies]
 proptest = { workspace = true }

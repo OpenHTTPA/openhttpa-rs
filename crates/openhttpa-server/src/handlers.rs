@@ -67,7 +67,7 @@ use crate::atb_registry::AtbRegistry;
 /// let key = ChallengeKey::new([0u8; 32]);
 /// // … later, at operator command:
 /// let mut new_key = [0u8; 32];
-/// getrandom::getrandom(&mut new_key).unwrap();
+/// getrandom::fill(&mut new_key).unwrap();
 /// key.rotate(new_key);
 /// ```
 #[derive(Clone, Debug)]
@@ -124,7 +124,7 @@ pub struct AtHsHandlerState {
 
 impl AtHsHandlerState {
     fn verify_challenge(c: &[u8], key: &[u8; 32]) -> Result<[u8; 48], &'static str> {
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
         type HmacSha256 = Hmac<Sha256>;
 
@@ -327,7 +327,7 @@ pub async fn preflight_handler(State(state): State<Arc<PreflightHandlerState>>) 
     let mut rand_bytes = [0u8; 8];
     // HIGH-02: treat RNG failure as fatal rather than silently using zeroed bytes,
     // which would collapse challenge entropy to the timestamp alone.
-    if let Err(e) = getrandom::getrandom(&mut rand_bytes) {
+    if let Err(e) = getrandom::fill(&mut rand_bytes) {
         error!(%e, "entropy source unavailable — cannot issue challenge");
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -336,7 +336,7 @@ pub async fn preflight_handler(State(state): State<Arc<PreflightHandlerState>>) 
             .into_response();
     }
 
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
     type HmacSha256 = Hmac<Sha256>;
 
@@ -379,7 +379,7 @@ pub type AtHsHandler = fn(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
     type HmacSha256 = Hmac<Sha256>;
 

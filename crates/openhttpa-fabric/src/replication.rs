@@ -7,7 +7,7 @@ use openhttpa_attestation::verifier::QuoteVerifier;
 use openhttpa_core::sha2::{Digest, Sha384};
 use openhttpa_proto::{AttestQuote, ProvenanceChain};
 use openhttpa_tee::provider::{QuoteRequest, TeeProvider};
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::time::{Duration, interval};
@@ -197,7 +197,7 @@ impl ReplicationManager {
                 if peers.is_empty() {
                     continue;
                 }
-                let mut rng = rand::thread_rng();
+                let mut rng = rand::rng();
                 if let Some(target) = peers.choose(&mut rng) {
                     info!("Gossiping state to random peer: {}", target);
                     metrics.inc_gossip_syncs();

@@ -20,7 +20,7 @@ impl IdentityResolver {
     pub async fn resolve_did(&self, did: &str) -> Result<String, String> {
         // Dummy implementation to resolve DID to an MRENCLAVE
         // In reality, this will interact with the OpenHTTPA smart contract
-        let _provider = ProviderBuilder::new().on_http(self.rpc_url.clone());
+        let _provider = ProviderBuilder::new().connect_http(self.rpc_url.clone());
         tracing::info!("Resolving DID: {} via provider", did);
 
         // Mock successful resolution

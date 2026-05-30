@@ -9,7 +9,7 @@ use http::Uri;
 use thiserror::Error;
 use tracing::instrument;
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use openhttpa_attestation::verifier::QuoteVerifier;
 use openhttpa_core::handshake::ClientKeyShare;
 use openhttpa_core::session::AttestSession;
