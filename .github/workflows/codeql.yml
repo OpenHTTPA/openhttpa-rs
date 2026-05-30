@@ -132,7 +132,7 @@ jobs:
       # Pinned SHA: actions/checkout v4.2.2 (2025-01-13)
       # Update via Dependabot or: gh api repos/actions/checkout/git/ref/tags/v4
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 1
           submodules: recursive
@@ -176,7 +176,7 @@ jobs:
       #
       # Pinned SHA: actions/cache v4.2.3 (2025-03-05)
       - name: Cache Cargo registry and git deps
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
             ~/.cargo/registry
@@ -192,7 +192,7 @@ jobs:
       # build-mode: none → we run the build manually below so we can control
       # exactly which crates are compiled and which env vars are set.
       - name: Initialise CodeQL
-        uses: github/codeql-action/init@fee9466b8957867761f2d78f922ab084e3e2dd17 # v3
+        uses: github/codeql-action/init@03e4368ac7daa2bd82b3e85262f3bf87ee112f57 # v3
         with:
           languages: rust
           config-file: .github/codeql/codeql-config.yml
@@ -223,7 +223,7 @@ jobs:
       # ── 7. Perform CodeQL analysis & upload SARIF ────────────────────────────
       # Pinned SHA: github/codeql-action v3 (same SHA as init above)
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@fee9466b8957867761f2d78f922ab084e3e2dd17 # v3
+        uses: github/codeql-action/analyze@03e4368ac7daa2bd82b3e85262f3bf87ee112f57 # v3
         with:
           category: '/language:rust'
           upload: true
