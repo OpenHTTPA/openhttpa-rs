@@ -393,6 +393,7 @@ formal: ## Run formal verification models (ProVerif)
 # Start the full demo stack (backend + frontend)
 .PHONY: demo-up
 demo-up: build wasm ## Launch the MPC demo via Docker
+	$(MAKE) demo-down
 	$(DEMO_MAKE) up
 
 # Stop the demo stack
@@ -403,6 +404,7 @@ demo-down: ## Stop the demo stack
 # Start the stable demo instance (port 3001, isolated)
 .PHONY: demo-stable-up
 demo-stable-up: build wasm ## Start the stable demo instance (port 3001, isolated)
+	$(MAKE) demo-stable-down
 	$(DEMO_MAKE) stable-up
 
 # Stop the stable demo instance

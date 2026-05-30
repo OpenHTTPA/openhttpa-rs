@@ -3,12 +3,16 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 # Copyright 2026 The OpenHTTPA Foundation (openhttpa.org)
 
-set -e
+set -euo pipefail
 
 # OpenHTTPA Runner Setup Script for Ubuntu 24.04 (Noble) and compatible environments.
 # This script installs all necessary prerequisites for the CI/CD pipeline and local development.
 
 echo "🚀 Starting OpenHTTPA Runner Setup..."
+
+# Secure temporary directory for downloads
+SETUP_TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$SETUP_TMP_DIR"' EXIT
 
 # Helper: Check if command is available
 has_cmd() {
@@ -40,12 +44,13 @@ if [ -f /etc/apt/sources.list.d/trivy.list ]; then
 fi
 
 # 2. Install System Dependencies
-if [ "${SKIP_SYSTEM_DEPS}" = "1" ]; then
+if [ "${SKIP_SYSTEM_DEPS:-0}" = "1" ]; then
     echo "⏭️ Skipping system dependencies installation as requested."
 elif has_cmd apt-get; then
     echo "📦 Installing system dependencies..."
+    export DEBIAN_FRONTEND=noninteractive
     run_sudo apt-get update
-    run_sudo apt-get install -y \
+    run_sudo apt-get install -y --no-install-recommends \
         unzip bubblewrap rsync libgtk2.0-dev m4 patch make gcc \
         wget curl gnupg lsb-release ca-certificates pkg-config \
         libssl-dev cmake ninja-build libpcre3-dev zlib1g-dev binaryen
@@ -57,7 +62,8 @@ fi
 # 3. Install Rust Toolchain
 echo "🦀 Installing/updating Rust toolchain..."
 if ! has_cmd rustup; then
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o "$SETUP_TMP_DIR/rustup.sh"
+    sh "$SETUP_TMP_DIR/rustup.sh" -y --default-toolchain stable
     source "$HOME/.cargo/env"
 else
     rustup update stable
@@ -68,14 +74,15 @@ rustup component add rustfmt clippy llvm-tools-preview
 rustup target add wasm32-unknown-unknown
 
 # 4. Install OPAM & ProVerif (Formal Verification)
-if [ "${SKIP_FORMAL_SETUP}" = "1" ]; then
+if [ "${SKIP_FORMAL_SETUP:-0}" = "1" ]; then
     echo "⏭️ Skipping Formal Verification setup (opam/proverif) as requested."
 else
     if ! has_cmd proverif; then
         echo "💎 Installing OPAM and ProVerif..."
         if ! has_cmd opam; then
             if has_cmd apt-get; then
-                run_sudo apt-get install -y opam
+                export DEBIAN_FRONTEND=noninteractive
+                run_sudo apt-get install -y --no-install-recommends opam
             else
                 echo "❌ Error: 'opam' not found and 'apt-get' is not available. Install opam manually." >&2
                 exit 1
@@ -91,17 +98,30 @@ else
             opam switch create 4.14.0 -y
         fi
 
-        eval $(opam env)
-        opam install -y proverif
+        opam exec -- opam install -y proverif
     else
         echo "✓ ProVerif is already installed."
+    fi
+
+    if ! has_cmd tamarin-prover; then
+        echo "💎 Installing Tamarin Prover and Maude..."
+        if has_cmd apt-get; then
+            export DEBIAN_FRONTEND=noninteractive
+            run_sudo apt-get install -y --no-install-recommends maude
+        fi
+        TAMARIN_URL="https://github.com/tamarin-prover/tamarin-prover/releases/download/1.12.0/tamarin-prover-1.12.0-linux64-ubuntu.tar.gz"
+        wget -qO "$SETUP_TMP_DIR/tamarin.tar.gz" $TAMARIN_URL
+        run_sudo tar xzf "$SETUP_TMP_DIR/tamarin.tar.gz" -C /usr/local/bin tamarin-prover
+    else
+        echo "✓ Tamarin Prover is already installed."
     fi
 fi
 
 # 5. Install Wasm-Pack
 if ! has_cmd wasm-pack; then
     echo "🕸️ Installing wasm-pack..."
-    curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+    curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh -o "$SETUP_TMP_DIR/wasm-init.sh"
+    sh "$SETUP_TMP_DIR/wasm-init.sh"
 else
     echo "✓ wasm-pack is already installed."
 fi
@@ -110,8 +130,10 @@ fi
 echo "📦 Installing Node.js, PNPM, and UV..."
 if ! has_cmd node; then
     if has_cmd apt-get; then
-        curl -fsSL https://deb.nodesource.com/setup_22.x | run_sudo -E bash -
-        run_sudo apt-get install -y nodejs
+        curl -fsSL https://deb.nodesource.com/setup_22.x -o "$SETUP_TMP_DIR/nodesetup.sh"
+        run_sudo -E bash "$SETUP_TMP_DIR/nodesetup.sh"
+        export DEBIAN_FRONTEND=noninteractive
+        run_sudo apt-get install -y --no-install-recommends nodejs
     else
         echo "❌ Node.js not found. Please install Node.js (>=18) manually." >&2
         exit 1
@@ -127,7 +149,8 @@ else
 fi
 
 if ! has_cmd uv; then
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    curl -LsSf https://astral.sh/uv/install.sh -o "$SETUP_TMP_DIR/uv-install.sh"
+    sh "$SETUP_TMP_DIR/uv-install.sh"
     export PATH="$HOME/.local/bin:$PATH"
 else
     echo "✓ uv is already installed."
@@ -142,7 +165,8 @@ if ! has_cmd gh; then
         run_sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | run_sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
         run_sudo apt-get update
-        run_sudo apt-get install -y gh
+        export DEBIAN_FRONTEND=noninteractive
+        run_sudo apt-get install -y --no-install-recommends gh
     else
         echo "⚠️ 'gh' CLI not found and 'apt-get' not available. Skipping."
     fi
@@ -151,7 +175,7 @@ else
 fi
 
 # 7. Install Cargo Tools
-if [ "${SKIP_CARGO_INSTALL}" = "1" ]; then
+if [ "${SKIP_CARGO_INSTALL:-0}" = "1" ]; then
     echo "⏭️ Skipping Cargo tools installation as requested."
 else
     echo "🛡️ Installing cargo-audit, cargo-deny, maturin, and cargo-cyclonedx..."
@@ -191,7 +215,8 @@ fi
 # 9. Install Foundry (for Solidity verification)
 if ! has_cmd forge; then
     echo "⛓️ Installing Foundry..."
-    curl -L https://foundry.paradigm.xyz | bash
+    curl -L https://foundry.paradigm.xyz -o "$SETUP_TMP_DIR/foundry-init.sh"
+    bash "$SETUP_TMP_DIR/foundry-init.sh"
     export PATH="$HOME/.foundry/bin:$PATH"
     foundryup
 else
@@ -209,7 +234,7 @@ echo "✅ Setup Complete!"
 echo "--------------------------------------------------------"
 echo "Please restart your terminal or run the following command:"
 echo "source \$HOME/.cargo/env"
-if [ "${SKIP_FORMAL_SETUP}" != "1" ] && has_cmd opam; then
+if [ "${SKIP_FORMAL_SETUP:-0}" != "1" ] && has_cmd opam; then
     echo "eval \$(opam env)"
 fi
 echo "--------------------------------------------------------"
