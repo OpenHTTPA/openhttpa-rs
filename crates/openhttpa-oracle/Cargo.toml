@@ -18,7 +18,7 @@ serde = { workspace = true }
 reqwest = { version = "0.13", features = ["json", "rustls"], default-features = false }
 thiserror = { workspace = true }
 bytes = { workspace = true }
-bincode = "1.3.3"
+bincode = "3.0.0"
 serde-big-array = "0.5"
 tracing-subscriber = { workspace = true }
 axum.workspace = true
