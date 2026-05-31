@@ -5,8 +5,10 @@
 //!
 //! The `Attest-*` header field names defined in this module (`Attest-Cipher-Suites`,
 //! `Attest-Random`, `Attest-Key-Shares`, `Attest-Challenge`, `Attest-Quotes`, etc.)
-//! are formally registered in the IANA "Hypertext Transfer Protocol (HTTP) Field Name
-//! Registry" as per `draft-openhttpa-protocol-00`.
+//! are pending IANA registration in the "Hypertext Transfer Protocol (HTTP) Field Name
+//! Registry" (RFC 9110 §16.3.1) as specified in `draft-openhttpa-protocol-00`.
+//! Until registration is complete, the `Attest-` prefix serves as a vendor prefix
+//! unlikely to conflict with standardised fields.
 //!
 //! ## Encoding rules
 //!
@@ -121,20 +123,33 @@ const MAX_AHL_HEADER_VALUE_LEN: usize = 4096;
 
 const AHL_PREFIX_METHOD: &[u8] = b"7::method";
 const AHL_PREFIX_PATH: &[u8] = b"5::path";
+/// `"query:"` = 6 bytes; encodes the query-string slot tag.
+const AHL_PREFIX_QUERY: &[u8] = b"6::query";
 const AHL_PREFIX_AUTHORITY: &[u8] = b"10::authority";
 const AHL_SEPARATOR: &[u8] = b":";
 
-/// Construct a canonical byte representation of the request/response context,
-/// including the HTTP method, URI path, and all `Attest-*` headers.
-///
-/// This AHL (Attest Header List) is used as the input to the MAC calculation
-/// for `Attest-Ticket` and `Attest-Binder`. Binding the method and path
-/// prevents semantic re-routing attacks (C-AHL-1).
 /// Canonicalise the Attested Header List (AHL) into a byte stream for MAC
 /// calculation or quote QUDD binding.
 ///
-/// Implements length-prefixed encoding (C-AHL-1) to ensure semantic integrity
-/// and prevent injection.
+/// The AHL binds **all four** of the following components so that no
+/// intermediate node can alter any of them without invalidating the MAC:
+///
+/// 1. **Method** — uppercased per RFC 7230 §3.1.1 (C-AHL-1, SEC-05).  A case
+///    mismatch between client and server would produce a different AHL byte
+///    stream and cause MAC verification failure.
+/// 2. **Path** — the request-target path, verbatim (C-AHL-1).
+/// 3. **Query** — the query string, or an empty string when absent (SEC-01).
+///    Binding the query prevents parameter injection (e.g. `?action=read`
+///    → `?action=write`) without invalidating the MAC.
+/// 4. **Authority** — the `Host` header / URI authority (C-AHL-1).
+///    Binding the authority prevents semantic re-routing to a different
+///    virtual host.
+/// 5. All `Attest-*` headers except `Attest-Ticket` and `Attest-Binder`
+///    (which carry the MAC itself and must be excluded to avoid circularity).
+///
+/// The encoding uses length-prefixed fields with type-tagged prefixes
+/// (`7::method`, `5::path`, `6::query`, `10::authority`) so that no two
+/// distinct inputs produce the same byte sequence (C-AHL-1 injection safety).
 ///
 /// # Errors
 /// Returns [`HeaderError::TooManyHeaders`] or [`HeaderError::ValueTooLong`] if
@@ -142,11 +157,12 @@ const AHL_SEPARATOR: &[u8] = b":";
 pub fn canonicalize_ahl(
     method: &str,
     path: &str,
+    query: Option<&str>,
     authority: &str,
     map: &HeaderMap,
 ) -> Result<Vec<u8>, HeaderError> {
     let mut ahl = Vec::new();
-    update_ahl(method, path, authority, map, |chunk| {
+    update_ahl(method, path, query, authority, map, |chunk| {
         ahl.extend_from_slice(chunk);
     })?;
 
@@ -155,14 +171,19 @@ pub fn canonicalize_ahl(
 
 /// Update a streaming hasher or buffer with the canonicalised AHL bytes.
 ///
-/// This avoids allocating a large intermediate `Vec<u8>` when only a digest is
-/// needed (e.g. for MAC verification).
+/// This is the streaming counterpart to [`canonicalize_ahl`].  It avoids
+/// allocating a large intermediate `Vec<u8>` when only a digest is needed
+/// (e.g. feeding an HMAC-SHA-384 context directly).
+///
+/// See [`canonicalize_ahl`] for the full description of the bound components
+/// and their security rationale.
 ///
 /// # Errors
 /// Returns [`HeaderError`] if limits are exceeded.
 pub fn update_ahl<F>(
     method: &str,
     path: &str,
+    query: Option<&str>,
     authority: &str,
     map: &HeaderMap,
     mut update: F,
@@ -170,11 +191,14 @@ pub fn update_ahl<F>(
 where
     F: FnMut(&[u8]),
 {
-    // 1. Bind Method (C-AHL-1)
+    // 1. Bind Method (C-AHL-1, SEC-05)
+    // Normalise to uppercase so "GET" and "get" produce identical AHL bytes
+    // on both client and server, regardless of transport-level casing.
+    let method_upper = method.to_ascii_uppercase();
     update(AHL_PREFIX_METHOD);
-    update(method.len().to_string().as_bytes());
+    update(method_upper.len().to_string().as_bytes());
     update(AHL_SEPARATOR);
-    update(method.as_bytes());
+    update(method_upper.as_bytes());
 
     // 2. Bind Path (C-AHL-1)
     update(AHL_PREFIX_PATH);
@@ -182,13 +206,24 @@ where
     update(AHL_SEPARATOR);
     update(path.as_bytes());
 
-    // 2b. Bind Authority (C-AHL-1) - NEW: Prevent semantic re-routing attacks.
+    // 3. Bind Query (C-AHL-1, SEC-01)
+    // An absent query (`None`) is canonicalised as an empty string so that
+    // requests with and without a query component always produce distinct
+    // AHL byte streams — preventing query-parameter injection attacks.
+    let q = query.unwrap_or("");
+    update(AHL_PREFIX_QUERY);
+    update(q.len().to_string().as_bytes());
+    update(AHL_SEPARATOR);
+    update(q.as_bytes());
+
+    // 4. Bind Authority (C-AHL-1) — prevents semantic re-routing attacks.
     update(AHL_PREFIX_AUTHORITY);
     update(authority.len().to_string().as_bytes());
     update(AHL_SEPARATOR);
     update(authority.as_bytes());
 
-    // tracing::info!(method = %method, path = %path, authority = %authority, "AHL base components updated");
+    // tracing::debug!(method = %method_upper, path = %path, query = %q,
+    //     authority = %authority, "AHL base components bound");
 
     // 3. Bind Attest-* headers
     // Sort Attest-* headers by name for canonicalization.
@@ -1631,6 +1666,7 @@ mod proptest_headers {
             prop_assert_eq!(decoded.expires_secs, expected);
         }
 
+        /// H-01: Different method/path MUST produce different AHL bytes.
         #[test]
         fn ahl_semantic_binding_prevents_rerouting(
             method1 in "[A-Z]{3,7}",
@@ -1643,11 +1679,41 @@ mod proptest_headers {
             let mut map = HeaderMap::new();
             map.insert("Attest-Test", "Value".parse().unwrap());
 
-            let ahl1 = canonicalize_ahl(&method1, &path1, "example.com", &map).unwrap();
-            let ahl2 = canonicalize_ahl(&method2, &path2, "example.com", &map).unwrap();
+            let ahl1 = canonicalize_ahl(&method1, &path1, None, "example.com", &map).unwrap();
+            let ahl2 = canonicalize_ahl(&method2, &path2, None, "example.com", &map).unwrap();
 
             // Different method/path MUST result in different AHL (H-01).
             prop_assert_ne!(ahl1, ahl2);
+        }
+
+        /// SEC-01: Different query strings MUST always produce different AHL bytes.
+        #[test]
+        fn ahl_query_injection_property(
+            path in "/[a-z0-9]+",
+            query1 in "[a-zA-Z0-9=&]{0,50}",
+            query2 in "[a-zA-Z0-9=&]{0,50}",
+        ) {
+            prop_assume!(query1 != query2);
+            let map = HeaderMap::new();
+            let ahl1 = canonicalize_ahl("GET", &path, Some(&query1), "host", &map).unwrap();
+            let ahl2 = canonicalize_ahl("GET", &path, Some(&query2), "host", &map).unwrap();
+            prop_assert_ne!(ahl1, ahl2);
+        }
+
+        /// SEC-05: Lowercase and uppercase method MUST produce identical AHL bytes.
+        #[test]
+        fn ahl_method_case_insensitive(
+            method in "[a-zA-Z]{3,7}",
+            path in "/[a-z0-9]+",
+        ) {
+            let map = HeaderMap::new();
+            let ahl_lower = canonicalize_ahl(
+                &method.to_ascii_lowercase(), &path, None, "host", &map,
+            ).unwrap();
+            let ahl_upper = canonicalize_ahl(
+                &method.to_ascii_uppercase(), &path, None, "host", &map,
+            ).unwrap();
+            prop_assert_eq!(ahl_lower, ahl_upper);
         }
     }
 
@@ -1663,7 +1729,7 @@ mod proptest_headers {
                 "val".parse().unwrap(),
             );
         }
-        let res = canonicalize_ahl("POST", "/api", "", &map);
+        let res = canonicalize_ahl("POST", "/api", None, "", &map);
         assert!(
             matches!(res, Err(HeaderError::TooManyHeaders { .. })),
             "Expected TooManyHeaders, got {res:?}"
@@ -1677,7 +1743,7 @@ mod proptest_headers {
             http::HeaderName::from_bytes(long_name.as_bytes()).unwrap(),
             "val".parse().unwrap(),
         );
-        let res = canonicalize_ahl("POST", "/api", "", &map);
+        let res = canonicalize_ahl("POST", "/api", None, "", &map);
         assert!(
             matches!(res, Err(HeaderError::ValueTooLong { .. })),
             "Expected ValueTooLong for name, got {res:?}"
@@ -1689,10 +1755,85 @@ mod proptest_headers {
             http::HeaderName::from_static("attest-suite"),
             "a".repeat(5000).parse().unwrap(),
         );
-        let res = canonicalize_ahl("POST", "/api", "", &map);
+        let res = canonicalize_ahl("POST", "/api", None, "", &map);
         assert!(
             matches!(res, Err(HeaderError::ValueTooLong { .. })),
             "Expected ValueTooLong for value, got {res:?}"
+        );
+    }
+
+    // ─── AHL security property tests ─────────────────────────────────────────
+
+    /// SEC-01: Query parameter changes MUST change the AHL (prevents query injection).
+    #[test]
+    fn ahl_query_binding_prevents_injection() {
+        let map = HeaderMap::new();
+        let ahl_no_query = canonicalize_ahl("GET", "/api/data", None, "host:8080", &map).unwrap();
+        let ahl_with_query =
+            canonicalize_ahl("GET", "/api/data", Some("action=read"), "host:8080", &map).unwrap();
+        let ahl_tampered =
+            canonicalize_ahl("GET", "/api/data", Some("action=write"), "host:8080", &map).unwrap();
+        assert_ne!(
+            ahl_no_query, ahl_with_query,
+            "absent vs. present query must differ"
+        );
+        assert_ne!(
+            ahl_with_query, ahl_tampered,
+            "different query values must differ"
+        );
+    }
+
+    /// SEC-01: Different query strings always produce different AHL bytes.
+    #[test]
+    fn ahl_different_queries_produce_different_outputs() {
+        let map = HeaderMap::new();
+        // Note: `None` and `Some("")` are intentionally treated identically —
+        // both represent "no query parameters", matching how routing frameworks
+        // treat `/path` and `/path?` as the same resource.
+        for (q1, q2) in &[
+            (Some("a=1"), Some("a=2")),
+            (Some("x=1&y=2"), Some("x=1")),
+            (None, Some("a=1")),
+        ] {
+            let a1 = canonicalize_ahl("POST", "/p", *q1, "h", &map).unwrap();
+            let a2 = canonicalize_ahl("POST", "/p", *q2, "h", &map).unwrap();
+            assert_ne!(a1, a2, "query {q1:?} vs {q2:?} should differ");
+        }
+    }
+
+    /// SEC-05: Method case-insensitivity — "get" and "GET" must produce identical AHL bytes.
+    #[test]
+    fn ahl_method_normalized_to_uppercase() {
+        let map = HeaderMap::new();
+        let ahl_lower = canonicalize_ahl("get", "/api", None, "host", &map).unwrap();
+        let ahl_upper = canonicalize_ahl("GET", "/api", None, "host", &map).unwrap();
+        let ahl_mixed = canonicalize_ahl("Get", "/api", None, "host", &map).unwrap();
+        assert_eq!(
+            ahl_lower, ahl_upper,
+            "lowercase and uppercase must be identical"
+        );
+        assert_eq!(
+            ahl_mixed, ahl_upper,
+            "mixed case must be identical to uppercase"
+        );
+    }
+
+    /// Attest-Ticket and Attest-Binder are excluded (cannot create a circular MAC).
+    #[test]
+    fn ahl_excludes_ticket_and_binder_headers() {
+        let mut map_base = HeaderMap::new();
+        map_base.insert("attest-base-id", "id-123".parse().unwrap());
+
+        let mut map_with_ticket = map_base.clone();
+        map_with_ticket.insert(STR_ATTEST_TICKET, "some-ticket".parse().unwrap());
+        map_with_ticket.insert(STR_ATTEST_BINDER, "some-binder".parse().unwrap());
+
+        let ahl_base = canonicalize_ahl("POST", "/api", None, "host", &map_base).unwrap();
+        let ahl_with_ticket =
+            canonicalize_ahl("POST", "/api", None, "host", &map_with_ticket).unwrap();
+        assert_eq!(
+            ahl_base, ahl_with_ticket,
+            "ticket/binder headers must not contribute to the AHL"
         );
     }
 }

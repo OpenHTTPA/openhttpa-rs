@@ -550,7 +550,7 @@ pub fn openhttpa_compute_ticket(
     nonce: u64,
     method: &str,
     path: &str,
-    _query: Option<String>,
+    query: Option<String>,
     headers_json: &str,
 ) -> Result<String, JsValue> {
     SESSION.with(|s_ref| {
@@ -584,9 +584,18 @@ pub fn openhttpa_compute_ticket(
             .get(http::header::HOST)
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
-        // Bind method, path, and authority for semantic integrity (H-01/C-AHL-1).
-        let ahl = openhttpa_headers::canonicalize_ahl(method, path, authority, &map)
-            .map_err(|e| JsValue::from_str(&format!("AHL error: {e}")))?;
+        // SEC-04: An empty authority means zero binding against re-routing;
+        // reject the request so callers get an explicit error rather than a
+        // silently weak MAC.
+        if authority.is_empty() {
+            return Err(JsValue::from_str(
+                "AHL error: missing Host header — required for authority binding",
+            ));
+        }
+        // SEC-01: bind query so parameter manipulation is detected by the MAC.
+        let ahl =
+            openhttpa_headers::canonicalize_ahl(method, path, query.as_deref(), authority, &map)
+                .map_err(|e| JsValue::from_str(&format!("AHL error: {e}")))?;
 
         // Compute HMAC-SHA-384.
         use hmac::{Hmac, Mac};
@@ -616,14 +625,76 @@ pub fn openhttpa_compute_ticket(
 ///
 /// The returned JSON contains:
 /// - `nonce`: hex-encoded 12-byte IV
-/// - `counter`: monotonic counter value
+/// - `counter`: monotonic counter value used to construct the nonce
 /// - `ciphertext`: hex-encoded AEAD ciphertext (includes GCM authentication tag)
-/// - `ticket`: base64-encoded `Attest-Ticket` trailer — `BE_u64(counter) || 0x00 || HMAC-SHA384(AHL)`
-///   This is computed via `openhttpa_compute_ticket` and provides AHL authentication.
-///   Callers MUST include this value in the `Attest-Ticket` trailer or header of the request.
+/// - `binder`: empty string — the `Attest-Ticket` MAC must be computed separately
+///   via [`openhttpa_compute_ticket`], which binds the method, path, query, and
+///   authority so the MAC covers the full request target.
+///
+/// # Design note
+///
+/// `openhttpa_seal` and `openhttpa_compute_ticket` are intentionally separate:
+/// sealing (AEAD encryption) does not require knowledge of the HTTP routing
+/// context, while ticket computation (HMAC over the AHL) does.  Callers MUST
+/// invoke `openhttpa_compute_ticket` with the real `Host`, method, and path and
+/// place the result in the `Attest-Ticket` header/trailer.
 #[wasm_bindgen]
 pub fn openhttpa_seal(base_id: &str, plaintext: &str) -> Result<String, JsValue> {
-    openhttpa_seal_with_ahl(base_id, plaintext, "GET", "/", None, "{}")
+    SESSION.with(|s_ref| {
+        let mut s_opt = s_ref.borrow_mut();
+        let s = s_opt
+            .as_mut()
+            .ok_or_else(|| JsValue::from_str("no active `OpenHTTPA` session"))?;
+
+        if s.base_id != base_id {
+            return Err(JsValue::from_str("base_id mismatch"));
+        }
+
+        // Hardened AAD: "openhttpa:" + base_id
+        let mut aad = b"openhttpa:".to_vec();
+        aad.extend_from_slice(base_id.as_bytes());
+
+        // Get current counter and increment atomically.
+        let count = s.counter.get();
+        if count == u64::MAX {
+            return Err(JsValue::from_str("nonce counter overflow"));
+        }
+        s.counter.set(count + 1);
+
+        // Build nonce: IV XOR counter (TLS 1.3 §5.3).
+        let mut nonce_bytes = [0u8; 12];
+        nonce_bytes.copy_from_slice(&s.keys.client_write_iv);
+        let count_bytes = count.to_be_bytes();
+        for (i, b) in count_bytes.iter().enumerate() {
+            nonce_bytes[4 + i] ^= b;
+        }
+        let nonce = GcmNonce::from_slice(&nonce_bytes);
+
+        // Encrypt payload.
+        let cipher = Aes256Gcm::new_from_slice(&s.keys.client_write_key)
+            .map_err(|e| JsValue::from_str(&format!("cipher init: {e}")))?;
+        let ciphertext = cipher
+            .encrypt(
+                nonce,
+                Payload {
+                    msg: plaintext.as_bytes(),
+                    aad: &aad,
+                },
+            )
+            .map_err(|e| JsValue::from_str(&format!("encryption failed: {e}")))?;
+
+        // Return ciphertext + counter.  The AHL ticket is computed separately by
+        // openhttpa_compute_ticket so that the caller can supply the real Host,
+        // method, path, and query string.  `binder` is kept as an empty string for
+        // backward-compatibility with callers that destructure it.
+        let res = serde_json::json!({
+            "nonce":      hex::encode(nonce_bytes),
+            "counter":    count,
+            "ciphertext": hex::encode(ciphertext),
+            "binder":     "",
+        });
+        serde_json::to_string(&res).map_err(|e| JsValue::from_str(&format!("serialise: {e}")))
+    })
 }
 
 /// Encrypt a JSON payload and compute a real `Attest-Ticket` binder over the AHL.
@@ -636,7 +707,7 @@ pub fn openhttpa_seal_with_ahl(
     plaintext: &str,
     method: &str,
     path: &str,
-    _query: Option<String>,
+    query: Option<String>,
     headers_json: &str,
 ) -> Result<String, JsValue> {
     SESSION.with(|s_ref| {
@@ -702,8 +773,16 @@ pub fn openhttpa_seal_with_ahl(
             .get(http::header::HOST)
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
-        let ahl = openhttpa_headers::canonicalize_ahl(method, path, authority, &map)
-            .map_err(|e| JsValue::from_str(&format!("AHL error: {e}")))?;
+        // SEC-04: reject empty authority.
+        if authority.is_empty() {
+            return Err(JsValue::from_str(
+                "AHL error: missing Host header — required for authority binding",
+            ));
+        }
+        // SEC-01: bind query so parameter manipulation is detected.
+        let ahl =
+            openhttpa_headers::canonicalize_ahl(method, path, query.as_deref(), authority, &map)
+                .map_err(|e| JsValue::from_str(&format!("AHL error: {e}")))?;
 
         use hmac::{Hmac, Mac};
         use sha2::Sha384;

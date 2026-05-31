@@ -168,7 +168,7 @@ impl OpenHttpaClient {
         let client_share = ClientKeyShare {
             ecdhe_public: client_pub_share.ecdhe_public,
             mlkem_public: client_pub_share.mlkem_public,
-            signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string()),
+            signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65),
         };
         let client_share_bytes = serde_json::to_vec(&client_share)
             .map_err(|e| ClientError::Serialisation(e.to_string()))?;
@@ -552,6 +552,7 @@ impl OpenHttpaClient {
             session,
             method,
             final_path,
+            full_uri.query(),
             ahl_authority(&full_uri),
             b"", // Empty initial body for header binding
             &aad,
@@ -766,6 +767,7 @@ impl OpenHttpaClient {
             session,
             method,
             final_path,
+            full_uri.query(),
             ahl_authority(&full_uri),
             body,
             &aad,
@@ -850,6 +852,7 @@ impl OpenHttpaClient {
         session: &AttestSession,
         method: &str,
         path: &str,
+        query: Option<&str>,
         authority: &str,
         body: &[u8],
         aad: &[u8],
@@ -894,7 +897,8 @@ impl OpenHttpaClient {
 
                 let mut hmac = HmacSha384::new_from_slice(&keys.client_mac_key).unwrap();
                 hmac.update(&counter.to_be_bytes());
-                openhttpa_headers::update_ahl(method, path, authority, &hdrs, |chunk| {
+                // SEC-01: pass query so that parameter manipulation is detected.
+                openhttpa_headers::update_ahl(method, path, query, authority, &hdrs, |chunk| {
                     hmac.update(chunk);
                 })
                 .map_err(|e| ClientError::Handshake(format!("AHL error: {e}")))?;
@@ -1070,9 +1074,7 @@ mod tests {
                             ecdhe_public: server_pub.ecdhe_public,
                             mlkem_ciphertext: ct,
                             mlkem_public: server_pub.mlkem_public,
-                            signature_alg: Some(
-                                openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string(),
-                            ),
+                            signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65),
                         },
                     )
                     .unwrap(),

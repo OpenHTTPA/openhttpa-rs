@@ -96,7 +96,7 @@ extern "C" fn openhttpa_handshake_body_handler(r: *mut ffi::ngx_http_request_t) 
         let share = ClientKeyShare {
             ecdhe_public,
             mlkem_public,
-            signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string()),
+            signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65),
         };
 
         let hs_req = AtHsRequest {

@@ -101,9 +101,7 @@ impl openhttpa_transport::connection::AttestTransport for ExampleTransport {
                         &openhttpa_core::handshake::ServerKeyShare {
                             ecdhe_public: server_pub.ecdhe_public.clone(),
                             mlkem_ciphertext: ct.clone(),
-                            signature_alg: Some(
-                                openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string(),
-                            ),
+                            signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65),
                             mlkem_public: server_pub.mlkem_public.clone(),
                         },
                     )

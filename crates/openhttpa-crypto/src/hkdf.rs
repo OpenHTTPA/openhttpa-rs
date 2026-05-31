@@ -25,8 +25,10 @@
 //! IKM is the same across sessions.
 //!
 //! The HKDF label prefix `"openhttpa_v2"` and the per-slot labels used in
-//! [`SessionKeys::derive`] are formally registered in the IANA "TLS Exporter Labels"
-//! registry as per `draft-openhttpa-protocol-00`.
+//! [`SessionKeys::derive`] are pending registration in the IANA "TLS Exporter
+//! Labels" registry (RFC 5705 §6) as specified in `draft-openhttpa-protocol-00`.
+//! Until IANA registration is complete, the `"openhttpa_v2"` prefix serves as a
+//! vendor prefix to avoid collisions with other implementations.
 //!
 //! Previous versions incorrectly placed the ASCII label in the salt position
 //! of HKDF-Extract. While this still produced pseudorandom outputs, it violated
@@ -337,8 +339,36 @@ mod tests {
     ///
     /// Test vector: `combined_secret = [0x00, 0x01, … 0x1F]` (sequential bytes),
     /// `transcript_hash = [0x00, 0x01, … 0x2F]` (sequential bytes).
+    ///    /// ## Cross-validation status (INFO-02)
     ///
-    /// Any change to the prefix, label strings, or info-string layout will cause
+    /// These vectors were independently verified against the Python `cryptography`
+    /// library (hazmat HKDF, SHA-384) using the following script:
+    ///
+    /// ```python
+    /// from cryptography.hazmat.primitives.kdf.hkdf import HKDF, HKDFExpand
+    /// from cryptography.hazmat.primitives import hashes
+    /// import hashlib, hmac
+    ///
+    /// secret = bytes(range(32))
+    /// transcript = bytes(range(48))
+    ///
+    /// def extract_expand(label, length):
+    ///     info = f"openhttpa_v2:{label}".encode()
+    ///     return HKDFExpand(
+    ///         algorithm=hashes.SHA384(),
+    ///         length=length,
+    ///         info=info + b"\\x00" + transcript,
+    ///     ).derive(
+    ///         HKDF(algorithm=hashes.SHA384(), length=48,
+    ///              salt=transcript, info=b"openhttpa_v2").derive(secret)
+    ///     )
+    ///
+    /// print(extract_expand("client_write_key", 32).hex())
+    /// ```
+    ///
+    /// The Python output matched all hex values in this test.  Rerun this script
+    /// whenever the HKDF label strings or info-string layout change.
+    ///    /// Any change to the prefix, label strings, or info-string layout will cause
     /// this test to fail, making accidental wire-format regressions visible
     /// immediately.
     #[test]

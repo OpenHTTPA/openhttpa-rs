@@ -94,7 +94,7 @@ async fn handle_handshake(
     let share = ClientKeyShare {
         ecdhe_public,
         mlkem_public,
-        signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string()),
+        signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65),
     };
 
     let hs_req = AtHsRequest {

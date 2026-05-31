@@ -31,7 +31,42 @@ use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
-pub const SIG_ALG_ML_DSA_65: &str = "ml-dsa-65";
+pub const SIG_ALG_ML_DSA_65: SigAlg = SigAlg::MlDsa65;
+
+/// The post-quantum digital signature algorithm negotiated during `AtHS`.
+///
+/// Using an enum (rather than `Option<String>`) means that any unrecognised
+/// algorithm identifier in the JSON wire format is rejected at deserialisation
+/// time, preventing algorithm-downgrade attacks (INFO-01).
+///
+/// # Wire format
+/// Typed algorithm identifier for the signature algorithm used in `Attest-Key-Share`.
+///
+/// Using an enum instead of `Option<String>` prevents unknown algorithm identifiers
+/// from reaching protocol logic (INFO-01).  Each variant carries an explicit
+/// `#[serde(rename = ...)]` because `rename_all = "kebab-case"` maps `MlDsa65`
+/// to `"ml-dsa65"` (no hyphen before the digit), whereas the NIST/IANA wire-format
+/// is `"ml-dsa-65"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SigAlg {
+    /// ML-DSA Level 3 (CRYSTALS-Dilithium-3), NIST FIPS 204 §5.
+    ///
+    /// This is the only algorithm currently defined by the `OpenHTTPA` v2
+    /// specification.  New variants MUST be added here before they can be
+    /// advertised or accepted by any endpoint.
+    #[serde(rename = "ml-dsa-65")]
+    MlDsa65,
+}
+
+impl SigAlg {
+    /// Returns the IANA / NIST wire-format identifier string.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::MlDsa65 => "ml-dsa-65",
+        }
+    }
+}
 
 /// Errors that can occur during the `AtHS` phase.
 // MED-06: non_exhaustive prevents breaking changes when new variants are added.
@@ -108,7 +143,7 @@ pub struct ClientKeyShare {
     pub ecdhe_public: Vec<u8>,
     pub mlkem_public: Vec<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signature_alg: Option<String>,
+    pub signature_alg: Option<SigAlg>,
 }
 
 /// JSON-serialisable server key share returned in `Attest-Key-Share`.
@@ -120,7 +155,7 @@ pub struct ServerKeyShare {
     /// ML-KEM ciphertext (encapsulation result targeting client's public key).
     pub mlkem_ciphertext: Vec<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signature_alg: Option<String>,
+    pub signature_alg: Option<SigAlg>,
 }
 
 // AttestationPolicy is now replaced by PolicyEngine
@@ -447,9 +482,7 @@ impl AtHsExecutor {
             // actually provided and signatures were produced.  Advertising
             // "ml-dsa-65" with an empty server_signatures would mislead clients
             // that validate the signature_alg field.
-            signature_alg: identity_key
-                .is_some()
-                .then(|| SIG_ALG_ML_DSA_65.to_string()),
+            signature_alg: identity_key.is_some().then_some(SIG_ALG_ML_DSA_65),
         };
 
         Ok((suite, version, server_share, result))
@@ -591,7 +624,7 @@ mod tests {
         let share = ClientKeyShare {
             ecdhe_public: client_pub.ecdhe_public,
             mlkem_public: client_pub.mlkem_public,
-            signature_alg: Some(SIG_ALG_ML_DSA_65.to_string()),
+            signature_alg: Some(SIG_ALG_ML_DSA_65),
         };
         (share, client_random, client_challenge)
     }
@@ -890,5 +923,51 @@ mod tests {
             matches!(err, HandshakeError::KeyExchange(_)),
             "Should fail cleanly at protocol validation with KeyExchange error"
         );
+    }
+
+    // ─── INFO-01: SigAlg enum validation tests ─────────────────────────────
+
+    /// INFO-01: Known algorithm "ml-dsa-65" deserialises successfully.
+    #[test]
+    fn sig_alg_known_value_deserialises() {
+        let json = r#"{"ecdhe_public":[],"mlkem_public":[],"mlkem_ciphertext":[],"signature_alg":"ml-dsa-65"}"#;
+        let share: ServerKeyShare = serde_json::from_str(json).unwrap();
+        assert_eq!(share.signature_alg, Some(SigAlg::MlDsa65));
+    }
+
+    /// INFO-01: Unknown algorithm identifier is rejected at deserialisation time,
+    /// preventing algorithm-downgrade attacks.
+    #[test]
+    fn sig_alg_unknown_value_rejected() {
+        let json = r#"{"ecdhe_public":[],"mlkem_public":[],"mlkem_ciphertext":[],"signature_alg":"ecdsa-p256"}"#;
+        let result: Result<ServerKeyShare, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "unknown algorithm identifier must be rejected at deserialisation"
+        );
+    }
+
+    /// INFO-01: `SigAlg::as_str` returns the IANA wire-format string.
+    #[test]
+    fn sig_alg_as_str() {
+        assert_eq!(SigAlg::MlDsa65.as_str(), "ml-dsa-65");
+    }
+
+    /// INFO-01: `SIG_ALG_ML_DSA_65` constant equals `SigAlg::MlDsa65`.
+    #[test]
+    fn sig_alg_constant_equals_variant() {
+        assert_eq!(SIG_ALG_ML_DSA_65, SigAlg::MlDsa65);
+    }
+
+    /// INFO-01: Serialises back to the same wire-format string as the old `&str`.
+    #[test]
+    fn sig_alg_serialises_as_kebab_case_string() {
+        let share = ClientKeyShare {
+            ecdhe_public: vec![],
+            mlkem_public: vec![],
+            signature_alg: Some(SigAlg::MlDsa65),
+        };
+        let json = serde_json::to_value(&share).unwrap();
+        assert_eq!(json["signature_alg"], "ml-dsa-65");
     }
 }

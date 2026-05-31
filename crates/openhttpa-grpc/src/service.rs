@@ -157,7 +157,7 @@ mod tests {
         let share = openhttpa_core::handshake::ClientKeyShare {
             ecdhe_public: pub_share.ecdhe_public,
             mlkem_public: pub_share.mlkem_public,
-            signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string()),
+            signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65),
         };
         serde_json::to_vec(&share).unwrap()
     }

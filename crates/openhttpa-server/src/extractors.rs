@@ -309,9 +309,28 @@ where
                     host_hdr.as_str()
                 };
 
+                // SEC-04: Reject requests with no resolvable authority — an
+                // empty authority means the AHL MAC provides zero binding
+                // against re-routing attacks.  RFC 7230 §5.4 mandates the
+                // Host header in HTTP/1.1.
+                if authority.is_empty() {
+                    return Err(Box::new(
+                        (
+                            StatusCode::BAD_REQUEST,
+                            "Missing Host / authority header — required for AHL integrity",
+                        )
+                            .into_response(),
+                    ));
+                }
+
+                // SEC-01: also pass the query string so that parameter
+                // manipulation is detected by the MAC.
+                let query = original_uri.map_or_else(|| parts.uri.query(), |u| u.0.query());
+
                 openhttpa_headers::update_ahl(
                     parts.method.as_str(),
                     path,
+                    query,
                     authority,
                     &parts.headers,
                     |chunk| {
@@ -725,6 +744,36 @@ mod tests {
 
         let body = serde_json::json!({ "ciphertext": "000000" }).to_string();
 
+        // SEC-04 requires a Host header; include one so we reach the MAC check.
+        let res = client
+            .post("/test")
+            .header(HDR_ATTEST_BASE_ID.as_str(), &id.to_string())
+            .header("Attest-Ticket", t_hv.to_str().unwrap())
+            .header("Host", "localhost")
+            .send_with_body(body)
+            .await;
+
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    /// SEC-04: Requests without a Host header or URI authority must be rejected with 400.
+    #[tokio::test]
+    async fn test_encrypted_json_missing_authority_rejected() {
+        let (registry, id) = setup_registry();
+        let app = Router::new()
+            .route(
+                "/test",
+                post(|_s: EncryptedJson<serde_json::Value>| async { "ok" }),
+            )
+            .with_state(registry);
+
+        let client = TestClient::new(app);
+
+        let dummy_mac: [u8; 48] = [0u8; 48];
+        let t_hv = openhttpa_headers::encode_attest_ticket(1, &dummy_mac, None);
+        let body = serde_json::json!({ "ciphertext": "000000" }).to_string();
+
+        // No Host header — should be rejected with 400 Bad Request.
         let res = client
             .post("/test")
             .header(HDR_ATTEST_BASE_ID.as_str(), &id.to_string())
@@ -732,7 +781,7 @@ mod tests {
             .send_with_body(body)
             .await;
 
-        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

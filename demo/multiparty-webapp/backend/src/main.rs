@@ -572,9 +572,7 @@ async fn simulate_swarm(State(_state): State<AppState>) -> impl IntoResponse {
                             ecdhe_public: server_pub.ecdhe_public,
                             mlkem_ciphertext: ct,
                             mlkem_public: server_pub.mlkem_public,
-                            signature_alg: Some(
-                                openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string(),
-                            ),
+                            signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65),
                         })
                         .unwrap(),
                         base_id: openhttpa_proto::AtbId::new(),
@@ -764,7 +762,7 @@ async fn aths_json(
     let client_share = ClientKeyShare {
         ecdhe_public,
         mlkem_public,
-        signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string()),
+        signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65),
     };
 
     let suites: Vec<CipherSuite> = req
@@ -1267,8 +1265,14 @@ mod tests {
         header_map.insert("content-type", "application/json".parse().unwrap());
 
         // Bind method and path for semantic integrity (H-01).
-        let ahl =
-            openhttpa_headers::canonicalize_ahl("POST", "/api/submit", "", &header_map).unwrap();
+        let ahl = openhttpa_headers::canonicalize_ahl(
+            "POST",
+            "/api/submit",
+            None,
+            "localhost",
+            &header_map,
+        )
+        .unwrap();
         hmac.update(&1u64.to_be_bytes());
         hmac.update(&ahl);
         let mac = hmac.finalize().into_bytes();
@@ -1282,6 +1286,7 @@ mod tests {
                 Request::builder()
                     .method(Method::POST)
                     .uri("/api/submit")
+                    .header("Host", "localhost")
                     .header("content-type", "application/json")
                     .header("Attest-Base-ID", &base_id_str)
                     .header("Attest-Ticket", ticket_bin)
@@ -1360,8 +1365,14 @@ mod tests {
         header_map.insert("content-type", "application/json".parse().unwrap());
 
         // Bind method and path for semantic integrity (H-01).
-        let ahl =
-            openhttpa_headers::canonicalize_ahl("POST", "/api/submit", "", &header_map).unwrap();
+        let ahl = openhttpa_headers::canonicalize_ahl(
+            "POST",
+            "/api/submit",
+            None,
+            "localhost",
+            &header_map,
+        )
+        .unwrap();
         hmac.update(&1u64.to_be_bytes());
         hmac.update(&ahl);
         let mac = hmac.finalize().into_bytes();
@@ -1376,6 +1387,7 @@ mod tests {
                 Request::builder()
                     .method(Method::POST)
                     .uri("/api/submit")
+                    .header("Host", "localhost")
                     .header("Attest-Base-ID", &base_id_str)
                     .header("Attest-Ticket", ticket_bin)
                     .header("content-type", "application/json")
@@ -1393,6 +1405,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/api/result")
+                    .header("Host", "localhost")
                     .header("Attest-Base-ID", &base_id_str)
                     .body(Body::empty())
                     .unwrap(),
@@ -1510,7 +1523,9 @@ mod tests {
         header_map.insert("content-type", "application/json".parse().unwrap());
 
         // Bind method and path for semantic integrity (H-01).
-        let ahl = openhttpa_headers::canonicalize_ahl("POST", "/api/mcp", "", &header_map).unwrap();
+        let ahl =
+            openhttpa_headers::canonicalize_ahl("POST", "/api/mcp", None, "localhost", &header_map)
+                .unwrap();
         hmac.update(&1u64.to_be_bytes());
         hmac.update(&ahl);
         let mac = hmac.finalize().into_bytes();
@@ -1523,6 +1538,7 @@ mod tests {
                 Request::builder()
                     .method(Method::POST)
                     .uri("/api/mcp")
+                    .header("Host", "localhost")
                     .header("Attest-Base-ID", base_id.to_string())
                     .header("Attest-Ticket", ticket)
                     .header("content-type", "application/json")
@@ -1596,8 +1612,14 @@ mod tests {
         header_map.insert("Attest-Base-ID", base_id.to_string().parse().unwrap());
         header_map.insert("content-type", "application/json".parse().unwrap());
 
-        let ahl = openhttpa_headers::canonicalize_ahl("POST", "/api/oracle/fetch", "", &header_map)
-            .unwrap();
+        let ahl = openhttpa_headers::canonicalize_ahl(
+            "POST",
+            "/api/oracle/fetch",
+            None,
+            "localhost",
+            &header_map,
+        )
+        .unwrap();
         hmac.update(&1u64.to_be_bytes());
         hmac.update(&ahl);
         let mac = hmac.finalize().into_bytes();
@@ -1608,6 +1630,7 @@ mod tests {
                 Request::builder()
                     .method(Method::POST)
                     .uri("/api/oracle/fetch")
+                    .header("Host", "localhost")
                     .header("Attest-Base-ID", base_id.to_string())
                     .header("Attest-Ticket", ticket)
                     .header("content-type", "application/json")

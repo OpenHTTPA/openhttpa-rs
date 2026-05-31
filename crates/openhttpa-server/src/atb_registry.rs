@@ -116,19 +116,39 @@ impl AtbRegistry {
     }
 
     /// Evict all expired sessions.  Call this from a background task.
+    ///
+    /// ## Race-safety (SEC-03)
+    ///
+    /// `DashMap::retain` + a single `fetch_sub` at the end would create a
+    /// TOCTOU window: in the time between `retain` completing and the counter
+    /// being decremented, new insert attempts see an inflated `live_count` and
+    /// are falsely rejected.  Instead, we:
+    ///
+    /// 1. Collect expired IDs with a read-only pass (no long-held shard locks).
+    /// 2. Remove each session individually with `DashMap::remove`, which
+    ///    returns `Some` only if the entry was actually present.
+    /// 3. Decrement the counter once *per successful removal* — exactly the
+    ///    same pattern used by the lazy-eviction path in [`Self::get`].
+    ///
+    /// This ensures that a race between `get` and `evict_expired` on the same
+    /// expired entry can only cause one decrement (the loser's `remove` returns
+    /// `None` and no decrement is performed), keeping `live_count` accurate.
     pub fn evict_expired(&self) {
-        let mut expired_count = 0;
-        self.sessions.retain(|_id, session| {
-            let alive = session.is_alive();
-            if !alive {
-                expired_count += 1;
+        // Read-only pass: collect expired IDs without holding shard write locks.
+        let expired: Vec<AtbId> = self
+            .sessions
+            .iter()
+            .filter(|e| !e.value().is_alive())
+            .map(|e| e.key().clone())
+            .collect();
+
+        // Remove-and-decrement, one entry at a time.  Checking `remove`'s
+        // return value ensures we don't double-decrement when `get`'s lazy
+        // eviction races ahead of us on the same entry.
+        for id in expired {
+            if self.sessions.remove(&id).is_some() {
+                self.live_count.fetch_sub(1, Ordering::SeqCst);
             }
-            alive
-        });
-        // Reclaim slots for the evicted sessions so the atomic counter stays
-        // in sync with the actual DashMap length.
-        if expired_count > 0 {
-            self.live_count.fetch_sub(expired_count, Ordering::SeqCst);
         }
     }
 
