@@ -253,7 +253,7 @@ pub async fn aths_handler(
         version,
         result.session_keys.clone(),
         result.expires_at,
-        openhttpa_core::ReplayStrategy::default(),
+        openhttpa_core::ReplayStrategy::StrictMonotonic,
         result.client_attestation_result.clone(),
     );
     if let Err(e) = state.registry.insert(session) {

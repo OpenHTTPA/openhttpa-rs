@@ -131,7 +131,7 @@ pub trait QuoteVerifier: Send + Sync {
 /// M-01: This provider is **test-only**. It stores revocations in an in-process
 /// `DashSet` that does not persist across restarts, is not loaded from a CRL or
 /// OCSP endpoint, and is not shared across server replicas. Use
-/// [`ItaVerifier`](crate::ita_verifier::ItaVerifier) or a production-grade
+/// `ItaVerifier` or a production-grade
 /// CRL-backed implementation in any deployed environment.
 #[deprecated(
     note = "M-01: test-only — does not persist or load revocations from a CRL/OCSP \

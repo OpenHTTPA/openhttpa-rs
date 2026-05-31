@@ -117,13 +117,18 @@ impl AtbRegistry {
 
     /// Evict all expired sessions.  Call this from a background task.
     pub fn evict_expired(&self) {
-        let before = self.sessions.len();
-        self.sessions.retain(|_id, session| session.is_alive());
-        let after = self.sessions.len();
+        let mut expired_count = 0;
+        self.sessions.retain(|_id, session| {
+            let alive = session.is_alive();
+            if !alive {
+                expired_count += 1;
+            }
+            alive
+        });
         // Reclaim slots for the evicted sessions so the atomic counter stays
         // in sync with the actual DashMap length.
-        if before > after {
-            self.live_count.fetch_sub(before - after, Ordering::SeqCst);
+        if expired_count > 0 {
+            self.live_count.fetch_sub(expired_count, Ordering::SeqCst);
         }
     }
 

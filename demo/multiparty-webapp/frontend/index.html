@@ -2102,6 +2102,7 @@
           const wasmFunctions = await import('./wasm/openhttpa_wasm.js?v=' + Date.now());
           await wasmFunctions.default();
           wasmModule = wasmFunctions;
+          window.wasmModule = wasmFunctions; // expose for e2e tests
           console.log('[openhttpa] Wasm functions:', Object.keys(wasmModule));
           logA(
             ts() +
@@ -2440,6 +2441,10 @@
       // backend container). Falls back to the direct backend address only when the
       // file is opened locally as file://, e.g. during development without Docker.
       const API = window.OpenHTTPA_CONFIG.backendUrl || '';
+      // The authority (Host header) sent to the server: use the API URL's host when
+      // a cross-origin backend URL is configured, otherwise fall back to the current
+      // origin's host (same-origin / nginx-proxy setup).
+      const API_HOST = (API && new URL(API).host) || window.location.host;
 
       // Update UI log with actual backend URL
       document.getElementById('log-backend-url').textContent = API || window.location.origin;
@@ -2554,6 +2559,7 @@
             const headers = {
               'attest-base-id': proof.base_id,
               'content-type': 'application/json',
+              host: API_HOST,
             };
             const ticket = wasmModule.openhttpa_compute_ticket(
               proof.base_id,
@@ -2702,6 +2708,7 @@
           const headers = {
             'attest-base-id': proof.base_id,
             'content-type': 'application/json',
+            host: API_HOST,
           };
           // Bind method ('POST') and path ('/mcp') for semantic integrity (H-01).
           const ticket = wasmModule.openhttpa_compute_ticket(
@@ -2795,6 +2802,7 @@
           const headers = {
             'attest-base-id': proof.base_id,
             'content-type': 'application/json',
+            host: API_HOST,
           };
           const ticket = wasmModule.openhttpa_compute_ticket(
             proof.base_id,
@@ -3210,6 +3218,7 @@
           const headers = {
             'content-type': 'application/json',
             'Attest-Base-ID': baseId,
+            host: API_HOST,
           };
           const ticket = wasmModule.openhttpa_compute_ticket(
             baseId,
@@ -3343,6 +3352,7 @@
           const headers = {
             'content-type': 'application/json',
             'Attest-Base-ID': baseId,
+            host: API_HOST,
           };
           const ticket = wasmModule.openhttpa_compute_ticket(
             baseId,

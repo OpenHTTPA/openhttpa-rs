@@ -14,11 +14,15 @@ REPO_ROOT="$(cd "$BINDING_ROOT/../.." && pwd)"
 
 cd "$SCRIPT_DIR"
 
-echo "--- Building Rust C-Library ---"
+if [ -z "$SKIP_BUILD" ]; then
+    echo "--- Building Rust C-Library ---"
 
-# 2. Build the Rust C-binding library
-cd "$REPO_ROOT"
-cargo build --release -p openhttpa-c
+    # 2. Build the Rust C-binding library
+    cd "$REPO_ROOT"
+    cargo build --release -p openhttpa-c
+else
+    echo "--- Skipping Build (SKIP_BUILD=1) ---"
+fi
 
 # 3. Determine library extension and linker flags
 OS_TYPE=$(uname)

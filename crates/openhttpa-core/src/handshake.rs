@@ -31,6 +31,8 @@ use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
+pub const SIG_ALG_ML_DSA_65: &str = "ml-dsa-65";
+
 /// Errors that can occur during the `AtHS` phase.
 // MED-06: non_exhaustive prevents breaking changes when new variants are added.
 #[non_exhaustive]
@@ -105,6 +107,8 @@ pub struct AtHsResult {
 pub struct ClientKeyShare {
     pub ecdhe_public: Vec<u8>,
     pub mlkem_public: Vec<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature_alg: Option<String>,
 }
 
 /// JSON-serialisable server key share returned in `Attest-Key-Share`.
@@ -115,6 +119,8 @@ pub struct ServerKeyShare {
     pub mlkem_public: Vec<u8>,
     /// ML-KEM ciphertext (encapsulation result targeting client's public key).
     pub mlkem_ciphertext: Vec<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature_alg: Option<String>,
 }
 
 // AttestationPolicy is now replaced by PolicyEngine
@@ -437,6 +443,13 @@ impl AtHsExecutor {
             ecdhe_public: server_pub_share.ecdhe_public,
             mlkem_public: server_pub_share.mlkem_public,
             mlkem_ciphertext: ct_bytes,
+            // Only advertise the signature algorithm when an identity key was
+            // actually provided and signatures were produced.  Advertising
+            // "ml-dsa-65" with an empty server_signatures would mislead clients
+            // that validate the signature_alg field.
+            signature_alg: identity_key
+                .is_some()
+                .then(|| SIG_ALG_ML_DSA_65.to_string()),
         };
 
         Ok((suite, version, server_share, result))
@@ -578,6 +591,7 @@ mod tests {
         let share = ClientKeyShare {
             ecdhe_public: client_pub.ecdhe_public,
             mlkem_public: client_pub.mlkem_public,
+            signature_alg: Some(SIG_ALG_ML_DSA_65.to_string()),
         };
         (share, client_random, client_challenge)
     }

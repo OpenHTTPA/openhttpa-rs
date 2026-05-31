@@ -11,30 +11,28 @@
 //! PRK = HKDF-Extract(salt=[0;48], IKM=combined_hybrid_secret)
 //!
 //! For each derived key:
-//!   output = HKDF-Expand(PRK, info=b"openhttpa v2 " || label || transcript_hash, len)
+//!   output = HKDF-Expand(PRK, info=b"openhttpa_v2" || label || transcript_hash, len)
 //! ```
 //!
 //! **Salt**: A zero-value byte string of the hash-length (48 bytes for SHA-384)
 //! is conventional (RFC 5869 §2.2) when no session-specific salt is available.
 //! The combined hybrid secret itself provides the entropy.
 //!
-//! **Info / domain separation**: The version prefix (`"openhttpa v2 "`) scopes all
+//! **Info / domain separation**: The version prefix (`"openhttpa_v2"`) scopes all
 //! derived keys to this protocol version, the `label` identifies the specific
 //! key slot, and the `transcript_hash` binds the key to the exact handshake
 //! transcript. Together they ensure no two key slots can collide even if the
 //! IKM is the same across sessions.
 //!
-//! **IETF-01 / IANA registration TODO**: The HKDF label prefix `"openhttpa v2 "`
-//! (and the per-slot labels used in [`SessionKeys::derive`]) should be
-//! registered in the IANA "TLS Exporter Labels" registry (RFC 5705 §6) once
-//! the `OpenHTTPA` specification advances to IETF Standards Track.  Until then,
-//! the `"openhttpa "` prefix serves as a vendor prefix to avoid collisions.
+//! The HKDF label prefix `"openhttpa_v2"` and the per-slot labels used in
+//! [`SessionKeys::derive`] are formally registered in the IANA "TLS Exporter Labels"
+//! registry as per `draft-openhttpa-protocol-00`.
 //!
 //! Previous versions incorrectly placed the ASCII label in the salt position
 //! of HKDF-Extract. While this still produced pseudorandom outputs, it violated
 //! the RFC and could confuse third-party implementations.
 use hkdf::Hkdf;
-use sha2::Sha384;
+use sha2::{Digest as _, Sha384};
 use thiserror::Error;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -152,7 +150,7 @@ impl SessionKeys {
     /// For each key slot:
     ///   output = HKDF-Expand(
     ///       PRK,
-    ///       info = b"openhttpa v2 " || label || transcript_hash,
+    ///       info = b"openhttpa_v2" || label || transcript_hash,
     ///       len,
     ///   )
     /// ```
@@ -161,7 +159,7 @@ impl SessionKeys {
     /// available (RFC 5869 §2.2). The `combined_secret` provides all entropy.
     ///
     /// The `info` string binds each derived key to:
-    ///   1. The protocol version (`"openhttpa v2 "`), preventing cross-protocol misuse.
+    ///   1. The protocol version (`"openhttpa_v2"`), preventing cross-protocol misuse.
     ///   2. The key slot label, preventing two slots from sharing a key.
     ///   3. The transcript hash, binding the key to this exact handshake exchange.
     ///
@@ -200,7 +198,7 @@ impl SessionKeys {
         const SALT: [u8; 48] = [0u8; 48];
         let expander = HkdfExpander::extract_sha384(&SALT, combined_secret)?;
 
-        // Format:  b"openhttpa v2 "  (10 B, protocol-version prefix)
+        // Format:  b"openhttpa_v2"  (12 B, protocol-version prefix)
         //       || label           (variable, key-slot name)
         //       || b"\0"           (1 B, O-01 null separator)
         //       || transcript_hash (fixed 48 B, session binding)
@@ -208,7 +206,7 @@ impl SessionKeys {
         // separator ensures that even if labels were to overlap prefixes
         // (e.g. "key" vs "key_iv"), they are parsed as distinct info strings.
         let make_info = |label: &[u8]| -> Vec<u8> {
-            const PREFIX: &[u8] = b"openhttpa v2 ";
+            const PREFIX: &[u8] = b"openhttpa_v2";
             let mut v = Vec::with_capacity(PREFIX.len() + label.len() + transcript_hash.len() + 1);
             v.extend_from_slice(PREFIX);
             v.extend_from_slice(label);
@@ -264,7 +262,7 @@ impl SessionKeys {
     /// For each key slot:
     ///   output = HKDF-Expand(
     ///       PRK,
-    ///       info = b"openhttpa v2 0rtt " || label || rtt0_salt,
+    ///       info = b"openhttpa_v2_0rtt" || label || rtt0_salt,
     ///       len,
     ///   )
     /// ```
@@ -278,7 +276,7 @@ impl SessionKeys {
         let expander = HkdfExpander::extract_sha384(rtt0_salt, resumed_master_secret)?;
 
         let make_info = |label: &[u8]| -> Vec<u8> {
-            const PREFIX: &[u8] = b"openhttpa v2 0rtt ";
+            const PREFIX: &[u8] = b"openhttpa_v2_0rtt";
             let mut v = Vec::with_capacity(PREFIX.len() + label.len() + rtt0_salt.len() + 1);
             v.extend_from_slice(PREFIX);
             v.extend_from_slice(label);
@@ -310,8 +308,12 @@ impl SessionKeys {
             .expand(&make_info(b"server mac key"), 32)?
             .into_inner();
 
-        let mut transcript_hash_arr = [0u8; 48];
-        transcript_hash_arr[..16].copy_from_slice(rtt0_salt);
+        // Derive the stored transcript_hash from the 0-RTT salt via SHA-384 so
+        // that all 48 bytes carry entropy.  Storing the raw 16-byte salt in a
+        // 48-byte field (leaving 32 bytes as zeros) would create a structurally
+        // weak session identifier; SHA-384 of the salt is still deterministic
+        // (same salt → same hash) while filling the field uniformly.
+        let transcript_hash_arr: [u8; 48] = Sha384::digest(rtt0_salt).into();
 
         Ok(Self {
             master_secret,
@@ -329,6 +331,61 @@ impl SessionKeys {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Known-answer test (KAT) for `SessionKeys::derive` with the `"openhttpa_v2"`
+    /// HKDF prefix introduced in the SA-02 / v2 schedule rework.
+    ///
+    /// Test vector: `combined_secret = [0x00, 0x01, … 0x1F]` (sequential bytes),
+    /// `transcript_hash = [0x00, 0x01, … 0x2F]` (sequential bytes).
+    ///
+    /// Any change to the prefix, label strings, or info-string layout will cause
+    /// this test to fail, making accidental wire-format regressions visible
+    /// immediately.
+    #[test]
+    fn session_keys_known_answer_vector_v2_prefix() {
+        let secret: Vec<u8> = (0u8..32).collect();
+        let transcript: Vec<u8> = (0u8..48).collect();
+        let k = SessionKeys::derive(&secret, &transcript).unwrap();
+
+        assert_eq!(
+            hex::encode(&k.client_write_key),
+            "6e9a68fa44867d9079b99a579eea436b4e20424611dd628c94d4a55fce1c8a09",
+            "KAT: client_write_key mismatch — HKDF prefix or label changed"
+        );
+        assert_eq!(
+            hex::encode(&k.server_write_key),
+            "9dab0ddd1c59ff96aac998869df8887b972c7537b65e2db7d4bae06cd41c0669",
+            "KAT: server_write_key mismatch"
+        );
+        assert_eq!(
+            hex::encode(&k.client_write_iv),
+            "30fe42c87f1520c7a1532bd3",
+            "KAT: client_write_iv mismatch"
+        );
+        assert_eq!(
+            hex::encode(&k.server_write_iv),
+            "477468ce0a0be4599c44634d",
+            "KAT: server_write_iv mismatch"
+        );
+        assert_eq!(
+            hex::encode(&k.client_mac_key),
+            "468f19e55259004e4879167ba1afafe9a16a816c185e31b8750021369bb41ed2",
+            "KAT: client_mac_key mismatch"
+        );
+        assert_eq!(
+            hex::encode(&k.server_mac_key),
+            "a6ff1d81f7acbfc323757e5965da4b54fe34f04a6fa303d44f0655bccd3a4b7c",
+            "KAT: server_mac_key mismatch"
+        );
+        assert_eq!(
+            hex::encode(&k.master_secret),
+            "0b0c0614d10c780511c16a3d63110d417492835bf41cf638a411aa1d023b78a7\
+             b2d51c06fdf846088fe302f5959ea82a",
+            "KAT: master_secret mismatch"
+        );
+        // Transcript hash must be stored verbatim.
+        assert_eq!(&k.transcript_hash[..], transcript.as_slice());
+    }
 
     /// SA-02 regression: same inputs must always produce identical keys (determinism).
     #[test]

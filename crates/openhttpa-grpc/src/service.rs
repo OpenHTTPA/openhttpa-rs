@@ -135,6 +135,16 @@ mod tests {
     use super::*;
     use openhttpa_core::handshake::AtHsExecutor;
 
+    const TEST_CIPHER_SUITE: &str = "X25519_ML_KEM768_AES256GCM_SHA384";
+    const TEST_VERSION: &str = "openhttpa";
+    const TEST_DATE: &str = "2026-01-01T00:00:00Z";
+    const TEST_CREATION: &str = "new";
+    const TEST_BASE_ID: &str = "some-id";
+    const TEST_BASE_ID_2: &str = "abc-123";
+    const TEST_TERMINATION_KEEP: &str = "keep";
+    const TEST_TERMINATION_DESTROY: &str = "destroy";
+    const TEST_QUOTE_TYPE: &str = "mock";
+
     fn make_executor() -> AtHsExecutor {
         // AtHsExecutor::new takes (supported_suites, supported_versions).
         // Empty vecs cause it to accept all suites/versions.
@@ -147,6 +157,7 @@ mod tests {
         let share = openhttpa_core::handshake::ClientKeyShare {
             ecdhe_public: pub_share.ecdhe_public,
             mlkem_public: pub_share.mlkem_public,
+            signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string()),
         };
         serde_json::to_vec(&share).unwrap()
     }
@@ -221,10 +232,10 @@ mod tests {
         let req = Request::new(AtHsRequest {
             key_share: prost::bytes::Bytes::from(make_valid_key_share_bytes()),
             random: prost::bytes::Bytes::from(vec![0x42u8; 32]),
-            cipher_suites: vec!["X25519_ML_KEM768_AES256GCM_SHA384".to_owned()],
-            versions: vec!["openhttpa".to_owned()],
-            date: "2026-01-01T00:00:00Z".to_owned(),
-            base_creation: "new".to_owned(),
+            cipher_suites: vec![TEST_CIPHER_SUITE.to_owned()],
+            versions: vec![TEST_VERSION.to_owned()],
+            date: TEST_DATE.to_owned(),
+            base_creation: TEST_CREATION.to_owned(),
             client_quote: None,
             challenge: prost::bytes::Bytes::from(vec![0xbcu8; 48]),
         });
@@ -233,7 +244,7 @@ mod tests {
         assert!(result.is_ok(), "Expected Ok but got: {:?}", result.err());
         let resp = result.unwrap().into_inner();
         assert!(!resp.base_id.is_empty(), "base_id should not be empty");
-        assert_eq!(resp.version, "openhttpa");
+        assert_eq!(resp.version, TEST_VERSION);
     }
 
     #[tokio::test]
@@ -241,10 +252,10 @@ mod tests {
         let svc = AttestHandshakeService::new(make_executor());
 
         let req = Request::new(TrustedRequest {
-            base_id: "some-id".to_owned(),
+            base_id: TEST_BASE_ID.to_owned(),
             ciphertext: prost::bytes::Bytes::new(),
             nonce: prost::bytes::Bytes::new(),
-            termination: "keep".to_owned(),
+            termination: TEST_TERMINATION_KEEP.to_owned(),
         });
 
         let result = svc.trusted_call(req).await;
@@ -255,24 +266,24 @@ mod tests {
     #[test]
     fn grpc_attest_quote_fields() {
         let quote = crate::GrpcAttestQuote {
-            quote_type: "mock".to_owned(),
+            quote_type: TEST_QUOTE_TYPE.to_owned(),
             raw: prost::bytes::Bytes::from_static(b"rawquote"),
             qudd: prost::bytes::Bytes::from_static(b"qudddata"),
         };
-        assert_eq!(quote.quote_type, "mock");
+        assert_eq!(quote.quote_type, TEST_QUOTE_TYPE);
         assert_eq!(&quote.raw[..], b"rawquote");
     }
 
     #[test]
     fn trusted_request_and_response_fields() {
         let req = TrustedRequest {
-            base_id: "abc-123".to_owned(),
+            base_id: TEST_BASE_ID_2.to_owned(),
             ciphertext: prost::bytes::Bytes::from_static(b"ct"),
             nonce: prost::bytes::Bytes::from_static(b"nc"),
-            termination: "destroy".to_owned(),
+            termination: TEST_TERMINATION_DESTROY.to_owned(),
         };
-        assert_eq!(req.base_id, "abc-123");
-        assert_eq!(req.termination, "destroy");
+        assert_eq!(req.base_id, TEST_BASE_ID_2);
+        assert_eq!(req.termination, TEST_TERMINATION_DESTROY);
 
         let resp = TrustedResponse {
             ciphertext: prost::bytes::Bytes::from_static(b"resp_ct"),

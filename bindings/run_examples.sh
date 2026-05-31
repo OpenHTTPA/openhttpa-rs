@@ -92,11 +92,45 @@ fi
 
 echo "Connecting to backend IP: $BACKEND_IP on network: $EXPECTED_NETWORK"
 
-docker run --rm \
-  --network "$EXPECTED_NETWORK" \
-  -e OPENHTTPA_SERVER=http://${BACKEND_IP}:8080 \
-  -e OPENHTTPA_BACKEND_URL=http://${BACKEND_IP}:8080 \
-  -e OPENHTTPA_TEE_PROVIDER=mock \
-  -e OPENHTTPA_MOCK_TEE_TYPE=mock \
-  -e OPENHTTPA_ALLOW_MOCK_HARDWARE=1 \
-  openhttpa-examples
+# --- Backend Reachability Check ---
+# Before launching the examples container, verify the backend responds on the
+# health endpoint.  A 30-second curl timeout avoids hanging indefinitely when
+# the container is up but the service is not yet ready.
+BACKEND_HEALTH_URL="http://${BACKEND_IP}:8080/health"
+HEALTH_TIMEOUT_SECS=30
+
+echo "--- Verifying backend health at $BACKEND_HEALTH_URL (timeout: ${HEALTH_TIMEOUT_SECS}s) ---"
+if ! curl --silent --fail --max-time "$HEALTH_TIMEOUT_SECS" "$BACKEND_HEALTH_URL" > /dev/null 2>&1; then
+    echo "Error: Backend at $BACKEND_HEALTH_URL did not respond within ${HEALTH_TIMEOUT_SECS}s."
+    echo "       The backend container may be starting up, crashed, or unhealthy."
+    echo "--- Backend Container Logs (last 50 lines) ---"
+    docker logs "$BACKEND_CONTAINER" --tail 50 2>&1 || true
+    exit 1
+fi
+echo "Backend health check passed."
+
+# --- Run Examples with an Overall Timeout ---
+# Cap the entire container run to prevent indefinite hangs if any individual
+# example stalls (e.g. a network call with no client-side timeout).
+# Override via EXAMPLES_TIMEOUT_SECS env var for local debugging.
+EXAMPLES_TIMEOUT_SECS="${EXAMPLES_TIMEOUT_SECS:-120}"
+
+echo "--- Launching examples container (overall timeout: ${EXAMPLES_TIMEOUT_SECS}s) ---"
+timeout "${EXAMPLES_TIMEOUT_SECS}" \
+  docker run --rm \
+    --network "$EXPECTED_NETWORK" \
+    -e OPENHTTPA_SERVER=http://${BACKEND_IP}:8080 \
+    -e OPENHTTPA_BACKEND_URL=http://${BACKEND_IP}:8080 \
+    -e OPENHTTPA_TEE_PROVIDER=mock \
+    -e OPENHTTPA_MOCK_TEE_TYPE=mock \
+    -e OPENHTTPA_ALLOW_MOCK_HARDWARE=1 \
+    openhttpa-examples || {
+  STATUS=$?
+  if [ "$STATUS" -eq 124 ]; then
+    echo "Error: Examples container exceeded timeout of ${EXAMPLES_TIMEOUT_SECS}s and was forcefully stopped."
+    echo "       Check individual binding examples for missing client-side timeouts."
+  else
+    echo "Error: Examples container exited with status $STATUS."
+  fi
+  exit "$STATUS"
+}

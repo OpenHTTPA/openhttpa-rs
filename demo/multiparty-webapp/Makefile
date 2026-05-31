@@ -46,6 +46,12 @@ down:
 		docker rm -f $$CONTAINERS || true; \
 	fi
 	-$(COMPOSE) down -v --remove-orphans --timeout 10
+	@# Also stop any stack started with the default directory-derived project name
+	@# (e.g. when 'docker compose up' was run directly inside demo/multiparty-webapp/).
+	@if [ "$(COMPOSE_PROJECT_NAME)" != "multiparty-webapp" ]; then \
+		echo "Also stopping default project 'multiparty-webapp' if running..."; \
+		COMPOSE_PROJECT_NAME=multiparty-webapp $(COMPOSE) down -v --remove-orphans --timeout 10 || true; \
+	fi
 	@# Handle race condition where network removal fails due to active endpoints
 	@NETWORK_ID=$$(docker network ls --filter name=^$(COMPOSE_PROJECT_NAME)_default$$ -q); \
 	if [ -n "$$NETWORK_ID" ]; then \

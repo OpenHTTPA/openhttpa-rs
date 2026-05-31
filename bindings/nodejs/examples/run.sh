@@ -13,12 +13,15 @@ BINDING_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 cd "$SCRIPT_DIR"
 
-echo "--- Building OpenHTTPA Node.js Bindings ---"
-
-# 2. Go to binding root and install/build
-cd "$BINDING_ROOT"
-pnpm install
-pnpm run build
+if [ -z "$SKIP_BUILD" ]; then
+    echo "--- Building OpenHTTPA Node.js Bindings ---"
+    # 2. Go to binding root and install/build
+    cd "$BINDING_ROOT"
+    pnpm install
+    pnpm run build
+else
+    echo "--- Skipping Build (SKIP_BUILD=1) ---"
+fi
 
 # 3. Run the example
 cd "$SCRIPT_DIR"

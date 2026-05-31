@@ -231,6 +231,7 @@ pub unsafe extern "C" fn openhttpa_server_handshake(
     let share = ClientKeyShare {
         ecdhe_public: hex::decode(&body.ecdhe_public).unwrap_or_default(),
         mlkem_public: hex::decode(&body.mlkem_public).unwrap_or_default(),
+        signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string()),
     };
 
     let mut cr = std::array::from_fn::<u8, 32, _>(|i| (i % 255) as u8);

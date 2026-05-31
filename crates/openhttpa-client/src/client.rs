@@ -25,6 +25,31 @@ type HmacSha384 = Hmac<Sha384>;
 
 use crate::builder::OpenHttpaClientBuilder;
 
+/// Returns the authority component of `uri` with the default port stripped,
+/// matching what an HTTP client library sends in the `Host` header (RFC 7230 §5.4).
+///
+/// Both client (MAC computation) and server (MAC verification via `Host` header)
+/// must agree on the authority string.  Default ports must be omitted so that
+/// URIs with explicit default ports (`https://host:443`) yield the same string
+/// as those without (`https://host`).
+fn ahl_authority(uri: &http::Uri) -> &str {
+    let auth = match uri.authority() {
+        Some(a) => a.as_str(),
+        None => return "",
+    };
+    let default_port = match uri.scheme_str() {
+        Some("https") => "443",
+        Some("http") => "80",
+        _ => return auth,
+    };
+    if let Some((host, port)) = auth.rsplit_once(':')
+        && port == default_port
+    {
+        return host;
+    }
+    auth
+}
+
 /// Errors from the `OpenHTTPA` client.
 // MED-06: non_exhaustive prevents breaking changes when new variants are added.
 #[non_exhaustive]
@@ -50,7 +75,7 @@ pub enum ClientError {
 ///
 /// - `strict_attestation` defaults to `false` (development mode). **Set to
 ///   `true` in production** to reject sessions with no server attestation quotes.
-/// - `max_response_size` defaults to `DEFAULT_MAX_RESPONSE_SIZE` (16 MiB).
+/// - `max_response_size` defaults to [`crate::builder::DEFAULT_MAX_RESPONSE_SIZE`] (16 MiB).
 ///   Increase only for known bulk-data endpoints.
 #[allow(dead_code)]
 #[derive(Clone)]
@@ -143,6 +168,7 @@ impl OpenHttpaClient {
         let client_share = ClientKeyShare {
             ecdhe_public: client_pub_share.ecdhe_public,
             mlkem_public: client_pub_share.mlkem_public,
+            signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string()),
         };
         let client_share_bytes = serde_json::to_vec(&client_share)
             .map_err(|e| ClientError::Serialisation(e.to_string()))?;
@@ -526,7 +552,7 @@ impl OpenHttpaClient {
             session,
             method,
             final_path,
-            full_uri.query(),
+            ahl_authority(&full_uri),
             b"", // Empty initial body for header binding
             &aad,
             None,
@@ -740,7 +766,7 @@ impl OpenHttpaClient {
             session,
             method,
             final_path,
-            full_uri.query(),
+            ahl_authority(&full_uri),
             body,
             &aad,
             extra_headers.as_ref(),
@@ -824,7 +850,7 @@ impl OpenHttpaClient {
         session: &AttestSession,
         method: &str,
         path: &str,
-        query: Option<&str>,
+        authority: &str,
         body: &[u8],
         aad: &[u8],
         extra_headers: Option<&http::HeaderMap>,
@@ -868,7 +894,7 @@ impl OpenHttpaClient {
 
                 let mut hmac = HmacSha384::new_from_slice(&keys.client_mac_key).unwrap();
                 hmac.update(&counter.to_be_bytes());
-                openhttpa_headers::update_ahl(method, path, query, &hdrs, |chunk| {
+                openhttpa_headers::update_ahl(method, path, authority, &hdrs, |chunk| {
                     hmac.update(chunk);
                 })
                 .map_err(|e| ClientError::Handshake(format!("AHL error: {e}")))?;
@@ -1044,6 +1070,9 @@ mod tests {
                             ecdhe_public: server_pub.ecdhe_public,
                             mlkem_ciphertext: ct,
                             mlkem_public: server_pub.mlkem_public,
+                            signature_alg: Some(
+                                openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string(),
+                            ),
                         },
                     )
                     .unwrap(),

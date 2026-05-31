@@ -25,22 +25,26 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BINDING_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "--- Building OpenHTTPA Python Bindings with uv ---"
+if [ -z "$SKIP_BUILD" ]; then
+    echo "--- Building OpenHTTPA Python Bindings with uv ---"
 
-# 2. Check for uv installation
-if ! command -v uv &> /dev/null; then
-    echo "Error: 'uv' is not installed. Please install it to proceed (Rule #16)."
-    exit 1
+    # 2. Check for uv installation
+    if ! command -v uv &> /dev/null; then
+        echo "Error: 'uv' is not installed. Please install it to proceed (Rule #16)."
+        exit 1
+    fi
+
+    # 3. Synchronize environment and build bindings
+    # We use 'uv run' which handles virtualenv creation and package installation.
+    # 'maturin develop' is used to install the Rust extension in development mode.
+    # We set AWS_LC_SYS_STATIC=1 to force static linking of crypto libraries,
+    # which avoids @rpath issues on macOS.
+    cd "$BINDING_ROOT"
+    echo "Syncing dependencies and building extension..."
+    AWS_LC_SYS_STATIC=1 uv run --with maturin maturin develop --release
+else
+    echo "--- Skipping Build (SKIP_BUILD=1) ---"
 fi
-
-# 3. Synchronize environment and build bindings
-# We use 'uv run' which handles virtualenv creation and package installation.
-# 'maturin develop' is used to install the Rust extension in development mode.
-# We set AWS_LC_SYS_STATIC=1 to force static linking of crypto libraries,
-# which avoids @rpath issues on macOS.
-cd "$BINDING_ROOT"
-echo "Syncing dependencies and building extension..."
-AWS_LC_SYS_STATIC=1 uv run --with maturin maturin develop --release
 
 # 4. Run the example
 # We use 'uv run' again to ensure we use the correct environment.

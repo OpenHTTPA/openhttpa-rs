@@ -14,18 +14,22 @@ REPO_ROOT="$(cd "$BINDING_ROOT/../.." && pwd)"
 
 cd "$SCRIPT_DIR"
 
-echo "--- Building Rust C-Library for Go ---"
+if [ -z "$SKIP_BUILD" ]; then
+    echo "--- Building Rust C-Library for Go ---"
 
-# 2. Build the Rust C-binding library
-cd "$REPO_ROOT"
-cargo build --release -p openhttpa-c
+    # 2. Build the Rust C-binding library
+    cd "$REPO_ROOT"
+    cargo build --release -p openhttpa-c
 
-# 3. Copy the library to the Go lib directory
-mkdir -p "$BINDING_ROOT/lib"
-if [ -f "target/release/libopenhttpa_c.dylib" ]; then
-    cp target/release/libopenhttpa_c.dylib "$BINDING_ROOT/lib/"
-elif [ -f "target/release/libopenhttpa_c.so" ]; then
-    cp target/release/libopenhttpa_c.so "$BINDING_ROOT/lib/"
+    # 3. Copy the library to the Go lib directory
+    mkdir -p "$BINDING_ROOT/lib"
+    if [ -f "target/release/libopenhttpa_c.dylib" ]; then
+        cp target/release/libopenhttpa_c.dylib "$BINDING_ROOT/lib/"
+    elif [ -f "target/release/libopenhttpa_c.so" ]; then
+        cp target/release/libopenhttpa_c.so "$BINDING_ROOT/lib/"
+    fi
+else
+    echo "--- Skipping Build (SKIP_BUILD=1) ---"
 fi
 
 # 4. Run the Go example

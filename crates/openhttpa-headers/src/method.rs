@@ -6,6 +6,8 @@
 use http::Method;
 use std::sync::OnceLock;
 
+pub const STR_ATTEST: &str = "ATTEST";
+
 static ATTEST_INNER: OnceLock<Method> = OnceLock::new();
 
 /// Return a reference to the `ATTEST` [`Method`].
@@ -13,8 +15,9 @@ static ATTEST_INNER: OnceLock<Method> = OnceLock::new();
 /// # Panics
 /// Never panics; `"ATTEST"` is a valid HTTP method token.
 pub fn attest_method() -> &'static Method {
-    ATTEST_INNER
-        .get_or_init(|| Method::from_bytes(b"ATTEST").expect("ATTEST is a valid HTTP method token"))
+    ATTEST_INNER.get_or_init(|| {
+        Method::from_bytes(STR_ATTEST.as_bytes()).expect("ATTEST is a valid HTTP method token")
+    })
 }
 
 #[cfg(test)]
@@ -23,6 +26,6 @@ mod tests {
 
     #[test]
     fn attest_method_is_attest() {
-        assert_eq!(attest_method().as_str(), "ATTEST");
+        assert_eq!(attest_method().as_str(), STR_ATTEST);
     }
 }

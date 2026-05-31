@@ -53,6 +53,10 @@ impl AttestTransport for DummyTransport {
                         &openhttpa_core::handshake::ServerKeyShare {
                             ecdhe_public: vec![0u8; 32],
                             mlkem_ciphertext: vec![0u8; 1088],
+                            signature_alg: Some(
+                                openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string(),
+                            ),
+
                             mlkem_public: vec![0u8; 1184],
                         },
                     )

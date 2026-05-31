@@ -213,7 +213,7 @@ async fn run_client(url: String, message: String, mutual: bool) -> anyhow::Resul
                         openhttpa_headers::update_ahl(
                             "POST",
                             "/api/echo",
-                            None,
+                            "",
                             &header_map,
                             |chunk| {
                                 hmac.update(chunk);

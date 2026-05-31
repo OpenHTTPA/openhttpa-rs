@@ -53,7 +53,7 @@ elif has_cmd apt-get; then
     run_sudo apt-get install -y --no-install-recommends \
         unzip bubblewrap rsync libgtk2.0-dev m4 patch make gcc \
         wget curl gnupg lsb-release ca-certificates pkg-config \
-        libssl-dev cmake ninja-build libpcre3-dev zlib1g-dev binaryen
+        libssl-dev cmake ninja-build libpcre3-dev zlib1g-dev binaryen patchelf
 else
     echo "⚠️ 'apt-get' not found. Skipping system package installation."
     echo "Please ensure you have equivalent system libraries installed manually."

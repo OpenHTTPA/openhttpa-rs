@@ -550,7 +550,7 @@ pub fn openhttpa_compute_ticket(
     nonce: u64,
     method: &str,
     path: &str,
-    query: Option<String>,
+    _query: Option<String>,
     headers_json: &str,
 ) -> Result<String, JsValue> {
     SESSION.with(|s_ref| {
@@ -577,8 +577,15 @@ pub fn openhttpa_compute_ticket(
             }
         }
 
-        // Bind method, path, and query for semantic integrity (H-01/C-AHL-1).
-        let ahl = openhttpa_headers::canonicalize_ahl(method, path, query.as_deref(), &map)
+        // RFC 7230 §5.4: use the Host header as the authority so the MAC
+        // matches what the server extracts from the mandatory Host header
+        // for HTTP/1.1 origin-form requests.
+        let authority = map
+            .get(http::header::HOST)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        // Bind method, path, and authority for semantic integrity (H-01/C-AHL-1).
+        let ahl = openhttpa_headers::canonicalize_ahl(method, path, authority, &map)
             .map_err(|e| JsValue::from_str(&format!("AHL error: {e}")))?;
 
         // Compute HMAC-SHA-384.
@@ -629,7 +636,7 @@ pub fn openhttpa_seal_with_ahl(
     plaintext: &str,
     method: &str,
     path: &str,
-    query: Option<String>,
+    _query: Option<String>,
     headers_json: &str,
 ) -> Result<String, JsValue> {
     SESSION.with(|s_ref| {
@@ -690,7 +697,12 @@ pub fn openhttpa_seal_with_ahl(
                 map.insert(name, val);
             }
         }
-        let ahl = openhttpa_headers::canonicalize_ahl(method, path, query.as_deref(), &map)
+        // RFC 7230 §5.4: use the Host header as the authority.
+        let authority = map
+            .get(http::header::HOST)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let ahl = openhttpa_headers::canonicalize_ahl(method, path, authority, &map)
             .map_err(|e| JsValue::from_str(&format!("AHL error: {e}")))?;
 
         use hmac::{Hmac, Mac};

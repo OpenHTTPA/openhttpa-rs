@@ -90,6 +90,7 @@ impl openhttpa_transport::connection::AttestTransport for SwarmTransport {
                 let server_pub = server_pair.public_key_share();
                 let client_ks = openhttpa_crypto::key_exchange::KeyShare {
                     ecdhe_public: client_share.ecdhe_public.clone(),
+
                     mlkem_public: client_share.mlkem_public.clone(),
                 };
                 let (ss, ct) = server_pair.server_combine(&client_ks).unwrap();
@@ -110,6 +111,10 @@ impl openhttpa_transport::connection::AttestTransport for SwarmTransport {
                     serde_json::to_vec(&openhttpa_core::handshake::ServerKeyShare {
                         ecdhe_public: server_pub.ecdhe_public.clone(),
                         mlkem_ciphertext: ct.clone(),
+                        signature_alg: Some(
+                            openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string(),
+                        ),
+
                         mlkem_public: server_pub.mlkem_public.clone(),
                     })
                     .unwrap(),
@@ -129,6 +134,10 @@ impl openhttpa_transport::connection::AttestTransport for SwarmTransport {
                         &openhttpa_core::handshake::ServerKeyShare {
                             ecdhe_public: server_pub.ecdhe_public,
                             mlkem_ciphertext: ct,
+                            signature_alg: Some(
+                                openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string(),
+                            ),
+
                             mlkem_public: server_pub.mlkem_public,
                         },
                     )

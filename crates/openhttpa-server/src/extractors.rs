@@ -260,6 +260,8 @@ where
         let mut ciphertext = hex::decode(&body_data.ciphertext)
             .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid ciphertext hex").into_response())?;
 
+        let session_id = session.id();
+
         // Perform decryption and MAC verification.
         let plaintext_res = session.session.with_keys_for_trr(
             nonce_val,
@@ -291,12 +293,26 @@ where
                     "AHL canonicalization path selected"
                 );
 
-                let query = parts.uri.query();
+                // RFC 7230 §5.4: for HTTP/1.1 origin-form requests the URI has
+                // no authority component; fall back to the mandatory Host header.
+                // For HTTP/2 the :authority pseudo-header populates parts.uri.
+                let host_hdr;
+                let authority = if let Some(a) = parts.uri.authority() {
+                    a.as_str()
+                } else {
+                    host_hdr = parts
+                        .headers
+                        .get(http::header::HOST)
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("")
+                        .to_owned();
+                    host_hdr.as_str()
+                };
 
                 openhttpa_headers::update_ahl(
                     parts.method.as_str(),
                     path,
-                    query,
+                    authority,
                     &parts.headers,
                     |chunk| {
                         hmac.update(chunk);
@@ -308,7 +324,7 @@ where
 
                 if hmac.verify_slice(&mac_val).is_err() {
                     error!(
-                        base_id = %session.session.id(),
+                        base_id = %session_id,
                         nonce = nonce_val,
                         method = parts.method.as_str(),
                         path = path,

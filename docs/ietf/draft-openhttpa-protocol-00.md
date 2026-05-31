@@ -666,9 +666,6 @@ The following individuals have contributed to the design and implementation of `
 - **Nick Li**: Original HTTPA/2 Co-Author
 - **Ned Smith**: Original HTTPA/2 Co-Author
 - **Krzysztof Sandowicz**: Original HTTPA/2 Co-Author
-- **Alice Dev**: OpenHTTPA Core Team
-- **Bob Sec**: OpenHTTPA Security Audit
-- **Charlie Implementer**: Language Bindings
 
 # IANA Considerations
 

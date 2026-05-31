@@ -112,7 +112,7 @@ pub fn derive_session_keys(combined: &[u8; 32], transcript_hash: &[u8]) -> Sessi
     let hk = Hkdf::<Sha384>::new(Some(&SALT), combined);
 
     let expand = |label: &[u8], len: usize| -> Vec<u8> {
-        const PREFIX: &[u8] = b"openhttpa v2 ";
+        const PREFIX: &[u8] = b"openhttpa_v2";
         // Format: PREFIX || label || \0 || transcript_hash
         let mut info = Vec::with_capacity(PREFIX.len() + label.len() + 1 + transcript_hash.len());
         info.extend_from_slice(PREFIX);

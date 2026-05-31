@@ -384,6 +384,7 @@ mod tests {
         sessions: Arc<dashmap::DashMap<String, openhttpa_crypto::hkdf::SessionKeys>>,
     }
     impl openhttpa_transport::connection::AttestTransport for DummyTransport {
+        #[allow(clippy::too_many_lines)]
         fn send(
             &self,
             req: openhttpa_transport::connection::TransportRequest,
@@ -410,6 +411,7 @@ mod tests {
                     let server_pub = server_pair.public_key_share();
                     let client_ks = openhttpa_crypto::key_exchange::KeyShare {
                         ecdhe_public: client_share.ecdhe_public.clone(),
+
                         mlkem_public: client_share.mlkem_public,
                     };
                     let (ss, ct) = server_pair.server_combine(&client_ks).unwrap();
@@ -447,6 +449,10 @@ mod tests {
                             &openhttpa_core::handshake::ServerKeyShare {
                                 ecdhe_public: server_pub.ecdhe_public,
                                 mlkem_ciphertext: ct,
+                                signature_alg: Some(
+                                    openhttpa_core::handshake::SIG_ALG_ML_DSA_65.to_string(),
+                                ),
+
                                 mlkem_public: server_pub.mlkem_public,
                             },
                         )

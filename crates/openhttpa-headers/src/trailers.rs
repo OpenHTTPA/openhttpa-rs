@@ -17,6 +17,7 @@ use base64ct::{Base64, Encoding as _};
 use http::{HeaderMap, HeaderValue};
 use thiserror::Error;
 
+use crate::attest_headers::{STR_ATTEST_BINDER, STR_ATTEST_TICKET};
 use crate::{HDR_ATTEST_BINDER, HDR_ATTEST_TICKET};
 
 /// Errors related to trailer decoding.
@@ -73,19 +74,19 @@ pub fn decode_attest_ticket(map: &HeaderMap) -> Result<DecodedTicket, TrailerErr
     let val = map
         .get(&*HDR_ATTEST_TICKET)
         .ok_or_else(|| TrailerError::Missing {
-            name: "attest-ticket".to_owned(),
+            name: STR_ATTEST_TICKET.to_owned(),
         })?;
     let s = val.to_str().map_err(|e| TrailerError::Invalid {
-        name: "attest-ticket".to_owned(),
+        name: STR_ATTEST_TICKET.to_owned(),
         reason: e.to_string(),
     })?;
     let bytes = Base64::decode_vec(s).map_err(|e| TrailerError::Invalid {
-        name: "attest-ticket".to_owned(),
+        name: STR_ATTEST_TICKET.to_owned(),
         reason: e.to_string(),
     })?;
     if bytes.len() < 9 {
         return Err(TrailerError::Invalid {
-            name: "attest-ticket".to_owned(),
+            name: STR_ATTEST_TICKET.to_owned(),
             reason: "payload too short".to_owned(),
         });
     }
@@ -94,7 +95,7 @@ pub fn decode_attest_ticket(map: &HeaderMap) -> Result<DecodedTicket, TrailerErr
     if mode == 1 {
         if bytes.len() < 9 + 16 {
             return Err(TrailerError::Invalid {
-                name: "attest-ticket".to_owned(),
+                name: STR_ATTEST_TICKET.to_owned(),
                 reason: "0-RTT salt missing".to_owned(),
             });
         }
@@ -140,19 +141,19 @@ pub fn decode_attest_binder(map: &HeaderMap) -> Result<(u64, Vec<u8>), TrailerEr
     let val = map
         .get(&*HDR_ATTEST_BINDER)
         .ok_or_else(|| TrailerError::Missing {
-            name: "attest-binder".to_owned(),
+            name: STR_ATTEST_BINDER.to_owned(),
         })?;
     let s = val.to_str().map_err(|e| TrailerError::Invalid {
-        name: "attest-binder".to_owned(),
+        name: STR_ATTEST_BINDER.to_owned(),
         reason: e.to_string(),
     })?;
     let bytes = Base64::decode_vec(s).map_err(|e| TrailerError::Invalid {
-        name: "attest-binder".to_owned(),
+        name: STR_ATTEST_BINDER.to_owned(),
         reason: e.to_string(),
     })?;
     if bytes.len() < 8 {
         return Err(TrailerError::Invalid {
-            name: "attest-binder".to_owned(),
+            name: STR_ATTEST_BINDER.to_owned(),
             reason: "payload too short".to_owned(),
         });
     }
