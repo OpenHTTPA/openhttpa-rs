@@ -61,3 +61,8 @@ modules/browser-extension/wasm/
 **/*.pdf
 **/*.txt
 
+# IETF spec generated outputs (produced by Docker as root; not user-editable)
+docs/ietf/*.html
+docs/ietf/*.xml
+
+

@@ -119,3 +119,14 @@ bindings/nodejs/npm/
 bindings/nodejs/target/
 bindings/go/lib/
 scratch_test*
+
+# Generated specs
+docs/ietf/*.xml
+docs/ietf/*.txt
+docs/ietf/*.html
+docs/ietf/*.pdf
+.refcache/
+
+# IETF docs builder stamp
+docs/ietf/.docker-image-stamp
+

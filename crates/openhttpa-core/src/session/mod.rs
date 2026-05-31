@@ -27,7 +27,7 @@
 //! the storage write, the nonce is committed in memory but not persisted. On
 //! restart, the old `last_seen` value is loaded, and the same nonce could be
 //! re-accepted once. Mitigations:
-//! - Use [`openhttpa_crypto::nonce::FileNonceSequence`] for durable storage.
+//! - Use [`openhttpa_crypto::nonce::FileNonceStorage`] for durable storage.
 //! - On restart, fast-forward the counter by at least 1 past the stored value to
 //!   close the one-nonce replay window.
 //! - The `SlidingWindow` strategy does not persist state and is therefore not

@@ -328,8 +328,11 @@ check-go-bindings:
 	cd bindings/go && go build ./...
 
 # Generate documentation and check for broken links
-.PHONY: docs
+.PHONY: docs docs-specs
 docs: ## Generate workspace documentation
+
+docs-specs: ## Generate IETF and NIST spec formats (XML, TXT, HTML, PDF) and validate with idnits
+	@$(MAKE) -C docs/ietf all
 	@mkdir -p /tmp/usr/lib
 	+OPENHTTPA_SKIP_ZK_BUILD=$(OPENHTTPA_SKIP_ZK_BUILD) RUSTDOCFLAGS="-D warnings" cargo doc --workspace $(CLIPPY_FEATURES) --no-deps
 
@@ -337,6 +340,7 @@ docs: ## Generate workspace documentation
 .PHONY: clean
 clean: ## Remove basic build artifacts
 	cargo clean || rm -rf target/
+	@$(MAKE) -C docs/ietf clean
 
 .PHONY: deep-clean
 deep-clean: clean ## Remove ALL artifacts (node_modules, wasm, etc.)
@@ -347,6 +351,7 @@ deep-clean: clean ## Remove ALL artifacts (node_modules, wasm, etc.)
 	rm -rf playwright-report/ test-results/
 	find . -name "dist" -type d -exec rm -rf {} +
 	find . -name ".turbo" -type d -exec rm -rf {} +
+	@$(MAKE) -C docs/ietf clean-image || true
 
 .PHONY: doctor
 doctor: ## Check system dependencies and environment readiness

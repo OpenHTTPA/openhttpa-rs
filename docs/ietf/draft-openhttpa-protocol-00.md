@@ -2,14 +2,47 @@
 title: 'OpenHTTPA: Hypertext Transfer Protocol with Attestation'
 abbrev: 'OpenHTTPA'
 docname: draft-openhttpa-protocol-00
+obsoletes: draft-sandowicz-httpbis-httpa2
 category: std
 
 ipr: trust200902
 area: Security
 workgroup: HTTPBIS, TEE, SECDISPATCH
 keyword: [http, attestation, tee, post-quantum, pqc, sigma-i, eat]
+stream: IETF
+
+normative:
+  RFC2119:
+  RFC8174:
+  RFC8446:
+  RFC5869:
+  RFC8941:
+  RFC9334:
+  FIPS-203:
+    title: 'Module-Lattice-Based Key-Encapsulation Mechanism Standard'
+    author:
+      - org: NIST
+    date: 2024
+  FIPS-204:
+    title: 'Module-Lattice-Based Digital Signature Standard'
+    author:
+      - org: NIST
+    date: 2024
+
+informative:
+  I-D.sandowicz-httpbis-httpa2:
+  I-D.ietf-tls-hybrid-design:
+  ProVerif:
+    title: 'ProVerif: Cryptographic Protocol Verifier in the Formal Model'
+    author:
+      - ins: B. Blanchet
+  Tamarin:
+    title: 'The Tamarin Prover for symbolic analysis of security protocols'
+    author:
+      - org: Tamarin Team
 
 stand_alone: yes
+v: 3
 pi: [toc, sortrefs, symrefs, compact, subcompact]
 
 author:
@@ -23,7 +56,7 @@ author:
     email: info@openhttpa.org
 ---
 
-abstract
+--- abstract
 
 `OpenHTTPA` (Hypertext Transfer Protocol with Attestation) defines a protocol for establishing
 hardware-verified, end-to-end confidential and authenticated communication between a client
@@ -46,7 +79,7 @@ provide hardware-level isolation. While TEEs can generate cryptographic "quotes"
 their identity and integrity, there is no standardized Application Layer (L7) protocol to
 seamlessly bind these hardware proofs to HTTP sessions.
 
-`OpenHTTPA` addresses this gap by providing:
+`OpenHTTPA` addresses this gap by providing an end-to-end trusted communication protocol. Building upon the foundational concepts of the earlier HTTPA/2 specification (see {{I-D.sandowicz-httpbis-httpa2}}), `OpenHTTPA` introduces:
 
 1.  **Enclave-to-Enclave Security**: Cryptographic termination inside the TEE.
 2.  **Mutual Attestation**: Integration of TEE hardware quotes into the handshake via the
@@ -154,13 +187,13 @@ The following diagram illustrates the AtHS SIGMA-I handshake:
 ```mermaid
 sequenceDiagram
     participant Client
-    participant Server (TEE Enclave)
+    participant Server
 
     Client->>Server: ATTEST (Random_C, KeyShare_C, Suites, Versions)
-    Note over Server: 1. Negotiation\n2. KEM Encapsulation\n3. Transcript Binding
+    Note over Server: Negotiate, KEM Encap, Bind Transcript
     Server->>Client: 200 OK (Random_S, KeyShare_S, Atb-ID, Quotes)
-    Note over Client: 1. Quote Verification\n2. KEM Decapsulation\n3. Key Derivation
-    Note over Server: 1. Key Derivation
+    Note over Client: Verify Quote, KEM Decap, Derive Keys
+    Note over Server: Derive Keys
 ```
 
 # Message Formats
@@ -194,6 +227,8 @@ A 32-byte byte sequence (base64-encoded in HTTP).
 
 A List of Inner Lists. Each inner list contains a TEE type token and a byte sequence (the raw quote).
 
+_Note: For strict performance requirements (sub-millisecond setup times), `OpenHTTPA` transmits raw hardware quotes directly rather than encapsulating them in Entity Attestation Tokens (EAT) as defined in {{RFC9334}}._
+
 - Example: `Attest-Quotes: (tdx :YmFzZTY0LXF1b3RlLWJ5dGVz:), (nvidia_gpu :Z3B1LXF1b3RlOjpieXRlcw==:)`
 
 ## JSON Key Shares
@@ -206,15 +241,16 @@ the following schema:
   "ecdhe_public": "base64_encoded_bytes",
   "mlkem_public": "base64_encoded_bytes",
   "mlkem_ciphertext": "base64_encoded_bytes (server response only)",
-  "server_identity_pub": "base64_encoded_bytes (optional server response)"
+  "server_identity_pub": "base64_encoded_bytes (optional server response)",
+  "signature_alg": "string (e.g., 'ml-dsa-65')"
 }
 ```
 
 # Test Vectors
 
-[Note to RFC Editor: The following test vectors were generated from the OpenHTTPA reference implementation (`openhttpa-rs`).]
+> **Note to RFC Editor:** The following test vectors were generated from the OpenHTTPA reference implementation (`openhttpa-rs`).
 
-### Hybrid KEM Key Exchange
+## Hybrid KEM Key Exchange
 
 **Client ECDHE Public Key:**
 
@@ -225,7 +261,50 @@ the following schema:
 **Client ML-KEM Public Key:**
 
 ```text
-47a226263994c1677422005a2345508546a4c1049e9af576b582a231db5a354a5b7290a4cacc22c18322fd45729527a0b8584bfe0b1248634f6016ad6e39ad5d229869e9cd00ba06f755557df266f0a52f393b6734ecc4ee696f4b761b3f6088eed895ebb81f0d66c97b8361fad9cb5583ac02a9734286bc74e28e6484bc229332e0f00c5f471a09648610daa11e48be1cf08cc4bc84902713432468816533a24433786c20f0231b7eac413753a3ae3a19d0c817b79451a9817f7876942d53b6ccec6a6784c7c2d84929039a67a0c26cbb5875ba0432686fee7227e95b14c6494c517c1214b59cbbbb06fe996447203e8fe27a48996613674a826674564a4c11c5055e3679d686b30233a84c4ab46c07c764fcbc4a646972dc16c895bdde9c575d86bcd3d35baf39520e967d286c8af44763a856926e7534a4f488ca403e1bb7baff4c6d41230f67a590453891fc6730d63bcac141954d32ae37ebca96b24409922a234b3b486c3f9a602e13337ae9f1a4a8c2137ac6481f32bb7e34cd3f97cd00d9ae92dc187fb00c78384b669443d2377e79b82f5890037fcacd64952003b1b3589968b3725763f79f4618491bb27426e96fac824dbe93828bea31572a8852139e46806121652c7673ce1b659e8249bcc102ac39a768322a62f85b6b25c74a12126336d05da992c8a0729e7f97909591c816b0c98366600fa7053c29c530a546c3c92b705144f153b949f6bf9a43cbb2141572c9251b43c350776978b8cdb19ba642695c3242207260934dd1707d12662a666790bb6816292f67cc19a416c17a01828be46005dc6b1319b551899044b44c8bc80b0ac329e61c60a00279ac87a5ff03697d501c9d79b6945a0b04e95f8654ad8f5b72e431b339a909fb5cce6652991762cf3778009fd53e0896b47c725b9ddbbc9ae63b6e1b8ff184880b156b4b3626d6cb9ebd8b37ba5b63bada72fdd58adff49be0f736242bb219b6430f700d99c5a87d8109ede8211c5bc5fb85762b843c9e6aa9750685d5f4442b9ba0d3e07fa7f10628abaaefd0555d63cd437b3ea36894bd21731763b194c0a1f9746838845bfaf8159278b255f14bdd00ac82e05b2d90cd52f57388b8036c7ac0feccc0a3b975419756e8bb5de36ba25bf18dc1931663f3afaf08c9f4d7b533097723f1a3be260fd34ac968795f82c51ebb5b081385546c82a41924ac7ac672b5ec6178b3310661b9017a8f37823f1da3cf7c384e00389685ac584b0b339f96899b707d4928a5831972479750a39ac6852514a96b9f81f541b6cba6aea7a23f911c939b050f9b239026c825b4b7b978cbb10951a7d3bccd442641a184e5425a0224421d48c082acc8afc215e0aa201cca63bfd056678b311cbc0fcbb5144320a91a963952b227b3a8cfa71c562cb5a844295c2e20520118943bc6bdf50392f8391f9d81cabf18c82c1ba194a27131b16b06952b80d4055e0a6767431cd0f61fba43698b590912c2b6463688bfd99e099a4519061ea4230e72b794c9114fd91c59a5c8585ed65f622a42004c6e11b086db272bbcb4c53c7c8abcfa69d730bfe0b4857bd61c0f6a37be496e0063a5dc6145e26a4f931b3e261a52233244a6028c34b2ccadea1c400df39ed0a8f8c4047ed3ceeda48a6d7b29a0553d35706fde12858da5
+47a226263994c1677422005a2345508546a4c1049e9af576b582a2
+31db5a354a5b7290a4cacc22c18322fd45729527a0b8584bfe0b12
+48634f6016ad6e39ad5d229869e9cd00ba06f755557df266f0a52f
+393b6734ecc4ee696f4b761b3f6088eed895ebb81f0d66c97b8361
+fad9cb5583ac02a9734286bc74e28e6484bc229332e0f00c5f471a
+09648610daa11e48be1cf08cc4bc84902713432468816533a24433
+786c20f0231b7eac413753a3ae3a19d0c817b79451a9817f787694
+2d53b6ccec6a6784c7c2d84929039a67a0c26cbb5875ba0432686f
+ee7227e95b14c6494c517c1214b59cbbbb06fe996447203e8fe27a
+48996613674a826674564a4c11c5055e3679d686b30233a84c4ab4
+6c07c764fcbc4a646972dc16c895bdde9c575d86bcd3d35baf3952
+0e967d286c8af44763a856926e7534a4f488ca403e1bb7baff4c6d
+41230f67a590453891fc6730d63bcac141954d32ae37ebca96b244
+09922a234b3b486c3f9a602e13337ae9f1a4a8c2137ac6481f32bb
+7e34cd3f97cd00d9ae92dc187fb00c78384b669443d2377e79b82f
+5890037fcacd64952003b1b3589968b3725763f79f4618491bb274
+26e96fac824dbe93828bea31572a8852139e46806121652c7673ce
+1b659e8249bcc102ac39a768322a62f85b6b25c74a12126336d05d
+a992c8a0729e7f97909591c816b0c98366600fa7053c29c530a546
+c3c92b705144f153b949f6bf9a43cbb2141572c9251b43c3507769
+78b8cdb19ba642695c3242207260934dd1707d12662a666790bb68
+16292f67cc19a416c17a01828be46005dc6b1319b551899044b44c
+8bc80b0ac329e61c60a00279ac87a5ff03697d501c9d79b6945a0b
+04e95f8654ad8f5b72e431b339a909fb5cce6652991762cf377800
+9fd53e0896b47c725b9ddbbc9ae63b6e1b8ff184880b156b4b3626
+d6cb9ebd8b37ba5b63bada72fdd58adff49be0f736242bb219b643
+0f700d99c5a87d8109ede8211c5bc5fb85762b843c9e6aa9750685
+d5f4442b9ba0d3e07fa7f10628abaaefd0555d63cd437b3ea36894
+bd21731763b194c0a1f9746838845bfaf8159278b255f14bdd00ac
+82e05b2d90cd52f57388b8036c7ac0feccc0a3b975419756e8bb5d
+e36ba25bf18dc1931663f3afaf08c9f4d7b533097723f1a3be260f
+d34ac968795f82c51ebb5b081385546c82a41924ac7ac672b5ec61
+78b3310661b9017a8f37823f1da3cf7c384e00389685ac584b0b33
+9f96899b707d4928a5831972479750a39ac6852514a96b9f81f541
+b6cba6aea7a23f911c939b050f9b239026c825b4b7b978cbb10951
+a7d3bccd442641a184e5425a0224421d48c082acc8afc215e0aa20
+1cca63bfd056678b311cbc0fcbb5144320a91a963952b227b3a8cf
+a71c562cb5a844295c2e20520118943bc6bdf50392f8391f9d81ca
+bf18c82c1ba194a27131b16b06952b80d4055e0a6767431cd0f61f
+ba43698b590912c2b6463688bfd99e099a4519061ea4230e72b794
+c9114fd91c59a5c8585ed65f622a42004c6e11b086db272bbcb4c5
+3c7c8abcfa69d730bfe0b4857bd61c0f6a37be496e0063a5dc6145
+e26a4f931b3e261a52233244a6028c34b2ccadea1c400df39ed0a8
+f8c4047ed3ceeda48a6d7b29a0553d35706fde12858da5
 ```
 
 **Server ECDHE Public Key:**
@@ -237,7 +316,47 @@ cfff07624272cf8303edd7d71ea3bea1b359008c321ae06f076ed52200047418
 **Server ML-KEM Ciphertext:**
 
 ```text
-34b21199544efdba9cb4a0f832f61cf922983b52c7c3d04248498626d1e0a17565e81581a1d0017f453cb3bb19acf5c2f6340b338114e460a222bf0b1d339299820ab97e1b7645b0bf2b6ed917dc9c00935d3acf1a829155e1df2651785c8e91205b95f48d77198cd77854e292f84ee483d0ad97075d175e346c4a5c261746f2116b5b5b176401cd37f7521a277705bb1574e0a6f8e9614d8691a78bef730f93e04cb10f114cc217550f083ab6a51b7ef1388026af3ca9b9f191127ff3dde9aa8f4e7ed8d30bd948fde3f8348a3506be7b1cee85f670379d17af5b5ac797a4987356d500444c01f145c2ddbb3ecbb54ac08456ee07ae8770156b0a303c4841ccc6f03e82d79dfb3b78a2d7f15c6fc79af454e051a80cb7508474d2fdbdf400100fea583316854d28e5faee57cd7ce15dbd3609d14d16f4b7944c43d35e2afc0d5c443c69125a471405215fde928dd27b26bd641dce55e78d1d4c1ed12f9d09f03ffc6698f1573659c72ace12ff8428d972db6381727b40097c4fae0a1b89faf7e0e8371dc451c2221120be73731cc5428cff83ee09d212df32020af7677c24973796970480d647c24f5d88f4a33b4e6ff77e3db809d9ae8684ed31a4075b536aeb8f789ce65075c7096cfede20377cc9b4ff47973c22a0d9aa429207d36fc0a3ea24ca3c0b92c93af6a31f87cea8b20bdd81cb63db603bd3f012697194bb2f3068592b331a81ecd589510902d0356ef88c107b154b52e5617e2859a01b3f40151c7067221328f53f2f84429f4ccd99eb4981f96fcaae5f30f4caa1dd66eee2902714c35f4eacc0e7a32a382a36ca4ce532c489471d39b21ad1d9be3edc8dd5df16572fc93dbbd4f06cfab00badfd313e0b6b09c0dac2c491b70edf5eb3170cd65e6f72219496c986637676d6c80a2f6197c60c854f297476c05ef4565d5b9ddd2b79ea2e04ea0107d64a53fdb0d485f83983957b6985b36d1a6e24a062b5fd15fb9c20a00a74f2a8146f0c2d0c611d272d5d65c0495d954349542e94c5e23bd37ceaf5cc512a1c49ce84c08d7de7ff5015a1e42c2c9ea65e0f9187b20c1576daaad1fe1203975bbd611d52ca71eb2285e026c0f4cb166740f68158516d5e0484a7097c00bc8a8370b00f3fa1673be7f27ef098f664dd0406dbcca7e11cae9ce27b0dd4cb314c098b65ab9f698c0ebd9ca23969a1bdb7e1cf9a15dcbfac5d935c785d7b94fd77fe862d9c149666b8ea4bd75116fb4da8dd3510be5a2b2cf2cd5f158bcdbcf567d8c2a4288120db5fa459f54f2c8188d961436219ac5d2da7dea94246f2aa6dc3a165cc6a8ceaa45a62b303f4dd7d6dddfeb7f02beba9a41e22b60d006f6cb6ed2f9b17a3d4a12d200d1b432f9e08d629418a625f0f5dad3b6af69ca167d58aac8688eb20ab4ea5e68d589aa89f6da920decf07d382a2ac4937df1f236da2316174ef70b145c211e1a002201079c507d4ca4d5867acfdd5b32619e192928522cefc4f943e552f349000a3fb092274bb09de105b7905edff03f7ad
+34b21199544efdba9cb4a0f832f61cf922983b52c7c3d042484986
+26d1e0a17565e81581a1d0017f453cb3bb19acf5c2f6340b338114
+e460a222bf0b1d339299820ab97e1b7645b0bf2b6ed917dc9c0093
+5d3acf1a829155e1df2651785c8e91205b95f48d77198cd77854e2
+92f84ee483d0ad97075d175e346c4a5c261746f2116b5b5b176401
+cd37f7521a277705bb1574e0a6f8e9614d8691a78bef730f93e04c
+b10f114cc217550f083ab6a51b7ef1388026af3ca9b9f191127ff3
+dde9aa8f4e7ed8d30bd948fde3f8348a3506be7b1cee85f670379d
+17af5b5ac797a4987356d500444c01f145c2ddbb3ecbb54ac08456
+ee07ae8770156b0a303c4841ccc6f03e82d79dfb3b78a2d7f15c6f
+c79af454e051a80cb7508474d2fdbdf400100fea583316854d28e5
+faee57cd7ce15dbd3609d14d16f4b7944c43d35e2afc0d5c443c69
+125a471405215fde928dd27b26bd641dce55e78d1d4c1ed12f9d09
+f03ffc6698f1573659c72ace12ff8428d972db6381727b40097c4f
+ae0a1b89faf7e0e8371dc451c2221120be73731cc5428cff83ee09
+d212df32020af7677c24973796970480d647c24f5d88f4a33b4e6f
+f77e3db809d9ae8684ed31a4075b536aeb8f789ce65075c7096cfe
+de20377cc9b4ff47973c22a0d9aa429207d36fc0a3ea24ca3c0b92
+c93af6a31f87cea8b20bdd81cb63db603bd3f012697194bb2f3068
+592b331a81ecd589510902d0356ef88c107b154b52e5617e2859a0
+1b3f40151c7067221328f53f2f84429f4ccd99eb4981f96fcaae5f
+30f4caa1dd66eee2902714c35f4eacc0e7a32a382a36ca4ce532c4
+89471d39b21ad1d9be3edc8dd5df16572fc93dbbd4f06cfab00bad
+fd313e0b6b09c0dac2c491b70edf5eb3170cd65e6f72219496c986
+637676d6c80a2f6197c60c854f297476c05ef4565d5b9ddd2b79ea
+2e04ea0107d64a53fdb0d485f83983957b6985b36d1a6e24a062b5
+fd15fb9c20a00a74f2a8146f0c2d0c611d272d5d65c0495d954349
+542e94c5e23bd37ceaf5cc512a1c49ce84c08d7de7ff5015a1e42c
+2c9ea65e0f9187b20c1576daaad1fe1203975bbd611d52ca71eb22
+85e026c0f4cb166740f68158516d5e0484a7097c00bc8a8370b00f
+3fa1673be7f27ef098f664dd0406dbcca7e11cae9ce27b0dd4cb31
+4c098b65ab9f698c0ebd9ca23969a1bdb7e1cf9a15dcbfac5d935c
+785d7b94fd77fe862d9c149666b8ea4bd75116fb4da8dd3510be5a
+2b2cf2cd5f158bcdbcf567d8c2a4288120db5fa459f54f2c8188d9
+61436219ac5d2da7dea94246f2aa6dc3a165cc6a8ceaa45a62b303
+f4dd7d6dddfeb7f02beba9a41e22b60d006f6cb6ed2f9b17a3d4a1
+2d200d1b432f9e08d629418a625f0f5dad3b6af69ca167d58aac86
+88eb20ab4ea5e68d589aa89f6da920decf07d382a2ac4937df1f23
+6da2316174ef70b145c211e1a002201079c507d4ca4d5867acfdd5
+b32619e192928522cefc4f943e552f349000a3fb092274bb09de10
+5b7905edff03f7ad
 ```
 
 **Combined Hybrid Secret (IKM):**
@@ -251,13 +370,15 @@ cfff07624272cf8303edd7d71ea3bea1b359008c321ae06f076ed52200047418
 _Transcript Hash (All Zeros for Test Vector):_
 
 ```text
-000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000
 ```
 
 **Master Secret:**
 
 ```text
-e4c42f6ce7dd16b5d7c0dbbe632df194df2c66c2c23684149915028d521f120caa4ba423f91a7c33e508c301ee828b58
+e4c42f6ce7dd16b5d7c0dbbe632df194df2c66c2c23684149915028d521f120c
+aa4ba423f91a7c33e508c301ee828b58
 ```
 
 **Client Write Key:**
@@ -335,7 +456,7 @@ identity assurance.
 ## Hybrid KEM Combiner
 
 To achieve IND-CCA2 security, `OpenHTTPA` implements a hybrid combiner following
-{{draft-ietf-tls-hybrid-design}} §3.2.
+{{I-D.ietf-tls-hybrid-design}} §3.2.
 
 ### Combiner Input (IKM)
 
@@ -456,11 +577,10 @@ The Attested Header List (AHL) prevents semantic re-routing attacks.
 The AHL transcript MUST use length-prefixed binary fields:
 
 ```text
-AHL_Transcript = len(METHOD) ‖ METHOD
-                 ‖ len(PATH) ‖ PATH
-                 ‖ len(QUERY) ‖ QUERY
-                 ‖ [ len(HEADER_NAME_N) ‖ HEADER_NAME_N
-                     ‖ len(HEADER_VALUE_N) ‖ HEADER_VALUE_N ... ]
+AHL_Transcript = 7::method ‖ len(method_val) ‖ : ‖ method_val
+                 ‖ 5::path ‖ len(path_val) ‖ : ‖ path_val
+                 ‖ 10::authority ‖ len(authority_val) ‖ : ‖ authority_val
+                 ‖ [ len(HEADER_NAME_N) ‖ HEADER_NAME_N ‖ len(HEADER_VALUE_N) ‖ : ‖ HEADER_VALUE_N ... ]
 ```
 
 Headers MUST be sorted lexicographically by name before encoding.
@@ -498,6 +618,10 @@ provided in the `Attest-Quotes` header (e.g., both Host CPU and GPU quotes).
 The protocol supports Attestation Revocation Lists (ARL) and Secure Version Number (SVN)
 enforcement to mitigate TEE-specific vulnerabilities.
 
+## Replay Protection
+
+To prevent replay attacks during the Trusted Request (TrR) phase, servers MUST mandate strict replay protection for the `nonce` provided in the `Attest-Ticket` request trailer. The server MUST either enforce a strictly increasing monotonic counter for nonces within a session, or maintain a sliding-window strike register (replay cache) of recently seen nonces.
+
 # Privacy Considerations
 
 ## Attestation Fingerprinting
@@ -517,7 +641,7 @@ Implementations MUST ensure that provenance data is only transmitted within esta
 
 # Implementation Status
 
-[Note to RFC Editor: Please remove this section before publication.]
+> **Note to RFC Editor:** Please remove this section before publication.
 
 This section documents the current implementation status of `OpenHTTPA` as of May 2026.
 
@@ -527,7 +651,7 @@ This section documents the current implementation status of `OpenHTTPA` as of Ma
 - **Go/Python/Node Bindings**: Language bindings are provided for seamless integration
   into existing cloud-native stacks.
 - **Formal Models**: Symbolic and temporal security models have been validated using
-  ProVerif and Tamarin Prover.
+  {{ProVerif}} and {{Tamarin}} Prover.
 
 # Acknowledgements
 
@@ -536,8 +660,12 @@ Security area for their feedback on early iterations of this protocol.
 
 # Contributors
 
-The following individuals have contributed to the design and implementation of `OpenHTTPA`:
+The following individuals have contributed to the design and implementation of `OpenHTTPA` and its predecessor HTTPA/2:
 
+- **Shih-han Wang**: Original HTTPA/2 Co-Author
+- **Nick Li**: Original HTTPA/2 Co-Author
+- **Ned Smith**: Original HTTPA/2 Co-Author
+- **Krzysztof Sandowicz**: Original HTTPA/2 Co-Author
 - **Alice Dev**: OpenHTTPA Core Team
 - **Bob Sec**: OpenHTTPA Security Audit
 - **Charlie Implementer**: Language Bindings
@@ -557,17 +685,57 @@ This document requests the registration of the `ATTEST` method in the "HTTP Meth
 This document requests the registration of the following headers in the "Hypertext Transfer
 Protocol (HTTP) Field Name Registry":
 
-| Field Name             | Template | Reference     |
-| ---------------------- | -------- | ------------- |
-| `Attest-Versions`      | SFV      | This document |
-| `Attest-Cipher-Suites` | SFV      | This document |
-| `Attest-Random`        | SFV      | This document |
-| `Attest-Key-Shares`    | SFV      | This document |
-| `Attest-Quotes`        | SFV      | This document |
-| `Attest-Base-ID`       | SFV      | This document |
-| `Attest-Binder`        | SFV      | This document |
-| `Attest-Provenance`    | SFV      | This document |
-| `Attest-EAT`           | SFV      | This document |
+| Field Name                       | Template | Reference     |
+| -------------------------------- | -------- | ------------- |
+| `Attest-Cipher-Suites`           | SFV      | This document |
+| `Attest-Supported-Cipher-Suites` | SFV      | This document |
+| `Attest-Cipher-Suite`            | SFV      | This document |
+| `Attest-Supported-Groups`        | SFV      | This document |
+| `Attest-Key-Shares`              | SFV      | This document |
+| `Attest-Key-Share`               | SFV      | This document |
+| `Attest-Random`                  | SFV      | This document |
+| `Attest-Policies`                | SFV      | This document |
+| `Attest-Base-Creation`           | SFV      | This document |
+| `Attest-Blocklist`               | SFV      | This document |
+| `Attest-Versions`                | SFV      | This document |
+| `Attest-Supported-Versions`      | SFV      | This document |
+| `Attest-Date`                    | SFV      | This document |
+| `Attest-Signatures`              | SFV      | This document |
+| `Attest-Server-Signatures`       | SFV      | This document |
+| `Attest-Transport`               | SFV      | This document |
+| `Attest-Quotes`                  | SFV      | This document |
+| `Attest-Base-ID`                 | SFV      | This document |
+| `Attest-Version`                 | SFV      | This document |
+| `Attest-Expires`                 | SFV      | This document |
+| `Attest-Secrets`                 | SFV      | This document |
+| `Attest-Cargo`                   | SFV      | This document |
+| `Attest-Ticket`                  | SFV      | This document |
+| `Attest-Binder`                  | SFV      | This document |
+| `Attest-Base-Termination`        | SFV      | This document |
+| `Attest-Challenge`               | SFV      | This document |
+| `Attest-Provenance`              | SFV      | This document |
+| `Attest-Ticket-Resumption`       | SFV      | This document |
+| `Attest-Zk-Proof`                | SFV      | This document |
+| `Attest-Ai-Provenance-Proof`     | SFV      | This document |
+
+## TLS Exporter Labels Registry
+
+This document requests the registration of the following labels in the IANA "TLS Exporter Labels" registry (RFC 5705) for use with HKDF expansion in OpenHTTPA.
+
+| Label               | DTLS-OK | Reference     |
+| ------------------- | ------- | ------------- |
+| `openhttpa_v2`      | Y       | This document |
+| `openhttpa_v2_0rtt` | Y       | This document |
+
+Furthermore, the following specific key slots are logically prefixed by the protocol label:
+
+- `master secret`
+- `client write key`
+- `server write key`
+- `client write iv`
+- `server write iv`
+- `client mac key`
+- `server mac key`
 
 ## TEE Type Registry
 
@@ -593,19 +761,3 @@ This document establishes a new IANA registry titled "`OpenHTTPA` TEE Types".
 To achieve sub-millisecond setup times in trusted environments, `OpenHTTPA` will implement 0-RTT Confidentiality bound to the Session Resumption mechanism. By reusing the Master Secret and TEE state from a previous 1-RTT handshake, clients can send encrypted Trusted Requests in the first flight of a QUIC connection while maintaining hardware-level assurance.
 
 --- back
-
-# Normative References
-
-- {{RFC2119}}
-- {{RFC8174}}
-- {{RFC8446}}
-- {{RFC5869}}
-- {{RFC8941}}
-- {{RFC9334}}
-
-# Informative References
-
-- [FIPS-203] NIST, "Module-Lattice-Based Key-Encapsulation Mechanism Standard", 2024.
-- [FIPS-204] NIST, "Module-Lattice-Based Digital Signature Standard", 2024.
-- [ProVerif] B. Blanchet, "ProVerif: Cryptographic Protocol Verifier in the Formal Model".
-- [Tamarin] "The Tamarin Prover for symbolic analysis of security protocols".

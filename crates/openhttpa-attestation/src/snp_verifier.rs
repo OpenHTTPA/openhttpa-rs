@@ -6,7 +6,7 @@
 //! ## Verification pipeline
 //!
 //! 1. **VCEK chain fetch** — retrieve the VCEK (Versioned Chip Endorsement Key)
-//!    certificate from AMD KDS (`kdsintpk.amd.com`) using [`CollateralFetcher`].
+//!    certificate from AMD KDS (`kdsintpk.amd.com`) using [`crate::collateral_fetcher::CollateralFetcher`].
 //! 2. **VCEK chain verify** — verify the VCEK cert chain up to the bundled AMD
 //!    ARK (AMD Root Key) static root CA.
 //! 3. **Report signature verify** — verify the SNP attestation report's

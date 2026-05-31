@@ -50,7 +50,7 @@ pub enum ClientError {
 ///
 /// - `strict_attestation` defaults to `false` (development mode). **Set to
 ///   `true` in production** to reject sessions with no server attestation quotes.
-/// - `max_response_size` defaults to [`DEFAULT_MAX_RESPONSE_SIZE`] (16 MiB).
+/// - `max_response_size` defaults to `DEFAULT_MAX_RESPONSE_SIZE` (16 MiB).
 ///   Increase only for known bulk-data endpoints.
 #[allow(dead_code)]
 #[derive(Clone)]
@@ -484,7 +484,7 @@ impl OpenHttpaClient {
     /// Send a trusted request on an attested session with streaming body.
     ///
     /// Encrypts each chunk of the input stream and returns a stream of encrypted tokens.
-    /// Implements Binary Framing: [Length (4b)] || [Counter (8b)] || [Ciphertext].
+    /// Implements Binary Framing: `[Length (4b)] || [Counter (8b)] || [Ciphertext]`.
     ///
     /// # Errors
     /// Returns [`Err`] if encryption or transmission fails.

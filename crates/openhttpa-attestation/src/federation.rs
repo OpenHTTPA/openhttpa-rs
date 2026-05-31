@@ -8,7 +8,7 @@
 //! 1. **Routes** each quote to the correct vendor-specific [`QuoteVerifier`]
 //!    (registered by TEE class), producing a [`VerificationResult`] with the
 //!    vendor-neutral `tee_class` field populated.
-//! 2. **Validates** the normalised result against a [`FederationManifest`] —
+//! 2. **Validates** the normalised result against a [`openhttpa_proto::FederationManifest`] —
 //!    the signed cross-vendor trust policy loaded by the operator.
 //! 3. **Aggregates** composite bundles (e.g. TDX host + NVIDIA GPU) so that
 //!    all quotes are checked and the federation manifest is applied to each.
@@ -66,7 +66,7 @@ pub enum ManifestTrustRoot {
 /// A verifier that federates across multiple TEE vendors.
 ///
 /// Registered vendor verifiers are keyed by [`TeeClass`].  After per-vendor
-/// verification, the result is checked against the loaded [`FederationManifest`].
+/// verification, the result is checked against the loaded [`openhttpa_proto::FederationManifest`].
 ///
 /// The manifest can be hot-reloaded concurrently via [`FederatedVerifier::set_manifest`].
 pub struct FederatedVerifier {
@@ -142,7 +142,7 @@ impl FederatedVerifier {
         self.verifiers.insert(class.to_string(), verifier);
     }
 
-    /// Load (or hot-reload) the [`FederationManifest`].
+    /// Load (or hot-reload) the [`openhttpa_proto::FederationManifest`].
     ///
     /// The manifest's signature is verified against `self.trust_root` before it is accepted.
     ///
