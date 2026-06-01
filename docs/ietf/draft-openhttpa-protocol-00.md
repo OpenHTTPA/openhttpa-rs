@@ -53,7 +53,7 @@ author:
   - ins: H. Wang
     name: Hans Wang
     organization: The `OpenHTTPA` Foundation (openhttpa.org)
-    email: info@openhttpa.org
+    email: lukeckntu@hotmail.com
 ---
 
 --- abstract
@@ -463,11 +463,11 @@ To achieve IND-CCA2 security, `OpenHTTPA` implements a hybrid combiner following
 The Input Key Material (IKM) binds all public material from the exchange:
 
 ```text
-IKM = ECDHE_SS ‖ ML-KEM_SS ‖ u16(len(label)) ‖ label
-      ‖ u16(len(ECDHE_PK_client)) ‖ ECDHE_PK_client
-      ‖ u16(len(ECDHE_PK_server)) ‖ ECDHE_PK_server
-      ‖ u16(len(ML-KEM_EK_client)) ‖ ML-KEM_EK_client
-      ‖ u16(len(ML-KEM_CT)) ‖ ML-KEM_CT
+IKM = ECDHE_SS || ML-KEM_SS || u16(len(label)) || label
+      || u16(len(ECDHE_PK_client)) || ECDHE_PK_client
+      || u16(len(ECDHE_PK_server)) || ECDHE_PK_server
+      || u16(len(ML-KEM_EK_client)) || ML-KEM_EK_client
+      || u16(len(ML-KEM_CT)) || ML-KEM_CT
 ```
 
 The `label` MUST be `b"openhttpa hybrid kem v1"`.
@@ -491,7 +491,7 @@ Handshake_PRK = HKDF-Extract(Hash=SHA-384, salt=[0x00;48], IKM=combined_secret)
 
 ```text
 OKM = HKDF-Expand(Hash=SHA-384, PRK=Handshake_PRK,
-                 info=b"openhttpa v2 " ‖ label ‖ transcript_hash, L=<length>)
+                 info=b"openhttpa v2 " || label || transcript_hash, L=<length>)
 ```
 
 The fixed 48-byte length of the `transcript_hash` (SHA-384 output) ensures unambiguous domain separation between the `label` and the `transcript_hash` without the need for a delimiter.
@@ -577,10 +577,11 @@ The Attested Header List (AHL) prevents semantic re-routing attacks.
 The AHL transcript MUST use length-prefixed binary fields:
 
 ```text
-AHL_Transcript = 7::method ‖ len(method_val) ‖ : ‖ method_val
-                 ‖ 5::path ‖ len(path_val) ‖ : ‖ path_val
-                 ‖ 10::authority ‖ len(authority_val) ‖ : ‖ authority_val
-                 ‖ [ len(HEADER_NAME_N) ‖ HEADER_NAME_N ‖ len(HEADER_VALUE_N) ‖ : ‖ HEADER_VALUE_N ... ]
+AHL_Transcript = 7::method || len(method_val) || : || method_val
+                 || 5::path || len(path_val) || : || path_val
+                 || 10::authority || len(authority_val) || : || authority_val
+                 || [ len(HEADER_NAME_N) || HEADER_NAME_N
+                    || len(HEADER_VALUE_N) || : || HEADER_VALUE_N ... ]
 ```
 
 Headers MUST be sorted lexicographically by name before encoding.
