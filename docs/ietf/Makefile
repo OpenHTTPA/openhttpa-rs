@@ -64,7 +64,7 @@ pdf: xml
 	$(DOCKER_CMD) $(XML2RFC) $(DRAFT).xml --pdf
 
 validate: xml
-	$(DOCKER_CMD) idnits --mode submission --output simple $(DRAFT).xml
+	$(DOCKER_CMD) idnits --mode submission --output pretty $(DRAFT).xml
 
 clean:
 	rm -f $(DRAFT).xml $(DRAFT).html $(DRAFT).txt $(DRAFT).pdf

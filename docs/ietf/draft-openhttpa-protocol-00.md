@@ -2,7 +2,6 @@
 title: 'OpenHTTPA: Hypertext Transfer Protocol with Attestation'
 abbrev: 'OpenHTTPA'
 docname: draft-openhttpa-protocol-00
-obsoletes: draft-sandowicz-httpbis-httpa2
 category: std
 
 ipr: trust200902
@@ -48,11 +47,11 @@ pi: [toc, sortrefs, symrefs, compact, subcompact]
 author:
   - ins: G. King
     name: Gordon King
-    organization: The `OpenHTTPA` Foundation (openhttpa.org)
+    organization: OpenHTTPA Foundation
     email: info@openhttpa.org
   - ins: H. Wang
     name: Hans Wang
-    organization: The `OpenHTTPA` Foundation (openhttpa.org)
+    organization: OpenHTTPA Foundation
     email: lukeckntu@hotmail.com
 ---
 
@@ -64,6 +63,7 @@ and a Trusted Execution Environment (TEE) over standard HTTP/2, HTTP/3, and gRPC
 Unlike traditional TLS which terminates at the network edge, `OpenHTTPA` ensures that the
 cryptographic session terminates inside the hardware-isolated enclave.
 The protocol is based on the SIGMA-I model and incorporates post-quantum hybrid key exchange (ML-KEM), post-quantum digital signatures (ML-DSA), transcript-bound hardware attestation, and semantic binding of HTTP requests to the hardware-verified session state.
+This document supersedes the earlier work published as {{I-D.sandowicz-httpbis-httpa2}}.
 
 --- middle
 
