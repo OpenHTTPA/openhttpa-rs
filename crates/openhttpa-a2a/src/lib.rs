@@ -24,7 +24,10 @@ pub use types::*;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{A2AHandshakeRequest, A2AHandshakeResponse, A2AMessage, AgentIdentity};
+    use crate::types::{
+        A2AHandshakeRequest, A2AHandshakeResponse, A2AMessage, AgentIdentity, PublicKey,
+        PublicKeyAlgorithm,
+    };
 
     #[test]
     fn test_agent_creation() {
@@ -46,7 +49,7 @@ mod tests {
         assert_eq!(resp.server_identity.agent_id, "server-agent");
 
         let server_share: openhttpa_crypto::key_exchange::KeyShare =
-            serde_json::from_slice(&resp.server_identity.public_key).unwrap();
+            serde_json::from_slice(&resp.server_identity.public_key.bytes).unwrap();
         let client_secret = client_pair
             .client_combine(&server_share, &resp.encrypted_handshake_key)
             .unwrap();
@@ -102,13 +105,17 @@ mod tests {
     fn agent_identity_serde_round_trip() {
         let id = AgentIdentity {
             agent_id: "agent-001".to_owned(),
-            public_key: vec![0x01, 0x02, 0x03],
+            public_key: PublicKey {
+                algorithm: PublicKeyAlgorithm::MlDsa65,
+                bytes: vec![0x01, 0x02, 0x03],
+            },
             attestation_quote: vec![0xde, 0xad],
         };
         let json = serde_json::to_vec(&id).unwrap();
         let decoded: AgentIdentity = serde_json::from_slice(&json).unwrap();
         assert_eq!(decoded.agent_id, "agent-001");
-        assert_eq!(decoded.public_key, vec![0x01, 0x02, 0x03]);
+        assert_eq!(decoded.public_key.bytes, vec![0x01, 0x02, 0x03]);
+        assert_eq!(decoded.public_key.algorithm, PublicKeyAlgorithm::MlDsa65);
     }
 
     // ── A2AHandshakeRequest / Response serde ─────────────────────────────────
@@ -118,7 +125,10 @@ mod tests {
         let req = A2AHandshakeRequest {
             client_identity: AgentIdentity {
                 agent_id: "client".to_owned(),
-                public_key: vec![],
+                public_key: PublicKey {
+                    algorithm: PublicKeyAlgorithm::Unknown,
+                    bytes: vec![],
+                },
                 attestation_quote: vec![],
             },
             client_random: [0x11u8; 32],
@@ -133,7 +143,10 @@ mod tests {
         let resp = A2AHandshakeResponse {
             server_identity: AgentIdentity {
                 agent_id: "server".to_owned(),
-                public_key: vec![0xaa],
+                public_key: PublicKey {
+                    algorithm: PublicKeyAlgorithm::Unknown,
+                    bytes: vec![0xaa],
+                },
                 attestation_quote: vec![0xbb],
             },
             server_random: [0x22u8; 32],

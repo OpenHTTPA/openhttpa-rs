@@ -210,8 +210,8 @@ pub async fn trusted_request_streaming(
     session: &AttestSession,
     method: &str,
     path: &str,
-    body_stream: axum::body::Body,
-) -> Result<axum::body::Body, ClientError>
+    body_stream: openhttpa_transport::connection::TransportBody,
+) -> Result<openhttpa_transport::connection::TransportBody, ClientError>
 ```
 
 Sends a trusted request with a streaming encrypted body and returns a streaming decrypted response. Implements binary framing: `[Length (4 B)] ‖ [Counter (8 B)] ‖ [Ciphertext]`.
@@ -220,7 +220,7 @@ Sends a trusted request with a streaming encrypted body and returns a streaming 
 - Response is decrypted chunk-by-chunk using the same binary framing protocol.
 - Uses `Content-Type: application/x-openhttpa-stream`.
 
-**Returns**: A streaming `axum::body::Body` of decrypted plaintext bytes.
+**Returns**: A streaming `openhttpa_transport::connection::TransportBody` of decrypted plaintext bytes.
 
 ---
 
@@ -314,7 +314,7 @@ openhttpa-client
 ├── openhttpa-attestation (QuoteVerifier)
 ├── openhttpa-tee         (TeeProvider, QuoteRequest)
 ├── openhttpa-transport   (AttestTransport, TransportRequest, TransportResponse)
-├── axum                  (body streaming)
+├── http-body-util        (body streaming)
 ├── sha2                  (transcript hash)
 ├── hmac                  (HMAC-SHA-384 for ticket MAC)
 └── tracing               (instrumentation)

@@ -25,7 +25,7 @@
 
 pub mod collateral_fetcher;
 pub mod composite;
-pub mod dcap_zk_verifier;
+
 pub mod eat;
 /// M4: Multi-Vendor TEE Federation verifier.
 pub mod federation;
@@ -45,7 +45,6 @@ mod tests;
 pub mod tpm_verifier;
 pub mod verifier;
 
-pub use dcap_zk_verifier::DcapZkVerifier;
 pub use eat::{EatSignAlgorithm, create_signed_eat, verify_signed_eat};
 /// M4: [`FederatedVerifier`] for cross-vendor TEE federation.
 pub use federation::FederatedVerifier;

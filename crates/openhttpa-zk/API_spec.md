@@ -246,6 +246,7 @@ Verifies a RISC Zero `Receipt` and decodes the `ZkOutput` from its journal.
 **Usage in `DcapZkVerifier`**:
 
 ```rust
+use openhttpa_zk::verifier::ZkVerifier;
 let output = ZkVerifier::verify(&receipt, OPENHTTPA_GUEST_ID)?;
 assert!(output.is_valid && output.dcap_verified);
 ```
@@ -287,9 +288,9 @@ openhttpa-zk
 
 ### Integration Points
 
-| Crate                   | Usage                                                 |
-| ----------------------- | ----------------------------------------------------- |
-| `openhttpa-tee`         | `ZkCompressedTeeProvider` calls `ZkProver::prove`     |
-| `openhttpa-attestation` | `DcapZkVerifier` calls `ZkVerifier::verify`           |
-| `openhttpa-oracle`      | `OracleNode::fetch_and_prove` calls `ZkProver::prove` |
-| `openhttpa-llm`         | V-AI provenance proving calls `ZkProver::prove`       |
+| Crate              | Usage                                                 |
+| ------------------ | ----------------------------------------------------- |
+| `openhttpa-tee`    | `ZkCompressedTeeProvider` calls `ZkProver::prove`     |
+| `openhttpa-zk`     | `DcapZkVerifier` calls `ZkVerifier::verify`           |
+| `openhttpa-oracle` | `OracleNode::fetch_and_prove` calls `ZkProver::prove` |
+| `openhttpa-llm`    | V-AI provenance proving calls `ZkProver::prove`       |

@@ -30,6 +30,94 @@ pub struct OracleResponse {
     pub zk_receipt: Option<Vec<u8>>,
 }
 
+/// Validates a parsed URL against a comprehensive SSRF block list.
+///
+/// # Blocked ranges
+/// - Loopback (127.0.0.0/8) — except 127.0.0.1 which is the *only* allowed
+///   loopback address (for local integration tests over HTTP).
+/// - IPv6 loopback `::1`
+/// - RFC-1918 private ranges: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+/// - Link-local: 169.254.0.0/16 (APIPA / AWS/GCP/Azure metadata endpoints)
+/// - IPv6 link-local: fe80::/10
+/// - Unspecified: 0.0.0.0 / ::
+/// - Loopback hostname `localhost`
+///
+/// # Errors
+/// Returns [`OracleError::TeeError`] with a descriptive message if the URL
+/// targets a blocked address.
+fn validate_url_for_ssrf(url: &reqwest::Url) -> Result<(), OracleError> {
+    use std::net::{Ipv4Addr, Ipv6Addr};
+
+    let host = url
+        .host()
+        .ok_or_else(|| OracleError::TeeError("URL has no host".to_owned()))?;
+
+    // Domain name handling
+    if let url::Host::Domain(d) = host {
+        // Block the literal hostname "localhost" (resolves to 127.0.0.1/::1).
+        if d.eq_ignore_ascii_case("localhost") {
+            return Err(OracleError::TeeError(
+                "SSRF blocked: 'localhost' hostname is not permitted; use 127.0.0.1 \
+                 only for local test endpoints"
+                    .to_owned(),
+            ));
+        }
+        // Non-IP hostname (e.g. "example.com") — DNS resolution happens inside
+        // the HTTP client.  We cannot block all possible DNS results here, but
+        // we block all *explicit* private/reserved IP literals.
+        return Ok(());
+    }
+
+    let blocked = match host {
+        url::Host::Ipv4(v4) => {
+            let [a, b, _c, _] = v4.octets();
+            // 127.0.0.0/8 — loopback; 127.0.0.1 is the sole permitted exception
+            // (handled by the caller's `is_explicit_localhost` check).
+            let is_loopback = a == 127 && v4.octets() != [127, 0, 0, 1];
+            // 10.0.0.0/8
+            let is_10 = a == 10;
+            // 172.16.0.0/12
+            let is_172_16 = a == 172 && (16..=31).contains(&b);
+            // 192.168.0.0/16
+            let is_192_168 = a == 192 && b == 168;
+            // 169.254.0.0/16 — link-local / metadata service
+            let is_link_local = a == 169 && b == 254;
+            // 0.0.0.0 — unspecified
+            let is_unspecified = v4 == Ipv4Addr::UNSPECIFIED;
+            // 100.64.0.0/10 — Shared Address Space (RFC 6598 / carrier-grade NAT)
+            let is_cgnat = a == 100 && (64..=127).contains(&b);
+
+            is_loopback
+                || is_10
+                || is_172_16
+                || is_192_168
+                || is_link_local
+                || is_unspecified
+                || is_cgnat
+        }
+        url::Host::Ipv6(v6) => {
+            let is_loopback = v6 == Ipv6Addr::LOCALHOST;
+            let is_unspecified = v6 == Ipv6Addr::UNSPECIFIED;
+            // fe80::/10 — IPv6 link-local
+            let segments = v6.segments();
+            let is_link_local = (segments[0] & 0xffc0) == 0xfe80;
+            // fc00::/7 — IPv6 unique-local (analogous to RFC-1918)
+            let is_unique_local = (segments[0] & 0xfe00) == 0xfc00;
+
+            is_loopback || is_unspecified || is_link_local || is_unique_local
+        }
+        _ => false, // Handled above via Domain match
+    };
+
+    if blocked {
+        return Err(OracleError::TeeError(
+            "SSRF blocked: destination IP is in a private or reserved range".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
 /// Represents the `OpenHTTPA` Web3 Oracle Node.
 pub struct OracleNode {
     http_client: Client,
@@ -65,13 +153,27 @@ impl OracleNode {
         transcript_hash: [u8; 48],
         generate_zk_proof: bool,
     ) -> Result<OracleResponse, OracleError> {
-        // 1. Validate Scheme (Enforce HTTPS for external URLs)
+        // 1. Validate Scheme and block SSRF attack vectors.
         let parsed_url = reqwest::Url::parse(url)
             .map_err(|_| OracleError::TeeError("Invalid URL format".to_owned()))?;
 
-        let is_local = parsed_url.host_str() == Some("127.0.0.1");
+        // SEC-03: Comprehensive SSRF protection.
+        // The previous check only blocked non-HTTPS for non-127.0.0.1 hosts,
+        // leaving localhost, ::1, RFC-1918, link-local, and cloud-metadata
+        // addresses reachable over HTTP (or HTTPS if the oracle target is
+        // co-located with an internal service).
+        //
+        // Policy:
+        //   • Only HTTPS is permitted, with the sole exception of 127.0.0.1
+        //     (explicit loopback) for local integration tests.
+        //   • All private/reserved IP ranges are blocked regardless of scheme.
+        //   • Only 127.0.0.1 (not any other loopback) is whitelisted for HTTP.
+        let is_explicit_localhost = parsed_url.host_str() == Some("127.0.0.1");
 
-        if parsed_url.scheme() != "https" && !is_local {
+        // Block all private / reserved destination addresses.
+        validate_url_for_ssrf(&parsed_url)?;
+
+        if parsed_url.scheme() != "https" && !is_explicit_localhost {
             return Err(OracleError::TeeError(
                 "HTTPS required for non-local URLs".to_owned(),
             ));
@@ -80,12 +182,16 @@ impl OracleNode {
         // 2. Fetch data from Web2
         let response = self.http_client.get(url).send().await?.bytes().await?;
 
-        // 2. Format report_data (domain prefix "openhttpa hs server" + transcript_hash)
+        // 3. Format report_data (domain prefix "openhttpa hs server" + full transcript_hash)
+        //
+        // REL-03 fix: The previous code truncated the 48-byte transcript_hash
+        // to its first 32 bytes (`report_data[32..].copy_from_slice(&transcript_hash[..32])`),
+        // silently dropping the last 16 bytes.  We now store the full 48 bytes
+        // by placing the 16-byte prefix in [0..16] and the full hash in [16..64].
         let mut report_data = [0u8; 64];
-        let prefix = b"openhttpa hs server";
-        let prefix_len = prefix.len().min(32);
-        report_data[..prefix_len].copy_from_slice(&prefix[..prefix_len]);
-        report_data[32..].copy_from_slice(&transcript_hash[..32]);
+        let prefix = b"openhttpa oracle";
+        report_data[..prefix.len()].copy_from_slice(prefix); // 16 bytes
+        report_data[16..64].copy_from_slice(&transcript_hash); // full 48 bytes
 
         // 3. Generate TEE Quote
         let quote_req = QuoteRequest { report_data };
@@ -109,8 +215,10 @@ impl OracleNode {
 
             match ZkProver::prove(&zk_input) {
                 Ok(receipt) => {
-                    // Serialize receipt to bytes
-                    let bytes = bincode::serialize(&receipt)
+                    // Serialize receipt with postcard (INFO-09: postcard uses a stable,
+                    // compact self-describing format suited for `#![no_std]` / embedded;
+                    // bincode 1.x used a non-stable wire format unsuitable for persistence).
+                    let bytes = postcard::to_allocvec(&receipt)
                         .map_err(|e| OracleError::ZkError(e.to_string()))?;
                     zk_receipt_bytes = Some(bytes);
                 }
@@ -226,6 +334,80 @@ mod tests {
         let json = serde_json::to_vec(&original).unwrap();
         let decoded: OracleResponse = serde_json::from_slice(&json).unwrap();
         assert!(decoded.zk_receipt.is_none());
+    }
+
+    // ── SSRF protection tests (SEC-03) ──────────────────────────────────────
+
+    fn check_ssrf(url_str: &str) -> Result<(), OracleError> {
+        let url = reqwest::Url::parse(url_str).unwrap();
+        validate_url_for_ssrf(&url)
+    }
+
+    #[test]
+    fn ssrf_blocks_rfc1918_10x() {
+        assert!(check_ssrf("https://10.0.0.1/secret").is_err());
+        assert!(check_ssrf("https://10.255.255.255/secret").is_err());
+    }
+
+    #[test]
+    fn ssrf_blocks_rfc1918_172_16() {
+        assert!(check_ssrf("https://172.16.0.1/secret").is_err());
+        assert!(check_ssrf("https://172.31.255.254/secret").is_err());
+    }
+
+    #[test]
+    fn ssrf_blocks_rfc1918_192_168() {
+        assert!(check_ssrf("https://192.168.1.1/secret").is_err());
+    }
+
+    #[test]
+    fn ssrf_blocks_link_local_metadata() {
+        // AWS/GCP/Azure metadata endpoint
+        assert!(check_ssrf("https://169.254.169.254/latest/meta-data/").is_err());
+        assert!(check_ssrf("http://169.254.169.254/").is_err());
+    }
+
+    #[test]
+    fn ssrf_blocks_loopback_variants() {
+        assert!(check_ssrf("https://127.0.0.2/").is_err());
+        assert!(check_ssrf("https://127.1.2.3/").is_err());
+    }
+
+    #[test]
+    fn ssrf_blocks_localhost_hostname() {
+        assert!(check_ssrf("https://localhost/secret").is_err());
+        assert!(check_ssrf("http://localhost:8080/admin").is_err());
+    }
+
+    #[test]
+    fn ssrf_blocks_ipv6_loopback() {
+        assert!(check_ssrf("https://[::1]/secret").is_err());
+    }
+
+    #[test]
+    fn ssrf_blocks_ipv6_link_local() {
+        assert!(check_ssrf("https://[fe80::1]/path").is_err());
+    }
+
+    #[test]
+    fn ssrf_blocks_ipv6_unique_local() {
+        assert!(check_ssrf("https://[fc00::1]/internal").is_err());
+    }
+
+    #[test]
+    fn ssrf_allows_public_ip() {
+        // 1.1.1.1 is a public Cloudflare DNS — should not be blocked.
+        assert!(check_ssrf("https://1.1.1.1/").is_ok());
+        assert!(check_ssrf("https://8.8.8.8/").is_ok());
+    }
+
+    #[test]
+    fn ssrf_allows_127_0_0_1_for_local_tests() {
+        // The explicit loopback 127.0.0.1 passes SSRF check so local tests
+        // can use HTTP; the scheme check is handled separately by the caller.
+        // NOTE: the SSRF function does NOT block 127.0.0.1 — the scheme
+        // enforcement is handled in fetch_and_prove (HTTPS or explicit local).
+        assert!(check_ssrf("http://127.0.0.1:8080/test").is_ok());
     }
 
     #[test]

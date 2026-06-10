@@ -32,7 +32,8 @@ hex                 = { workspace = true }
 hmac                = { workspace = true }
 sha2                = { workspace = true }
 chrono              = { workspace = true }
-axum                = { workspace = true }
+http-body-util      = { workspace = true }
+http-body           = { workspace = true }
 futures             = { workspace = true }
 
 

@@ -51,24 +51,24 @@ Transport-level errors. Returned by `AttestTransport::send`.
 
 A transport-level HTTP request. All fields are consumed by `AttestTransport::send`.
 
-| Field      | Type                      | Description                                                                              |
-| ---------- | ------------------------- | ---------------------------------------------------------------------------------------- |
-| `method`   | `http::Method`            | HTTP method. For OpenHTTPA, may be `ATTEST`, `TERMINATE_ATTEST`, or any standard method. |
-| `uri`      | `http::Uri`               | Full request URI including scheme, host, port, and path.                                 |
-| `headers`  | `http::HeaderMap`         | Request headers including all `Attest-*` fields.                                         |
-| `body`     | `axum::body::Body`        | Request body, potentially a streaming body.                                              |
-| `trailers` | `Option<http::HeaderMap>` | Trailing headers appended after the body (e.g. `Attest-Ticket`, `Attest-Binder`).        |
+| Field      | Type                                             | Description                                                                              |
+| ---------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `method`   | `http::Method`                                   | HTTP method. For OpenHTTPA, may be `ATTEST`, `TERMINATE_ATTEST`, or any standard method. |
+| `uri`      | `http::Uri`                                      | Full request URI including scheme, host, port, and path.                                 |
+| `headers`  | `http::HeaderMap`                                | Request headers including all `Attest-*` fields.                                         |
+| `body`     | `openhttpa_transport::connection::TransportBody` | Request body, potentially a streaming body.                                              |
+| `trailers` | `Option<http::HeaderMap>`                        | Trailing headers appended after the body (e.g. `Attest-Ticket`, `Attest-Binder`).        |
 
 ### `TransportResponse` (Struct)
 
 A transport-level HTTP response.
 
-| Field      | Type                      | Description                                                      |
-| ---------- | ------------------------- | ---------------------------------------------------------------- |
-| `status`   | `http::StatusCode`        | HTTP status code.                                                |
-| `headers`  | `http::HeaderMap`         | Response headers.                                                |
-| `body`     | `axum::body::Body`        | Response body, potentially streaming.                            |
-| `trailers` | `Option<http::HeaderMap>` | Trailing headers received after the body (e.g. `Attest-Binder`). |
+| Field      | Type                                             | Description                                                      |
+| ---------- | ------------------------------------------------ | ---------------------------------------------------------------- |
+| `status`   | `http::StatusCode`                               | HTTP status code.                                                |
+| `headers`  | `http::HeaderMap`                                | Response headers.                                                |
+| `body`     | `openhttpa_transport::connection::TransportBody` | Response body, potentially streaming.                            |
+| `trailers` | `Option<http::HeaderMap>`                        | Trailing headers received after the body (e.g. `Attest-Binder`). |
 
 ### `AttestTransport` (Trait)
 
@@ -279,7 +279,7 @@ pub mod oblivious;        // ObliviousServer (for server-side use)
 ```
 openhttpa-transport
 ├── http            (Method, Uri, HeaderMap, StatusCode)
-├── axum            (axum::body::Body for streaming support)
+├── http-body-util  (TransportBody and stream support)
 ├── async-trait
 ├── reqwest         (ReqwestTransport)
 ├── hpke            (ObliviousClient / ObliviousServer HPKE)

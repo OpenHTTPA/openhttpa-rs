@@ -50,7 +50,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_server_flow() {
         let server = OpenHttpaMcpServer::new();
-        server.add_tool(Box::new(MockTool)).await;
+        server.add_tool(Box::new(MockTool)).await.unwrap();
 
         let req =
             serde_json::to_vec(&McpRequest::new(serde_json::json!(1), "tools/list", None)).unwrap();
@@ -125,7 +125,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_tool_execution_error() {
         let server = OpenHttpaMcpServer::new();
-        server.add_tool(Box::new(ErrorTool)).await;
+        let _ = server.add_tool(Box::new(ErrorTool)).await;
         let req = serde_json::to_vec(&McpRequest::new(
             serde_json::json!(1),
             "tools/call",

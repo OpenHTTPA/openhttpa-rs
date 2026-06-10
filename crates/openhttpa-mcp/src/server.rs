@@ -36,9 +36,22 @@ impl OpenHttpaMcpServer {
     }
 
     /// Add a tool to the server.
-    pub async fn add_tool(&self, tool: Box<dyn McpTool>) {
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(name)` if a tool with the same name is already registered
+    /// (DES-02 — prevents silent shadowing of existing tools).
+    pub async fn add_tool(&self, tool: Box<dyn McpTool>) -> Result<(), String> {
         let mut tools = self.tools.write().await;
-        tools.insert(tool.name().to_string(), Arc::from(tool));
+        let name = tool.name().to_string();
+        if tools.contains_key(&name) {
+            return Err(format!(
+                "MCP tool '{name}' is already registered; remove it first"
+            ));
+        }
+        tools.insert(name, Arc::from(tool));
+        drop(tools);
+        Ok(())
     }
 
     /// Handle an incoming MCP request.

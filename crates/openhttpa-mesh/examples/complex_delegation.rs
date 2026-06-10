@@ -99,8 +99,8 @@ impl openhttpa_transport::connection::AttestTransport for SwarmTransport {
                 let mut client_random = [0u8; 32];
                 client_random.copy_from_slice(&client_hdrs.random);
 
-                use openhttpa_core::sha2::Digest;
-                let mut hasher = openhttpa_core::sha2::Sha384::new();
+                use sha2::Digest;
+                let mut hasher = sha2::Sha384::new();
                 hasher.update(client_random);
                 if let Some(ref c) = client_hdrs.challenge {
                     hasher.update(c);
@@ -156,7 +156,7 @@ impl openhttpa_transport::connection::AttestTransport for SwarmTransport {
                 return Ok(openhttpa_transport::connection::TransportResponse {
                     status: http::StatusCode::OK,
                     headers: resp_hdrs.encode(),
-                    body: axum::body::Body::empty(),
+                    body: openhttpa_transport::connection::empty_body(),
                     trailers: None,
                 });
             }
@@ -181,7 +181,9 @@ impl openhttpa_transport::connection::AttestTransport for SwarmTransport {
             let mut aad = b"openhttpa:".to_vec();
             aad.extend_from_slice(base_id_str.as_bytes());
 
-            let body_bytes = axum::body::to_bytes(req.body, usize::MAX).await.unwrap();
+            let body_bytes = openhttpa_transport::connection::to_bytes(req.body, usize::MAX)
+                .await
+                .unwrap();
             let mut body_ciphertext = hex::decode(
                 serde_json::from_slice::<serde_json::Value>(&body_bytes).unwrap()["ciphertext"]
                     .as_str()
@@ -249,7 +251,7 @@ impl openhttpa_transport::connection::AttestTransport for SwarmTransport {
             Ok(openhttpa_transport::connection::TransportResponse {
                 status: http::StatusCode::OK,
                 headers: http::HeaderMap::new(),
-                body: axum::body::Body::from(
+                body: openhttpa_transport::connection::full_body(
                     serde_json::to_vec(&json!({
                         "ciphertext": hex::encode(data)
                     }))
@@ -415,14 +417,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let hits = Arc::new(DashMap::new());
     let total = Arc::new(DashMap::new());
-    aggregator_node
+    let _ = aggregator_node
         .mcp_server()
         .add_tool(Box::new(AggregatorTool {
             hits: hits.clone(),
             total: total.clone(),
         }))
         .await;
-    aggregator_node
+    let _ = aggregator_node
         .mcp_server()
         .add_tool(Box::new(GetPiTool {
             hits: hits.clone(),
@@ -461,7 +463,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
 
         let arc = Arc::new(worker_node);
-        arc.mcp_server()
+        let _ = arc
+            .mcp_server()
             .add_tool(Box::new(SamplerTool {
                 aggregator_id,
                 node: Arc::downgrade(&arc),

@@ -110,14 +110,14 @@ impl openhttpa_transport::connection::AttestTransport for MockTransport {
                 return Ok(openhttpa_transport::connection::TransportResponse {
                     status: http::StatusCode::OK,
                     headers: resp_hdrs.encode(),
-                    body: axum::body::Body::empty(),
+                    body: openhttpa_transport::connection::empty_body(),
                     trailers: None,
                 });
             }
             Ok(openhttpa_transport::connection::TransportResponse {
                 status: http::StatusCode::OK,
                 headers: http::HeaderMap::new(),
-                body: axum::body::Body::from("{\"result\": \"ok\"}"),
+                body: openhttpa_transport::connection::full_body(b"{\"result\": \"ok\"}".to_vec()),
                 trailers: None,
             })
         })

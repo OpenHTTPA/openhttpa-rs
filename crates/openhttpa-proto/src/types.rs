@@ -121,6 +121,17 @@ impl CipherSuite {
         )
     }
 
+    /// Returns `true` if this suite is deprecated and should no longer be
+    /// negotiated in new sessions (INFO-01).
+    ///
+    /// Callers should emit a diagnostic (e.g. `tracing::warn!`) and consider
+    /// rejecting the suite depending on their security policy.
+    #[must_use]
+    #[allow(deprecated)] // P256Aes256GcmSha256 retained for wire-format compatibility (S-04)
+    pub const fn is_legacy(&self) -> bool {
+        matches!(self, Self::P256Aes256GcmSha256)
+    }
+
     /// Returns a unique 16-bit numeric identifier for this suite (used in transcript binding).
     #[must_use]
     #[allow(deprecated)] // P256Aes256GcmSha256 retained for wire-format compatibility (S-04)
@@ -157,7 +168,14 @@ impl std::str::FromStr for CipherSuite {
             "X25519_ML_KEM768_AES256GCM_SHA384" => Ok(Self::X25519MlKem768Aes256GcmSha384),
             "P384_ML_KEM1024_AES256GCM_SHA384" => Ok(Self::P384MlKem1024Aes256GcmSha384),
             "X25519_AES256GCM_SHA384" => Ok(Self::X25519Aes256GcmSha384),
-            "P256_AES256GCM_SHA256" => Ok(Self::P256Aes256GcmSha256),
+            "P256_AES256GCM_SHA256" => {
+                // INFO-01: Wire-level deny for deprecated cipher suite after configurable cutoff.
+                if std::env::var("OPENHTTPA_ALLOW_DEPRECATED_CIPHERS").unwrap_or_default() == "1" {
+                    Ok(Self::P256Aes256GcmSha256)
+                } else {
+                    Err(())
+                }
+            }
             "X25519_CHACHA20POLY1305_SHA256" => Ok(Self::X25519ChaCha20Poly1305Sha256),
             _ => Err(()),
         }
@@ -558,6 +576,22 @@ mod tests {
             let parsed: CipherSuite = s.parse().expect("should parse");
             assert_eq!(*suite, parsed);
         }
+    }
+
+    #[test]
+    fn cipher_suite_from_str_denies_deprecated() {
+        // No env override → deprecated cipher must be rejected.
+        // temp_env handles the unsafe env mutation internally.
+        temp_env::with_var_unset("OPENHTTPA_ALLOW_DEPRECATED_CIPHERS", || {
+            let result: Result<CipherSuite, _> = "P256_AES256GCM_SHA256".parse();
+            assert!(result.is_err());
+        });
+
+        // With the opt-in env var set, deprecated cipher must be accepted.
+        temp_env::with_var("OPENHTTPA_ALLOW_DEPRECATED_CIPHERS", Some("1"), || {
+            let result: Result<CipherSuite, _> = "P256_AES256GCM_SHA256".parse();
+            assert!(result.is_ok());
+        });
     }
 
     #[test]

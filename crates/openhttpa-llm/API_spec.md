@@ -210,7 +210,7 @@ Full-control variant. Accepts a complete `ChatRequest` (including model, tempera
 pub async fn chat_stream(
     &self,
     messages: &[ChatMessage],
-) -> Result<axum::body::Body, ClientError>
+) -> Result<openhttpa_transport::connection::TransportBody, ClientError>
 ```
 
 Streaming variant. Sets `ChatRequest.stream = true` and returns a streaming `Body` of Server-Sent Event (SSE) data carrying token deltas. Uses `trusted_request_streaming` for binary-framed encrypted transport.

@@ -4,11 +4,11 @@
 use crate::store::{MemoryStore, VersionVector};
 use openhttpa_a2a::{A2AAgent, A2AMessage};
 use openhttpa_attestation::verifier::QuoteVerifier;
-use openhttpa_core::sha2::{Digest, Sha384};
 use openhttpa_proto::{AttestQuote, ProvenanceChain};
 use openhttpa_tee::provider::{QuoteRequest, TeeProvider};
 use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha384};
 use std::sync::Arc;
 use tokio::time::{Duration, interval};
 use tracing::{info, warn};

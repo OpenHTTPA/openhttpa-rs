@@ -119,29 +119,149 @@ mod tests {
 }
 
 /// A store for Pre-Shared Keys (PSKs) used for session resumption.
-#[derive(Debug, Default)]
+///
+/// # Security properties (REL-01 fixes)
+///
+/// - **TTL enforcement**: every PSK is stored with an `expires_at` timestamp;
+///   `take_psk` refuses to return expired tickets and schedules them for
+///   cleanup.  Default lifetime is 24 hours; use [`PskStore::with_ttl`] to
+///   customise.
+/// - **Bounded capacity**: the store is capped at [`PskStore::MAX_CAPACITY`]
+///   entries (10 000 by default) to prevent unbounded memory growth.
+///   When the cap is reached, the oldest entries (by expiry) are evicted.
+/// - **Single-use**: `take_psk` removes the ticket on first use to prevent
+///   replay attacks.
+#[derive(Debug)]
 pub struct PskStore {
-    /// Maps ticket IDs to session secrets.
-    tickets: RwLock<HashMap<Vec<u8>, zeroize::Zeroizing<Vec<u8>>>>,
+    /// Maps ticket IDs to (PSK, expiry) pairs.
+    tickets: RwLock<HashMap<Vec<u8>, PskEntry>>,
+    /// Maximum number of unexpired tickets.
+    max_capacity: usize,
+    /// How long a stored PSK is valid after insertion.
+    psk_ttl: std::time::Duration,
+}
+
+#[derive(Debug)]
+struct PskEntry {
+    psk: zeroize::Zeroizing<Vec<u8>>,
+    expires_at: std::time::Instant,
+}
+
+impl Default for PskStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PskStore {
+    /// Default cap on in-memory PSK tickets.
+    pub const MAX_CAPACITY: usize = 10_000;
+
+    /// Default PSK lifetime (24 hours — SIGMA-I recommendation).
+    pub const DEFAULT_TTL: std::time::Duration = std::time::Duration::from_secs(86_400);
+
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            tickets: RwLock::new(HashMap::new()),
+            max_capacity: Self::MAX_CAPACITY,
+            psk_ttl: Self::DEFAULT_TTL,
+        }
+    }
+
+    /// Create a store with a custom TTL and capacity.
+    #[must_use]
+    pub const fn with_ttl(mut self, ttl: std::time::Duration) -> Self {
+        self.psk_ttl = ttl;
+        self
+    }
+
+    /// Create a store with a custom capacity.
+    #[must_use]
+    pub const fn with_capacity(mut self, cap: usize) -> Self {
+        self.max_capacity = cap;
+        self
     }
 
     /// Store a PSK associated with a ticket ID.
-    pub async fn store_psk(&self, ticket_id: Vec<u8>, psk: Vec<u8>) {
+    ///
+    /// Returns `false` if the store is at capacity after eviction and the
+    /// new entry cannot be stored.
+    pub async fn store_psk(&self, ticket_id: Vec<u8>, psk: Vec<u8>) -> bool {
         let mut tickets = self.tickets.write().await;
-        tickets.insert(ticket_id, zeroize::Zeroizing::new(psk));
+
+        // 1. Purge expired tickets first to reclaim space.
+        let now = std::time::Instant::now();
+        tickets.retain(|_, v| v.expires_at > now);
+
+        // 2. Enforce capacity: evict the ticket with the earliest expiry.
+        while tickets.len() >= self.max_capacity {
+            let oldest_key = tickets
+                .iter()
+                .min_by_key(|(_, v)| v.expires_at)
+                .map(|(k, _)| k.clone());
+            if let Some(k) = oldest_key {
+                tickets.remove(&k);
+            } else {
+                break;
+            }
+        }
+
+        // 3. Refuse to store if we're somehow still at capacity.
+        if tickets.len() >= self.max_capacity {
+            tracing::error!(
+                "PskStore at maximum capacity ({}) — refusing to store new ticket",
+                self.max_capacity
+            );
+            return false;
+        }
+
+        tickets.insert(
+            ticket_id,
+            PskEntry {
+                psk: zeroize::Zeroizing::new(psk),
+                expires_at: now + self.psk_ttl,
+            },
+        );
+        true
     }
 
     /// Retrieve and remove a PSK associated with a ticket ID (single-use tickets).
+    ///
+    /// Returns `None` if the ticket does not exist or has expired.
     pub async fn take_psk(&self, ticket_id: &[u8]) -> Option<Vec<u8>> {
         let mut tickets = self.tickets.write().await;
-        // Unwrap the Zeroizing container to return the bytes,
-        // passing ownership to the caller.
-        tickets.remove(ticket_id).map(|z| z.to_vec())
+        match tickets.remove(ticket_id) {
+            Some(entry) if entry.expires_at > std::time::Instant::now() => Some(entry.psk.to_vec()),
+            Some(_expired) => {
+                // Ticket existed but has expired — treat as absent.
+                tracing::debug!("PskStore: ticket expired and discarded on take_psk");
+                None
+            }
+            None => None,
+        }
+    }
+
+    /// Remove all expired tickets.  Call periodically from a background task.
+    pub async fn purge_expired(&self) {
+        let mut tickets = self.tickets.write().await;
+        let now = std::time::Instant::now();
+        let before = tickets.len();
+        tickets.retain(|_, v| v.expires_at > now);
+        let purged = before.saturating_sub(tickets.len());
+        drop(tickets);
+        if purged > 0 {
+            tracing::debug!("PskStore: purged {} expired ticket(s)", purged);
+        }
+    }
+
+    /// Return the number of stored (including possibly-expired) tickets.
+    pub async fn len(&self) -> usize {
+        self.tickets.read().await.len()
+    }
+
+    /// Return `true` if no tickets are stored.
+    pub async fn is_empty(&self) -> bool {
+        self.tickets.read().await.is_empty()
     }
 }

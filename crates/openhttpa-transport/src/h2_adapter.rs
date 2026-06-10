@@ -56,7 +56,7 @@ mod tests {
             method: http::Method::POST,
             uri: "http://localhost:8080/path".parse().unwrap(),
             headers: http::HeaderMap::new(),
-            body: axum::body::Body::empty(),
+            body: crate::connection::empty_body(),
             trailers: None,
         };
 

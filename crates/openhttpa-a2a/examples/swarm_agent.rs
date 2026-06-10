@@ -114,7 +114,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         namespace: "global_ledger".to_string(),
     };
 
-    if aiql.evaluate_payload(&valid_payload_ctx) == PolicyAction::Allow {
+    if aiql
+        .evaluate_payload(&valid_payload_ctx)
+        .unwrap_or(PolicyAction::Deny)
+        == PolicyAction::Allow
+    {
         println!("  -> Payload Authorized by AIQL (valid DID and intent).");
 
         let payload_data = b"Ledger synchronization payload".to_vec();
@@ -146,7 +150,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         namespace: "global_ledger".to_string(),
     };
 
-    if aiql.evaluate_payload(&malicious_payload_ctx) == PolicyAction::Quarantine {
+    if aiql
+        .evaluate_payload(&malicious_payload_ctx)
+        .unwrap_or(PolicyAction::Deny)
+        == PolicyAction::Quarantine
+    {
         println!("  -> AIQL successfully Quarantined unauthorized payload!");
     }
 

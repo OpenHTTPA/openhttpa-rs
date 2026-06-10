@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 pub use aws_lc_rs::aead::NONCE_LEN;
 use aws_lc_rs::aead::{self, Aad, BoundKey, LessSafeKey, Nonce, SealingKey, UnboundKey};
-use fs2::FileExt;
+use fd_lock::RwLock as FdRwLock;
 use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
@@ -282,7 +282,7 @@ impl FileNonceSequence {
 impl NonceSequence for FileNonceSequence {
     fn next_nonce(&self, iv: &[u8; NONCE_LEN]) -> Result<AeadNonce, BoundAeadError> {
         let _guard = self.mutex.lock().unwrap();
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
@@ -290,21 +290,24 @@ impl NonceSequence for FileNonceSequence {
             .open(&self.path)
             .map_err(|e| AeadError::IoError(e.to_string()))?;
 
-        file.lock_exclusive()
+        // REL-05: fd-lock replaces the unmaintained fs2 crate for file locking.
+        // The write guard is held until dropped at the end of this scope.
+        let mut fd_lock = FdRwLock::new(file);
+        let mut locked = fd_lock
+            .write()
             .map_err(|e| AeadError::IoError(format!("lock failed: {e}")))?;
 
-        let count = Self::read_counter(&mut file)
+        let count = Self::read_counter(&mut locked)
             .map_err(|e| AeadError::IoError(format!("read failed: {e}")))?;
 
         if count == u64::MAX {
-            let _ = FileExt::unlock(&file);
             return Err(BoundAeadError::NonceOverflow);
         }
 
-        Self::write_counter(&mut file, count + 1)
+        Self::write_counter(&mut locked, count + 1)
             .map_err(|e| AeadError::IoError(format!("write failed: {e}")))?;
 
-        let _ = FileExt::unlock(&file);
+        drop(locked); // explicitly release the fd-lock write guard
 
         let mut nonce = *iv;
         let counter_bytes = count.to_be_bytes();

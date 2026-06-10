@@ -45,31 +45,65 @@ mod guest_methods {
     include!(concat!(env!("OUT_DIR"), "/methods.rs"));
 }
 
-#[cfg(feature = "zk")]
+// ─── Guest image constants ────────────────────────────────────────────────────
+//
+// SEC-02: Using all-zero GUEST_ID is equivalent to disabling proof verification
+// entirely — any guest image would pass `receipt.verify(OPENHTTPA_GUEST_ID)`.
+//
+// Resolution per compile path:
+//
+//  • `feature = "mock"` or `not(feature = "zk")` → sentinel zeros are acceptable
+//    because the prover short-circuits before `verify()` is reached.
+//
+//  • Real ZK build (feature = "zk", not mock, not stub) → must use the image
+//    ID embedded by `risc0_build::embed_methods()` in `build.rs`.  The
+//    `openhttpa_zk_stub` cfg flag is set by `build.rs` when the RISC Zero
+//    guest build is skipped (CI fast paths, rust-analyzer, etc.).  In that
+//    case a compile-time error is emitted to prevent accidental shipping of
+//    stub constants in a "production" binary.
+
+/// Image ID of the OpenHTTPA ZK guest program.
+///
+/// Used by [`ZkVerifier`] to authenticate that a receipt was produced by the
+/// genuine OpenHTTPA circuit.  **Must not be all-zeros in production builds.**
+#[cfg(all(feature = "zk", not(feature = "mock")))]
 pub const OPENHTTPA_GUEST_ID: [u32; 8] = {
-    #[cfg(feature = "mock")]
+    #[cfg(openhttpa_zk_stub)]
     {
+        // Build stub: constants are placeholders only.  The compile error below
+        // fires if someone tries to call `ZkProver::prove()` with real proving
+        // while the stub is active.
+        //
+        // NOTE: we cannot use `compile_error!` here as a `const` initialiser,
+        // so the guard is instead enforced inside `ZkProver::prove()`.
         [0u32; 8]
     }
-    #[cfg(not(feature = "mock"))]
+    #[cfg(not(openhttpa_zk_stub))]
     {
-        // Try to use the real ID, but fallback if it was skipped during build
-        [0u32; 8] // Simplified fallback for now
+        guest_methods::OPENHTTPA_ZK_GUEST_ID
     }
 };
 
-#[cfg(feature = "zk")]
+/// ELF binary of the OpenHTTPA ZK guest program.
+#[cfg(all(feature = "zk", not(feature = "mock")))]
 pub const OPENHTTPA_GUEST_ELF: &[u8] = {
-    #[cfg(feature = "mock")]
+    #[cfg(openhttpa_zk_stub)]
     {
         &[]
     }
-    #[cfg(not(feature = "mock"))]
+    #[cfg(not(openhttpa_zk_stub))]
     {
-        &[]
+        guest_methods::OPENHTTPA_ZK_GUEST_ELF
     }
 };
 
+// Mock path: sentinels are safe because the prover never calls verify().
+#[cfg(all(feature = "zk", feature = "mock"))]
+pub const OPENHTTPA_GUEST_ID: [u32; 8] = [0u32; 8];
+#[cfg(all(feature = "zk", feature = "mock"))]
+pub const OPENHTTPA_GUEST_ELF: &[u8] = &[];
+
+// Non-ZK path: sentinels are safe because ZkProver::prove() uses the stub path.
 #[cfg(not(feature = "zk"))]
 pub const OPENHTTPA_GUEST_ID: [u32; 8] = [0; 8];
 #[cfg(not(feature = "zk"))]
@@ -115,26 +149,55 @@ impl ZkProver {
 
         #[cfg(feature = "zk")]
         {
-            let input_bytes =
-                postcard::to_allocvec(input).map_err(|e| ZkError::Serialization(e.to_string()))?;
-            let env = ExecutorEnv::builder()
-                .write(&input_bytes)
-                .map_err(|e| ZkError::Serialization(e.to_string()))?
-                .build()
-                .map_err(|e| ZkError::Prover(e.to_string()))?;
+            // SEC-02 guard: If the stub build flag is set the guest ELF is empty
+            // and the image ID is all-zeros.  Attempting to prove with an empty
+            // ELF would panic; attempting to verify against [0u32;8] would accept
+            // ANY proof.  Fail explicitly instead.
+            #[cfg(openhttpa_zk_stub)]
+            {
+                return Err(ZkError::Prover(
+                    "ZK guest program was not compiled into this binary (build \
+                     stub is active).  Recompile with a full RISC Zero guest \
+                     build to enable real proving."
+                        .to_owned(),
+                ));
+            }
 
-            let prover = default_prover();
-            let info = prover
-                .prove(env, OPENHTTPA_GUEST_ELF)
-                .map_err(|e| ZkError::Prover(e.to_string()))?;
-            let receipt = info.receipt;
+            #[cfg(not(openhttpa_zk_stub))]
+            {
+                // Belt-and-suspenders runtime check: if the image ID is still
+                // all-zeros despite the build flag being absent, something is
+                // very wrong in the build system.  Refuse to continue.
+                if OPENHTTPA_GUEST_ID == [0u32; 8] {
+                    return Err(ZkError::Prover(
+                        "OPENHTTPA_GUEST_ID is all-zeros — ZK guest image was \
+                         not correctly embedded.  This is a build configuration \
+                         error; do not suppress this check."
+                            .to_owned(),
+                    ));
+                }
 
-            // Verify the receipt locally before returning.
-            receipt
-                .verify(OPENHTTPA_GUEST_ID)
-                .map_err(|e| ZkError::Verification(e.to_string()))?;
+                let input_bytes = postcard::to_allocvec(input)
+                    .map_err(|e| ZkError::Serialization(e.to_string()))?;
+                let env = ExecutorEnv::builder()
+                    .write(&input_bytes)
+                    .map_err(|e| ZkError::Serialization(e.to_string()))?
+                    .build()
+                    .map_err(|e| ZkError::Prover(e.to_string()))?;
 
-            Ok(receipt)
+                let prover = default_prover();
+                let info = prover
+                    .prove(env, OPENHTTPA_GUEST_ELF)
+                    .map_err(|e| ZkError::Prover(e.to_string()))?;
+                let receipt = info.receipt;
+
+                // Verify the receipt locally before returning.
+                receipt
+                    .verify(OPENHTTPA_GUEST_ID)
+                    .map_err(|e| ZkError::Verification(e.to_string()))?;
+
+                Ok(receipt)
+            }
         }
     }
 

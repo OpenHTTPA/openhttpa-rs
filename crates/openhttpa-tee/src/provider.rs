@@ -289,6 +289,9 @@ pub fn detect_best_provider(config: &TeeConfig) -> Result<Arc<dyn TeeProvider>, 
              This is ONLY acceptable in test/CI environments. \
              Disable 'allow_mock' or enable a hardware TEE feature in production."
         );
+        crate::telemetry::trigger_fallback_hook(
+            "No hardware TEE detected; falling back to MockTeeProvider.",
+        );
         return Ok(Arc::new(crate::mock::MockTeeProvider::default()));
     }
 
@@ -462,6 +465,9 @@ pub fn detect_all_providers(config: &TeeConfig) -> Result<CompositeTeeProvider, 
                 security = true,
                 "SECURITY: No hardware TEE detected; falling back to MockTeeProvider for federation. \
                  This is ONLY acceptable in test/CI environments."
+            );
+            crate::telemetry::trigger_fallback_hook(
+                "No hardware TEE detected for federation; falling back to MockTeeProvider.",
             );
             providers.push(Arc::new(crate::mock::MockTeeProvider::default()));
         } else {

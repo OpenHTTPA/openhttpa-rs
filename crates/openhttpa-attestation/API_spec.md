@@ -18,7 +18,7 @@ The `QuoteVerifier` trait is the primary extension point. Implementors are respo
 | Feature Flag | Backend                               | Notes                                                |
 | ------------ | ------------------------------------- | ---------------------------------------------------- |
 | _(default)_  | Mock verifier (`MockVerifier`)        | SHA-384 pseudo-quote; test/CI use only               |
-| `dcap`       | Intel DCAP (`DcapZkVerifier`)         | Calls `libsgx_dcap_quoteverify.so` via FFI           |
+| `mock`       | Mock provider (`MockVerifier`)        | Always validates mock quotes for test.               |
 | `maa`        | Azure MAA (`MaaVerifier`)             | Submits to Microsoft Azure Attestation REST endpoint |
 | `amd_snp`    | AMD SNP                               | Verifies VCEK-signed SEV-SNP attestation reports     |
 | `ita`        | Intel Trust Authority (`ItaVerifier`) | Cloud-agnostic verification as a service             |
@@ -35,8 +35,7 @@ The `QuoteVerifier` trait is the primary extension point. Implementors are respo
 5. [Concrete Implementations](#5-concrete-implementations)
 6. [Composite Verifier (`composite`)](#6-composite-verifier)
 7. [Collateral Fetcher (`collateral_fetcher`)](#7-collateral-fetcher)
-8. [ZK Verifier (`DcapZkVerifier`)](#8-zk-verifier)
-9. [Deprecated Types](#9-deprecated-types)
+8. [Deprecated Types](#8-deprecated-types)
 
 ---
 
@@ -163,10 +162,6 @@ pub use nvidia_verifier::NvidiaGpuVerifier;
 
 Verifies NVIDIA Hopper GPU Confidential Computing attestation quotes. Validates the RIM certificate chain and the GPU measurement against NVIDIA's attestation service.
 
-### `DcapZkVerifier` (feature: `dcap`)
-
-See section 8.
-
 ### `ItaVerifier` (feature: `ita`)
 
 ```rust
@@ -219,27 +214,6 @@ Security hardening requirements:
 
 ---
 
-## 8. ZK Verifier
-
-Source: [dcap_zk_verifier.rs](file:///home/ub/tmp/openhttpa-rs/crates/openhttpa-attestation/src/dcap_zk_verifier.rs)
-
-### `DcapZkVerifier` (Struct)
-
-Verifies an `AttestQuote` of type `QuoteType::ZkCompressed`. The quote contains a RISC Zero STARK receipt covering a ZK-compressed Intel DCAP verification (ZAA — ZK-Aggregated Attestation). Instead of repeating the full multi-KB DCAP certificate chain verification on-chain or in the server, the ZK proof represents the entire verification succinctly.
-
-```rust
-pub use dcap_zk_verifier::DcapZkVerifier;
-```
-
-The verifier:
-
-1. Deserialises the `AttestQuote.raw` field as a RISC Zero `Receipt`.
-2. Verifies the STARK proof using the known `OPENHTTPA_GUEST_ID` (from `openhttpa-zk`).
-3. Decodes the `ZkOutput` from the receipt journal and checks `is_valid` and `dcap_verified`.
-4. Constructs a `VerificationResult` from the decoded `ZkOutput`.
-
----
-
 ## 9. Deprecated Types
 
 ### `SimpleRevocationProvider`
@@ -287,7 +261,7 @@ A simple in-process `PolicyEngine` implementation.
 pub use verifier::{EatClaims, PolicyEngine, QuoteVerifier, RevocationProvider, VerificationError, VerificationResult};
 
 // Concrete types
-pub use dcap_zk_verifier::DcapZkVerifier;
+
 pub use mock_verifier::MockVerifier;
 pub use nvidia_verifier::NvidiaGpuVerifier;
 pub use policy::SimplePolicy;
@@ -308,7 +282,7 @@ pub use maa_verifier::MaaVerifier;
 ```
 openhttpa-attestation
 ├── openhttpa-proto       (AttestQuote, VerificationResult, EatClaims, AttestError)
-├── openhttpa-zk          (ZkOutput, OPENHTTPA_GUEST_ID — for DcapZkVerifier)
+
 ├── tokio
 ├── dashmap               (SimpleRevocationProvider.revoked_identities)
 └── reqwest (optional)    (MaaVerifier, ItaVerifier, NvidiaRemoteVerifier)

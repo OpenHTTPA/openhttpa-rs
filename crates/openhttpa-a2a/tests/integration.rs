@@ -106,7 +106,7 @@ impl AttestTransport for MockTransport {
                 return Ok(TransportResponse {
                     status: http::StatusCode::OK,
                     headers: resp_hdrs.encode(),
-                    body: axum::body::Body::empty(),
+                    body: openhttpa_transport::connection::empty_body(),
                     trailers: None,
                 });
             }
@@ -156,7 +156,7 @@ impl AttestTransport for MockTransport {
                 return Ok(TransportResponse {
                     status: http::StatusCode::OK,
                     headers: http::HeaderMap::new(),
-                    body: axum::body::Body::from(
+                    body: openhttpa_transport::connection::full_body(
                         serde_json::to_vec(&json!({
                             "ciphertext": hex::encode(data)
                         }))
@@ -169,7 +169,7 @@ impl AttestTransport for MockTransport {
             Ok(TransportResponse {
                 status: http::StatusCode::OK,
                 headers: http::HeaderMap::new(),
-                body: axum::body::Body::empty(),
+                body: openhttpa_transport::connection::empty_body(),
                 trailers: None,
             })
         })
@@ -179,7 +179,7 @@ impl AttestTransport for MockTransport {
 #[tokio::test]
 async fn test_mcp_e2e_flow() {
     let server = OpenHttpaMcpServer::new();
-    server.add_tool(Box::new(MockTool)).await;
+    let _ = server.add_tool(Box::new(MockTool)).await;
 
     let executor = Arc::new(AtHsExecutor::with_config(
         vec![openhttpa_proto::CipherSuite::X25519MlKem768Aes256GcmSha384],

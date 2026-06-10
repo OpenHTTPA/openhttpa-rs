@@ -9,7 +9,7 @@
 //! functions return `Err` to prevent accidental use in production code.
 //! See A2A-STUB-01 in the security findings log.
 
-use crate::types::{A2AHandshakeRequest, A2AHandshakeResponse};
+use crate::types::{A2AHandshakeRequest, A2AHandshakeResponse, PublicKey, PublicKeyAlgorithm};
 
 use openhttpa_crypto::key_exchange::HybridKemPair;
 
@@ -41,7 +41,10 @@ pub fn execute_client_handshake(
     let req = A2AHandshakeRequest {
         client_identity: crate::types::AgentIdentity {
             agent_id,
-            public_key: pub_bytes,
+            public_key: PublicKey {
+                algorithm: PublicKeyAlgorithm::HybridMlKem768X25519,
+                bytes: pub_bytes,
+            },
             attestation_quote: quote,
         },
         client_random,
@@ -65,8 +68,13 @@ pub fn execute_server_handshake(
     req: &A2AHandshakeRequest,
 ) -> Result<(A2AHandshakeResponse, HybridSharedSecret), &'static str> {
     let client_share: openhttpa_crypto::key_exchange::KeyShare =
-        serde_json::from_slice(&req.client_identity.public_key)
+        serde_json::from_slice(&req.client_identity.public_key.bytes)
             .map_err(|_| "Failed to parse client key share")?;
+
+    // INFO-05: Reject handshake requests whose client_random fails entropy check.
+    if !req.has_valid_entropy() {
+        return Err("client_random has insufficient entropy (all bytes identical)");
+    }
 
     let server_pair = HybridKemPair::generate().map_err(|_| "Server key generation failed")?;
 
@@ -87,7 +95,10 @@ pub fn execute_server_handshake(
     let resp = A2AHandshakeResponse {
         server_identity: crate::types::AgentIdentity {
             agent_id,
-            public_key: server_pub_bytes,
+            public_key: PublicKey {
+                algorithm: PublicKeyAlgorithm::HybridMlKem768X25519,
+                bytes: server_pub_bytes,
+            },
             attestation_quote: quote,
         },
         server_random,

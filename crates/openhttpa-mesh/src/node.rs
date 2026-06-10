@@ -89,12 +89,14 @@ impl AgentNode {
 
     /// Register memory fabric tools with the internal MCP server.
     pub async fn register_fabric_tools(&self) {
-        self.mcp_server
+        let _ = self
+            .mcp_server
             .add_tool(Box::new(openhttpa_fabric::mcp_tools::FabricReadTool {
                 store: self.fabric_store.clone(),
             }))
             .await;
-        self.mcp_server
+        let _ = self
+            .mcp_server
             .add_tool(Box::new(openhttpa_fabric::mcp_tools::FabricWriteTool {
                 store: self.fabric_store.clone(),
             }))

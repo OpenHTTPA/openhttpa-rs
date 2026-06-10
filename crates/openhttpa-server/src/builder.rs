@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
-use crate::handlers::ChallengeKey;
-use crate::handlers::{AtHsHandlerState, aths_handler};
-use crate::{AtbRegistry, RateLimitLayer, TrRequestLayer};
-use axum::{Router, routing::any};
+use crate::handlers::{AtHsHandlerState, ChallengeKey, aths_handler};
+use crate::{AtbRegistry, RateLimitLayer};
+use axum::Router;
 use openhttpa_attestation::verifier::QuoteVerifier;
 use openhttpa_core::handshake::AtHsExecutor;
 use openhttpa_crypto::pqc::MlDsaKeyPair;
@@ -13,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub struct OpenHttpaServerBuilder {
-    registry: AtbRegistry,
+    pub registry: AtbRegistry,
     executor: Option<Arc<AtHsExecutor>>,
     tee_provider: Option<Arc<dyn TeeProvider>>,
     verifier: Option<Arc<dyn QuoteVerifier>>,
@@ -21,6 +20,10 @@ pub struct OpenHttpaServerBuilder {
     challenge_key: ChallengeKey,
     identity_key: Option<MlDsaKeyPair>,
     rate_limit: Option<RateLimitLayer>,
+    // ARCH-01: fabric_config only exists when the `fabric` feature is enabled.
+    // Omitting it eliminates the transitive pull of RocksDB, regorus, and
+    // candle-core from deployments that do not need the mesh fabric.
+    #[cfg(feature = "fabric")]
     fabric_config: Option<(
         String,
         Vec<String>,
@@ -47,6 +50,7 @@ impl OpenHttpaServerBuilder {
             challenge_key: ChallengeKey::new([0u8; 32]),
             identity_key: None,
             rate_limit: None,
+            #[cfg(feature = "fabric")]
             fabric_config: None,
         }
     }
@@ -99,6 +103,10 @@ impl OpenHttpaServerBuilder {
         self
     }
 
+    /// Configure the Attested Agentic Mesh Fabric.
+    ///
+    /// Only available when the `fabric` Cargo feature is enabled.
+    #[cfg(feature = "fabric")]
     #[must_use]
     pub fn with_fabric(
         mut self,
@@ -154,7 +162,27 @@ impl OpenHttpaServerBuilder {
         self.tee_provider = Some(provider);
         self
     }
+}
 
+#[derive(Clone)]
+pub struct BuilderState {
+    aths: Arc<AtHsHandlerState>,
+    preflight: Arc<crate::handlers::PreflightHandlerState>,
+}
+
+impl axum::extract::FromRef<BuilderState> for Arc<AtHsHandlerState> {
+    fn from_ref(state: &BuilderState) -> Self {
+        state.aths.clone()
+    }
+}
+
+impl axum::extract::FromRef<BuilderState> for Arc<crate::handlers::PreflightHandlerState> {
+    fn from_ref(state: &BuilderState) -> Self {
+        state.preflight.clone()
+    }
+}
+
+impl OpenHttpaServerBuilder {
     pub fn build(self) -> Router {
         let executor = self
             .executor
@@ -168,14 +196,34 @@ impl OpenHttpaServerBuilder {
                 .unwrap_or_else(|| Arc::new(openhttpa_tee::mock::MockTeeProvider::default())),
             verifier: self.verifier,
             atb_ttl: self.atb_ttl,
-            challenge_key: self.challenge_key,
+            challenge_key: self.challenge_key.clone(),
             identity_key: self.identity_key.map(Arc::new),
         });
 
+        let preflight_state = Arc::new(crate::handlers::PreflightHandlerState {
+            cipher_suites: vec![
+                openhttpa_proto::CipherSuite::X25519MlKem768Aes256GcmSha384,
+                openhttpa_proto::CipherSuite::X25519Aes256GcmSha384,
+            ],
+            versions: vec![
+                openhttpa_proto::ProtocolVersion::V2,
+                openhttpa_proto::ProtocolVersion::V1,
+            ],
+            challenge_key: self.challenge_key,
+            oblivious_supported: false,
+        });
+
+        let builder_state = BuilderState {
+            aths: state,
+            preflight: preflight_state,
+        };
+
         let mut router = Router::new()
-            .route("/attest", any(aths_handler))
-            .with_state(state)
-            .layer(TrRequestLayer::new(self.registry));
+            .route(
+                "/attest",
+                axum::routing::options(crate::handlers::preflight_handler).fallback(aths_handler),
+            )
+            .with_state(builder_state);
 
         if let Some(rl) = self.rate_limit {
             router = router.layer(rl);
@@ -187,8 +235,11 @@ impl OpenHttpaServerBuilder {
     /// Builds the server router and wires up the Attested Agentic Mesh Fabric.
     /// Returns a tuple of `(Router, Arc<openhttpa_mesh::AgentNode>)`.
     ///
+    /// Only available when the `fabric`, `mesh`, and `a2a` Cargo features are all enabled.
+    ///
     /// # Panics
     /// Panics if `fabric_config` or `tee_provider` is not set.
+    #[cfg(all(feature = "fabric", feature = "mesh", feature = "a2a"))]
     pub fn build_fabric(self) -> (Router, Arc<openhttpa_mesh::AgentNode>) {
         let (name, caps, endpoint, _topology) = self
             .fabric_config
@@ -204,6 +255,16 @@ impl OpenHttpaServerBuilder {
         let transport = Arc::new(openhttpa_transport::h2_adapter::H2Transport::new(
             endpoint.parse().unwrap(),
         ));
+        // DES-04: Using permissive policy means every attested request is
+        // automatically approved without an explicit allow/deny decision.
+        // Callers MUST provide a real policy via `with_policy_engine()` before
+        // shipping to production.  The warn log below is intentional and must
+        // not be suppressed in production builds.
+        tracing::warn!(
+            "SECURITY: OpenHTTPA server is using RegoPolicyEngine::permissive() — \
+             all attested requests are approved without an explicit policy. \
+             Call with_policy_engine() before production deployment."
+        );
         let policy_engine = Arc::new(openhttpa_mesh::policy::RegoPolicyEngine::permissive());
         let agent_registry = Arc::new(openhttpa_mesh::registry::MockRegistry::new());
 

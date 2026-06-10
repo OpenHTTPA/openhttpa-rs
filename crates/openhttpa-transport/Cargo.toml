@@ -35,12 +35,13 @@ hkdf = { workspace = true }
 sha2 = { workspace = true }
 rustls         = { workspace = true }
 reqwest        = { workspace = true }
-axum           = { workspace = true }
-
+http-body      = { workspace = true }
+http-body-util = { workspace = true }
 h2          = { workspace = true, optional = true }
 hyper       = { workspace = true, optional = true }
 hyper-util  = { workspace = true, optional = true }
 tower       = { workspace = true, optional = true }
+futures     = { workspace = true }
 
 h3       = { workspace = true, optional = true }
 h3-quinn = { workspace = true, optional = true }

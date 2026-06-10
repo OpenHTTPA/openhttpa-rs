@@ -30,7 +30,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Server stores the PSK associated with the ticket data
     // In a real flow, the 'ticket' field contains encrypted state
-    store.store_psk(ticket.ticket.clone(), psk.to_vec()).await;
+    let stored = store.store_psk(ticket.ticket.clone(), psk.to_vec()).await;
+    assert!(stored, "Failed to store PSK — store may be at capacity");
     println!("Server: Issued ticket for resumption");
 
     // 3. Client side: Reconnect using ticket

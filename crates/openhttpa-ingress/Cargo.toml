@@ -23,6 +23,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 hex = { workspace = true }
 dashmap = { workspace = true }
+config = "0.15.23"
 
 [dev-dependencies]
 reqwest = { workspace = true }

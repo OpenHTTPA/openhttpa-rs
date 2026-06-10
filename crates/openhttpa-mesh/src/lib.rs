@@ -154,14 +154,16 @@ mod tests {
                     return Ok(openhttpa_transport::connection::TransportResponse {
                         status: http::StatusCode::OK,
                         headers: resp_hdrs.encode(),
-                        body: axum::body::Body::empty(),
+                        body: openhttpa_transport::connection::empty_body(),
                         trailers: None,
                     });
                 }
                 Ok(openhttpa_transport::connection::TransportResponse {
                     status: http::StatusCode::OK,
                     headers: http::HeaderMap::new(),
-                    body: axum::body::Body::from("{\"result\": \"success\"}"),
+                    body: openhttpa_transport::connection::full_body(
+                        b"{\"result\": \"success\"}".to_vec(),
+                    ),
                     trailers: None,
                 })
             })

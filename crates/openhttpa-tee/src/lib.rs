@@ -27,6 +27,7 @@
 pub mod collateral;
 pub mod evidence;
 pub mod provider;
+pub mod telemetry;
 
 #[cfg(feature = "aws_nitro")]
 pub mod aws_nitro;

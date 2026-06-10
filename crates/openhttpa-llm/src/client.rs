@@ -224,12 +224,13 @@ impl ConfidentialLlmClient {
                 &session,
                 "POST",
                 &self.inference_path,
-                axum::body::Body::from(body_bytes),
+                openhttpa_transport::connection::full_body(body_bytes),
             )
             .await
             .map_err(|e| LlmError::Transport(e.to_string()))?;
 
         use futures::StreamExt;
+        use http_body_util::BodyExt;
         Ok(stream
             .into_data_stream()
             .map(|chunk_res| {
@@ -378,7 +379,7 @@ impl ConfidentialLlmClientBuilder {
 mod tests {
     use super::*;
     use crate::types::Role;
-    use openhttpa_core::sha2::Digest;
+    use sha2::Digest;
 
     struct DummyTransport {
         sessions: Arc<dashmap::DashMap<String, openhttpa_crypto::hkdf::SessionKeys>>,
@@ -468,16 +469,35 @@ mod tests {
                     return Ok(openhttpa_transport::connection::TransportResponse {
                         status: http::StatusCode::OK,
                         headers: resp_hdrs.encode(),
-                        body: axum::body::Body::empty(),
+                        body: openhttpa_transport::connection::empty_body(),
                         trailers: None,
                     });
                 }
 
-                let base_id_str = req.headers.get("Attest-Base-ID").unwrap().to_str().unwrap();
-                let keys = self.sessions.get(base_id_str).unwrap();
+                let base_id_str = req
+                    .headers
+                    .get("Attest-Base-ID")
+                    .ok_or_else(|| {
+                        openhttpa_transport::connection::SendError::Protocol(
+                            "missing Attest-Base-ID header".into(),
+                        )
+                    })?
+                    .to_str()
+                    .map_err(|e| {
+                        openhttpa_transport::connection::SendError::Protocol(format!(
+                            "invalid Attest-Base-ID header value: {e}"
+                        ))
+                    })?;
+                let keys = self.sessions.get(base_id_str).ok_or_else(|| {
+                    openhttpa_transport::connection::SendError::Protocol(format!(
+                        "no active session for Attest-Base-ID '{base_id_str}'"
+                    ))
+                })?;
 
                 let res_body = ::serde_json::json!({ "id": "chat-123", "object": "chat.completion", "created": 123_456_789, "model": "mock-model", "choices": [{ "index": 0, "message": { "role": "assistant", "content": "Mock reply" } }] });
-                let mut data = serde_json::to_vec(&res_body).unwrap();
+                let mut data = serde_json::to_vec(&res_body).map_err(|e| {
+                    openhttpa_transport::connection::SendError::Protocol(e.to_string())
+                })?;
 
                 let counter = 1u64;
                 let mut nonce_bytes = [0u8; 12];
@@ -486,8 +506,12 @@ mod tests {
                 for (i, b) in count_bytes.iter().enumerate() {
                     nonce_bytes[4 + i] ^= b;
                 }
-                let aead_nonce =
-                    openhttpa_crypto::aead::AeadNonce::from_slice(&nonce_bytes).unwrap();
+                let aead_nonce = openhttpa_crypto::aead::AeadNonce::from_slice(&nonce_bytes)
+                    .map_err(|_| {
+                        openhttpa_transport::connection::SendError::Protocol(
+                            "nonce length invariant violated".into(),
+                        )
+                    })?;
 
                 let mut aad = b"openhttpa:".to_vec();
                 aad.extend_from_slice(base_id_str.as_bytes());
@@ -496,18 +520,27 @@ mod tests {
                     openhttpa_crypto::aead::AeadAlgorithm::Aes256Gcm,
                     &keys.server_write_key,
                 )
-                .unwrap();
+                .map_err(|e| {
+                    openhttpa_transport::connection::SendError::Protocol(format!(
+                        "AEAD key setup failed: {e}"
+                    ))
+                })?;
                 drop(keys);
-                key.seal_in_place(&aead_nonce, &aad, &mut data).unwrap();
+                key.seal_in_place(&aead_nonce, &aad, &mut data)
+                    .map_err(|e| {
+                        openhttpa_transport::connection::SendError::Protocol(format!(
+                            "encryption failed: {e:?}"
+                        ))
+                    })?;
 
                 Ok(openhttpa_transport::connection::TransportResponse {
                     status: http::StatusCode::OK,
                     headers: http::HeaderMap::new(),
-                    body: axum::body::Body::from(
+                    body: openhttpa_transport::connection::full_body(
                         serde_json::to_vec(&::serde_json::json!({
                             "ciphertext": hex::encode(data)
                         }))
-                        .unwrap(),
+                        .unwrap_or_default(),
                     ),
                     trailers: None,
                 })
@@ -523,8 +556,8 @@ mod tests {
             server_random: [u8; 32],
             server_pub: &openhttpa_crypto::key_exchange::KeyShare,
             ct: &[u8],
-        ) -> openhttpa_core::sha2::digest::Output<openhttpa_core::sha2::Sha384> {
-            let mut hasher = openhttpa_core::sha2::Sha384::new();
+        ) -> sha2::digest::Output<sha2::Sha384> {
+            let mut hasher = sha2::Sha384::new();
             hasher.update((client_random.len() as u64).to_be_bytes());
             hasher.update(client_random);
             let mut challenge_fixed = [0u8; 48];

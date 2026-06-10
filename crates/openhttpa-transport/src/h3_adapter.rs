@@ -145,7 +145,7 @@ impl AttestTransport for H3Transport {
             .map_err(|e| SendError::Protocol(format!("h3 send_request failed: {e}")))?;
 
         // Stream body
-        let body_bytes = axum::body::to_bytes(body, 100 * 1024 * 1024) // 100MB limit
+        let body_bytes = crate::connection::to_bytes(body, 100 * 1024 * 1024) // 100MB limit
             .await
             .map_err(|e| SendError::Protocol(format!("failed to collect request body: {e}")))?;
 
@@ -179,7 +179,7 @@ impl AttestTransport for H3Transport {
         Ok(TransportResponse {
             status: parts.status,
             headers: parts.headers,
-            body: axum::body::Body::from(body_acc),
+            body: crate::connection::full_body(body_acc),
             trailers: None, // h3 trailers would be handled via recv_trailers()
         })
     }

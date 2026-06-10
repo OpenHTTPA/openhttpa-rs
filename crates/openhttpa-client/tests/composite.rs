@@ -73,7 +73,7 @@ impl AttestTransport for DummyTransport {
                 return Ok(TransportResponse {
                     status: http::StatusCode::OK,
                     headers: resp_hdrs.encode(),
-                    body: axum::body::Body::empty(),
+                    body: openhttpa_transport::connection::empty_body(),
                     trailers: None,
                 });
             }
@@ -81,7 +81,7 @@ impl AttestTransport for DummyTransport {
             Ok(TransportResponse {
                 status: http::StatusCode::NOT_FOUND,
                 headers: http::HeaderMap::new(),
-                body: axum::body::Body::empty(),
+                body: openhttpa_transport::connection::empty_body(),
                 trailers: None,
             })
         })

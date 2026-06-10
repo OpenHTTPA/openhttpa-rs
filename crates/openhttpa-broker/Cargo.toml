@@ -3,7 +3,10 @@ name = "openhttpa-broker"
 version = "0.1.1"
 edition = "2024"
 publish = false
-description = "TEE-native event-driven ingress controller for OpenHTTPA"
+# ARCH-02: DEPRECATED — this binary is identical to openhttpa-ingress.
+# Use openhttpa-ingress for all new deployments. This crate will be removed
+# in a future release.
+description = "DEPRECATED: use openhttpa-ingress. TEE-native ingress controller for OpenHTTPA"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
@@ -23,6 +26,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 hex = { workspace = true }
 dashmap = { workspace = true }
+config = "0.15.23"
 
 [dev-dependencies]
 reqwest = { workspace = true }

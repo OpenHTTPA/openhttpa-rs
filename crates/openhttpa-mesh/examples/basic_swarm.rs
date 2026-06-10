@@ -13,12 +13,12 @@
 use dashmap::DashMap;
 use openhttpa_attestation::EatClaims;
 use openhttpa_attestation::verifier::{QuoteVerifier, VerificationError, VerificationResult};
-use openhttpa_core::sha2::Digest;
 use openhttpa_mcp::server::McpTool;
 use openhttpa_mesh::{AgentNode, AgentRegistry, RegoPolicyEngine, registry::ShardedRegistry};
 use openhttpa_proto::AttestQuote;
 use openhttpa_tee::mock::MockTeeProvider;
 use serde_json::json;
+use sha2::Digest;
 use std::sync::Arc;
 use tracing::info;
 
@@ -122,7 +122,7 @@ impl openhttpa_transport::connection::AttestTransport for ExampleTransport {
                     zk_proof: None,
                 };
 
-                let mut hasher = openhttpa_core::sha2::Sha384::new();
+                let mut hasher = sha2::Sha384::new();
 
                 // 1. Client Random
                 hasher.update((client_random.len() as u64).to_be_bytes());
@@ -176,7 +176,7 @@ impl openhttpa_transport::connection::AttestTransport for ExampleTransport {
                 return Ok(openhttpa_transport::connection::TransportResponse {
                     status: http::StatusCode::OK,
                     headers: resp_hdrs.encode(),
-                    body: axum::body::Body::empty(),
+                    body: openhttpa_transport::connection::empty_body(),
                     trailers: None,
                 });
             }
@@ -222,7 +222,7 @@ impl openhttpa_transport::connection::AttestTransport for ExampleTransport {
             Ok(openhttpa_transport::connection::TransportResponse {
                 status: http::StatusCode::OK,
                 headers: http::HeaderMap::new(),
-                body: axum::body::Body::from(
+                body: openhttpa_transport::connection::full_body(
                     serde_json::to_vec(&json!({
                         "ciphertext": hex::encode(data)
                     }))
@@ -301,7 +301,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         transport.clone(),
         Arc::new(RegoPolicyEngine::default()),
     );
-    agent_b.mcp_server().add_tool(Box::new(SecureSum)).await;
+    let _ = agent_b.mcp_server().add_tool(Box::new(SecureSum)).await;
     agent_b.start_heartbeat(std::time::Duration::from_secs(10));
     registry.register(agent_b.metadata().clone()).await?;
 

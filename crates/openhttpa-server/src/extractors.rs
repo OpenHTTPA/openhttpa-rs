@@ -12,10 +12,10 @@ use std::str::FromStr;
 use tracing::{debug, error, info};
 
 use openhttpa_core::session::AttestSession;
-use openhttpa_core::sha2::Digest;
 use openhttpa_crypto::aead::{AeadAlgorithm, AeadNonce, BoundAeadKey};
 use openhttpa_headers::HDR_ATTEST_BASE_ID;
 use openhttpa_proto::AtbId;
+use sha2::Digest;
 
 use crate::atb_registry::AtbRegistry;
 
@@ -151,7 +151,7 @@ impl OpenHttpaSession {
                     .map_err(|_| LlmError::Transport("Encryption failed".to_owned()))?;
 
                 // Update cumulative hash
-                let mut hasher = openhttpa_core::sha2::Sha384::new();
+                let mut hasher = sha2::Sha384::new();
                 hasher.update(cumulative_hash);
                 hasher.update(&data);
                 cumulative_hash = hasher.finalize().into();
@@ -471,7 +471,7 @@ where
                     let mut ciphertext = frame.ciphertext;
 
                     // Update hash BEFORE in-place decryption
-                    let mut hasher = openhttpa_core::sha2::Sha384::new();
+                    let mut hasher = sha2::Sha384::new();
                     hasher.update(prev_hash);
                     hasher.update(&ciphertext);
                     let next_hash = hasher.finalize().into();

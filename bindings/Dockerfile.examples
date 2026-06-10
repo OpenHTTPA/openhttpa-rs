@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     make \
     ninja-build \
     nasm \
+    protobuf-compiler \
     golang \
     curl \
     python3 \

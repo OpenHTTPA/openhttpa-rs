@@ -31,8 +31,23 @@ pub enum PolicyAction {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ViolationAction {
+    /// # Future Extension
+    ///
+    /// `RouteToKafka` is reserved for a future violation-routing integration
+    /// with Apache Kafka.  It is **not yet implemented** — at runtime, encountering
+    /// this variant will emit a `tracing::warn!` and fall back to `Log` behaviour
+    /// (INFO-08).
     RouteToKafka(String),
     Log,
+}
+
+/// Errors that can occur during AIQL policy evaluation.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum PolicyError {
+    /// A condition referenced a field name that is not recognised by the
+    /// current context schema (DES-03 — silent `false` is a security hazard).
+    #[error("Unknown field name in AIQL condition: '{0}'")]
+    UnknownField(String),
 }
 
 #[derive(Debug, Clone)]
@@ -43,41 +58,52 @@ pub struct Context {
     pub namespace: String,
 }
 
+/// Resolve a field path against a context.  Returns `Err(PolicyError::UnknownField)`
+/// for unrecognised paths so that typos in policies are surfaced immediately
+/// rather than silently evaluating to `false` (DES-03).
+fn resolve_field<'a>(ctx: &'a Context, field: &str) -> Result<&'a str, PolicyError> {
+    match field {
+        "caller.did" => Ok(&ctx.caller_did),
+        "caller.mrenclave" => Ok(&ctx.caller_mrenclave),
+        "intent" => Ok(&ctx.intent),
+        "namespace" => Ok(&ctx.namespace),
+        other => Err(PolicyError::UnknownField(other.to_owned())),
+    }
+}
+
 impl Condition {
-    pub fn evaluate(&self, ctx: &Context) -> bool {
+    /// Evaluate the condition against the given context.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PolicyError::UnknownField`] if a condition references a field
+    /// name that is not present in `ctx` — this surfaces policy typos immediately
+    /// instead of silently treating them as `false` (DES-03).
+    pub fn evaluate(&self, ctx: &Context) -> Result<bool, PolicyError> {
         match self {
-            Condition::Equals { field, value } => {
-                let actual = match field.as_str() {
-                    "caller.did" => &ctx.caller_did,
-                    "caller.mrenclave" => &ctx.caller_mrenclave,
-                    "intent" => &ctx.intent,
-                    "namespace" => &ctx.namespace,
-                    _ => return false,
-                };
-                actual == value
-            }
+            Condition::Equals { field, value } => Ok(resolve_field(ctx, field)? == value.as_str()),
             Condition::Contains { field, value } => {
-                let actual = match field.as_str() {
-                    "caller.did" => &ctx.caller_did,
-                    "caller.mrenclave" => &ctx.caller_mrenclave,
-                    "intent" => &ctx.intent,
-                    "namespace" => &ctx.namespace,
-                    _ => return false,
-                };
-                actual.contains(value)
+                Ok(resolve_field(ctx, field)?.contains(value.as_str()))
             }
             Condition::NotContains { field, value } => {
-                let actual = match field.as_str() {
-                    "caller.did" => &ctx.caller_did,
-                    "caller.mrenclave" => &ctx.caller_mrenclave,
-                    "intent" => &ctx.intent,
-                    "namespace" => &ctx.namespace,
-                    _ => return false,
-                };
-                !actual.contains(value)
+                Ok(!resolve_field(ctx, field)?.contains(value.as_str()))
             }
-            Condition::And(conds) => conds.iter().all(|c| c.evaluate(ctx)),
-            Condition::Or(conds) => conds.iter().any(|c| c.evaluate(ctx)),
+            Condition::And(conds) => {
+                for c in conds {
+                    if !c.evaluate(ctx)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            Condition::Or(conds) => {
+                for c in conds {
+                    if c.evaluate(ctx)? {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
         }
     }
 }
@@ -113,20 +139,45 @@ impl AiqlEngine {
         self.policies.push(policy);
     }
 
-    pub fn evaluate_payload(&self, ctx: &Context) -> PolicyAction {
+    /// Evaluate all loaded policies against `ctx`.
+    ///
+    /// Policies are evaluated in order; the first `Deny` or `Quarantine`
+    /// match short-circuits.  The final `Allow` match wins over the default.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PolicyError`] if any condition references an unknown field
+    /// name (DES-03).
+    pub fn evaluate_payload(&self, ctx: &Context) -> Result<PolicyAction, PolicyError> {
         let mut final_action = self.config.default_action.clone();
         for policy in &self.policies {
-            if policy.condition.evaluate(ctx) {
+            if policy.condition.evaluate(ctx)? {
                 match policy.action {
-                    PolicyAction::Deny => return PolicyAction::Deny,
-                    PolicyAction::Quarantine => return PolicyAction::Quarantine,
+                    PolicyAction::Deny => return Ok(PolicyAction::Deny),
+                    PolicyAction::Quarantine => return Ok(PolicyAction::Quarantine),
                     PolicyAction::Allow => {
                         final_action = PolicyAction::Allow;
                     }
                 }
+                // Handle violation actions.
+                if let Some(violation) = &policy.on_violation {
+                    match violation {
+                        ViolationAction::Log => {
+                            tracing::info!(policy = %policy.name, "AIQL violation: Log action");
+                        }
+                        ViolationAction::RouteToKafka(topic) => {
+                            // INFO-08: RouteToKafka is a future extension — not yet implemented.
+                            tracing::warn!(
+                                policy = %policy.name,
+                                topic = %topic,
+                                "AIQL violation: RouteToKafka not yet implemented, falling back to Log"
+                            );
+                        }
+                    }
+                }
             }
         }
-        final_action
+        Ok(final_action)
     }
 }
 

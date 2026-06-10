@@ -341,6 +341,18 @@ impl AtHsExecutor {
             .copied()
             .ok_or(HandshakeError::NoCipherSuiteOverlap)?;
 
+        // INFO-01: Warn when a deprecated (legacy) cipher suite is negotiated.
+        // `P256Aes256GcmSha256` has a symmetric/asymmetric security-level mismatch
+        // (128-bit classical vs 256-bit AES) and should not be used in new sessions.
+        if suite.is_legacy() {
+            tracing::warn!(
+                suite = %suite,
+                "Deprecated cipher suite negotiated — this suite (P-256 / AES-256-GCM) has a \
+                 128-bit / 256-bit security-level mismatch. Upgrade to X25519_AES256GCM_SHA384 \
+                 or a hybrid PQC suite."
+            );
+        }
+
         // Negotiate version.
         let version = req
             .client_versions

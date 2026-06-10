@@ -48,7 +48,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         > {
             let server = Arc::clone(&self.server);
             Box::pin(async move {
-                let body_bytes = axum::body::to_bytes(req.body, usize::MAX).await.unwrap();
+                let body_bytes = openhttpa_transport::connection::to_bytes(req.body, usize::MAX)
+                    .await
+                    .unwrap();
                 println!(
                     "Relay: Forwarding {} bytes of encrypted payload",
                     body_bytes.len()
@@ -79,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(TransportResponse {
                     status: http::StatusCode::OK,
                     headers: http::HeaderMap::new(),
-                    body: axum::body::Body::from(enc_resp),
+                    body: openhttpa_transport::connection::full_body(enc_resp),
                     trailers: None,
                 })
             })
@@ -98,14 +100,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         method: http::Method::POST,
         uri: "http://tee-server/api/data".parse()?,
         headers: http::HeaderMap::new(),
-        body: axum::body::Body::from("Secret client data"),
+        body: openhttpa_transport::connection::full_body("Secret client data"),
         trailers: None,
     };
 
     println!("Client: Sending oblivious request...");
     let resp = client.send(req).await?;
 
-    let resp_bytes = axum::body::to_bytes(resp.body, usize::MAX).await?;
+    let resp_bytes = openhttpa_transport::connection::to_bytes(resp.body, usize::MAX).await?;
     println!(
         "Client: Received decrypted response: {}",
         String::from_utf8_lossy(&resp_bytes)

@@ -1,0 +1,25 @@
+[package]
+name = "openhttpa-integration"
+version.workspace = true
+edition.workspace = true
+publish = false
+license.workspace = true
+[dev-dependencies]
+openhttpa-core = { workspace = true }
+openhttpa-server = { workspace = true }
+openhttpa-client = { workspace = true }
+openhttpa-proto = { workspace = true }
+openhttpa-transport = { workspace = true }
+openhttpa-crypto = { workspace = true }
+openhttpa-tee = { workspace = true }
+openhttpa-attestation = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+axum = { workspace = true }
+hyper = { workspace = true, features = ["full"] }
+http-body-util = "0.1"
+bytes = { workspace = true }
+openhttpa-headers = { path = "../../crates/openhttpa-headers" }
+serde_json = "1.0"
+hex = "0.4"

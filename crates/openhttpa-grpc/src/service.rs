@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
-//! Manual tonic service implementation for `OpenHTTPA`.
+//! Tonic service implementation for `OpenHTTPA`.
 //!
-//! Because `tonic-build 0.14` no longer ships `configure()/compile_protos()`,
-//! we define the service trait and its server wrapper manually here, using the
-//! prost-derived message types defined in `lib.rs`.
+//! Message types are generated from `proto/openhttpa.proto` by `prost-build`
+//! (see `build.rs` — DES-01).  The service trait and server wrapper are defined
+//! manually here using `tonic-build`'s `manual` service API, which is the
+//! recommended approach since tonic-build v0.14 no longer auto-generates
+//! server/client stubs via `compile_protos`.
 
 use std::sync::Arc;
 
@@ -17,7 +19,7 @@ use openhttpa_proto::{CipherSuite, ProtocolVersion};
 
 use crate::{AtHsRequest, AtHsResponse, TrustedRequest, TrustedResponse};
 
-// ─── Service trait (replaces generated server trait) ─────────────────────────
+// ─── Service trait (tonic-build manual service API) ──────────────────────────
 
 /// The gRPC service trait. Implemented by [`AttestHandshakeService`].
 #[tonic::async_trait]
@@ -113,8 +115,8 @@ impl OpenHttpaService for AttestHandshakeService {
 
         Ok(Response::new(AtHsResponse {
             cipher_suite: suite.to_string(),
-            random: ::prost::bytes::Bytes::from(vec![0u8; 32]),
-            key_share: ::prost::bytes::Bytes::from(server_share_bytes),
+            random: vec![0u8; 32],
+            key_share: server_share_bytes,
             base_id: result.atb_id.to_string(),
             version: ver.to_string(),
             expires_secs: 3600,
@@ -167,15 +169,15 @@ mod tests {
         let svc = AttestHandshakeService::new(make_executor());
 
         let req = Request::new(AtHsRequest {
-            key_share: prost::bytes::Bytes::from(make_valid_key_share_bytes()),
-            random: prost::bytes::Bytes::from(vec![0u8; 32]),
+            key_share: make_valid_key_share_bytes(),
+            random: vec![0u8; 32],
             cipher_suites: vec!["X25519_ML_KEM768_AES256GCM_SHA384".to_owned()],
             versions: vec!["openhttpa".to_owned()],
             date: "2026-01-01T00:00:00Z".to_owned(),
             base_creation: "new".to_owned(),
             client_quote: None,
             // Only 32 bytes — must be rejected
-            challenge: prost::bytes::Bytes::from(vec![0u8; 32]),
+            challenge: vec![0u8; 32],
         });
 
         let result = svc.attest_handshake(req).await;
@@ -190,14 +192,14 @@ mod tests {
         let svc = AttestHandshakeService::new(make_executor());
 
         let req = Request::new(AtHsRequest {
-            key_share: prost::bytes::Bytes::from(make_valid_key_share_bytes()),
-            random: prost::bytes::Bytes::from(vec![0u8; 32]),
+            key_share: make_valid_key_share_bytes(),
+            random: vec![0u8; 32],
             cipher_suites: vec!["X25519_ML_KEM768_AES256GCM_SHA384".to_owned()],
             versions: vec!["openhttpa".to_owned()],
             date: "2026-01-01T00:00:00Z".to_owned(),
             base_creation: "new".to_owned(),
             client_quote: None,
-            challenge: prost::bytes::Bytes::new(),
+            challenge: vec![],
         });
 
         let result = svc.attest_handshake(req).await;
@@ -210,14 +212,14 @@ mod tests {
         let svc = AttestHandshakeService::new(make_executor());
 
         let req = Request::new(AtHsRequest {
-            key_share: prost::bytes::Bytes::from(b"not-valid-json".to_vec()),
-            random: prost::bytes::Bytes::from(vec![0u8; 32]),
+            key_share: b"not-valid-json".to_vec(),
+            random: vec![0u8; 32],
             cipher_suites: vec!["X25519_ML_KEM768_AES256GCM_SHA384".to_owned()],
             versions: vec!["openhttpa".to_owned()],
             date: "2026-01-01T00:00:00Z".to_owned(),
             base_creation: "new".to_owned(),
             client_quote: None,
-            challenge: prost::bytes::Bytes::from(vec![0xabu8; 48]),
+            challenge: vec![0xabu8; 48],
         });
 
         let result = svc.attest_handshake(req).await;
@@ -230,14 +232,14 @@ mod tests {
         let svc = AttestHandshakeService::new(make_executor());
 
         let req = Request::new(AtHsRequest {
-            key_share: prost::bytes::Bytes::from(make_valid_key_share_bytes()),
-            random: prost::bytes::Bytes::from(vec![0x42u8; 32]),
+            key_share: make_valid_key_share_bytes(),
+            random: vec![0x42u8; 32],
             cipher_suites: vec![TEST_CIPHER_SUITE.to_owned()],
             versions: vec![TEST_VERSION.to_owned()],
             date: TEST_DATE.to_owned(),
             base_creation: TEST_CREATION.to_owned(),
             client_quote: None,
-            challenge: prost::bytes::Bytes::from(vec![0xbcu8; 48]),
+            challenge: vec![0xbcu8; 48],
         });
 
         let result = svc.attest_handshake(req).await;
@@ -253,8 +255,8 @@ mod tests {
 
         let req = Request::new(TrustedRequest {
             base_id: TEST_BASE_ID.to_owned(),
-            ciphertext: prost::bytes::Bytes::new(),
-            nonce: prost::bytes::Bytes::new(),
+            ciphertext: vec![],
+            nonce: vec![],
             termination: TEST_TERMINATION_KEEP.to_owned(),
         });
 
@@ -267,8 +269,8 @@ mod tests {
     fn grpc_attest_quote_fields() {
         let quote = crate::GrpcAttestQuote {
             quote_type: TEST_QUOTE_TYPE.to_owned(),
-            raw: prost::bytes::Bytes::from_static(b"rawquote"),
-            qudd: prost::bytes::Bytes::from_static(b"qudddata"),
+            raw: b"rawquote".to_vec(),
+            qudd: b"qudddata".to_vec(),
         };
         assert_eq!(quote.quote_type, TEST_QUOTE_TYPE);
         assert_eq!(&quote.raw[..], b"rawquote");
@@ -278,16 +280,16 @@ mod tests {
     fn trusted_request_and_response_fields() {
         let req = TrustedRequest {
             base_id: TEST_BASE_ID_2.to_owned(),
-            ciphertext: prost::bytes::Bytes::from_static(b"ct"),
-            nonce: prost::bytes::Bytes::from_static(b"nc"),
+            ciphertext: b"ct".to_vec(),
+            nonce: b"nc".to_vec(),
             termination: TEST_TERMINATION_DESTROY.to_owned(),
         };
         assert_eq!(req.base_id, TEST_BASE_ID_2);
         assert_eq!(req.termination, TEST_TERMINATION_DESTROY);
 
         let resp = TrustedResponse {
-            ciphertext: prost::bytes::Bytes::from_static(b"resp_ct"),
-            nonce: prost::bytes::Bytes::from_static(b"resp_nc"),
+            ciphertext: b"resp_ct".to_vec(),
+            nonce: b"resp_nc".to_vec(),
         };
         assert_eq!(&resp.ciphertext[..], b"resp_ct");
     }

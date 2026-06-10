@@ -5,7 +5,7 @@
 
 use openhttpa_proto::{AttestQuote, QuoteType};
 
-use crate::verifier::{EatClaims, QuoteVerifier, VerificationError, VerificationResult};
+use crate::verifier::{QuoteVerifier, VerificationError, VerificationResult};
 
 /// Verifies TPM 2.0 PCR quotes signed by an Attestation Identity Key (AIK).
 #[derive(Default)]
@@ -17,7 +17,7 @@ impl QuoteVerifier for TpmVerifier {
     fn verify<'a>(
         &'a self,
         quote: &'a AttestQuote,
-        report_data: &'a [u8; 64],
+        _report_data: &'a [u8; 64],
     ) -> std::pin::Pin<
         Box<
             dyn std::future::Future<Output = Result<VerificationResult, VerificationError>>
@@ -44,23 +44,29 @@ impl QuoteVerifier for TpmVerifier {
                 ));
             };
 
-            // 2. Verify signature on the PCR quote using the AIK public key
-            // 3. Verify that the quote user data (nonce) matches report_data
-            if quote.qudd.as_ref() != report_data {
-                return Err(VerificationError::SignatureInvalid);
-            }
-
-            // 4. Return claims extracted from the TPM quote
-            Ok(VerificationResult {
-                claims: EatClaims {
-                    hwmodel: Some("TPM 2.0".to_owned()),
-                    hwversion: Some("v1.0".to_owned()), // would extract actual version
-                    oemid: Some("Infineon/ST/etc".to_owned()),
-                    ..Default::default()
-                },
-                tcb_status: "UpToDate".to_owned(),
-                ..Default::default()
-            })
+            // 2. Verify signature on the PCR quote using the AIK public key.
+            //
+            // SEC-04: AIK signature cryptographic verification is NOT yet
+            // implemented.  The previous code silently skipped this step and
+            // accepted any quote whose QUDD matched the report_data nonce,
+            // effectively making the entire signature check a no-op.
+            //
+            // Failing closed here (returning an explicit error) is far safer
+            // than silently accepting unverified quotes.  The AIK X.509 cert
+            // is fetched above; when the real verification is implemented it
+            // should:
+            //   a) Parse the AIK cert (DER/PEM) and extract the public key.
+            //   b) Verify the cert chain against a trusted TPM CA.
+            //   c) Verify the TPM2B_ATTEST structure's signature over the
+            //      quoted PCR digest using the AIK public key.
+            //
+            // TODO: Implement using `aws-lc-rs` or `p256`/`rsa` crates.
+            Err(VerificationError::PolicyViolation(
+                "TpmVerifier: AIK cryptographic signature verification is not yet \
+                 implemented.  This verifier rejects all TPM 2.0 quotes until the \
+                 implementation is complete.  Do not use TpmVerifier in production."
+                    .to_owned(),
+            ))
         })
     }
 }

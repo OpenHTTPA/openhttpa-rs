@@ -47,6 +47,7 @@ The `OpenHTTPA` project is built with a "Zero-Warning" policy and undergoes cont
 - **Secrecy**: All payload data is AEAD-encrypted with hardware-rooted keys.
 - **Integrity**: Message-level authentication prevents modification by any party, including the host OS.
 - **Authenticity**: Every session is bound to a TEE attestation quote, proving the identity and integrity of the remote enclave.
+- **ZK Prover Isolation**: The zero-knowledge proof generation (`risc0-zkvm`) has been decoupled from `openhttpa-attestation` into `openhttpa-zk`, significantly reducing the attestation verifier's dependency footprint and attack surface (See [ADR-003](docs/adr/ADR-003-transport-zk-isolation.md)).
 
 ### CI/CD Runner Provenance (CI-03)
 

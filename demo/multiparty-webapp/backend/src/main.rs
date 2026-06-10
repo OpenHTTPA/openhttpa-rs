@@ -593,7 +593,14 @@ async fn simulate_swarm(State(_state): State<AppState>) -> impl IntoResponse {
                     return Ok(openhttpa_transport::connection::TransportResponse {
                         status: http::StatusCode::OK,
                         headers: resp_hdrs.encode(),
-                        body: axum::body::Body::empty(),
+                        body: openhttpa_transport::connection::empty_body(),
+                        trailers: None,
+                    });
+                } else if req.uri.path() == "/submit" {
+                    return Ok(openhttpa_transport::connection::TransportResponse {
+                        status: http::StatusCode::OK,
+                        headers: http::HeaderMap::new(),
+                        body: openhttpa_transport::connection::full_body("{\"status\":\"ok\"}"),
                         trailers: None,
                     });
                 }
@@ -601,7 +608,7 @@ async fn simulate_swarm(State(_state): State<AppState>) -> impl IntoResponse {
                 Ok(openhttpa_transport::connection::TransportResponse {
                     status: http::StatusCode::OK,
                     headers: http::HeaderMap::new(),
-                    body: axum::body::Body::from("{\"status\": \"ok\"}"),
+                    body: openhttpa_transport::connection::full_body("{\"status\": \"ok\"}"),
                     trailers: None,
                 })
             })
@@ -1093,12 +1100,12 @@ async fn main() {
     }
 
     // Register tools asynchronously
-    demo_state.mcp_server.add_tool(Box::new(SecureSum)).await;
-    demo_state
+    let _ = demo_state.mcp_server.add_tool(Box::new(SecureSum)).await;
+    let _ = demo_state
         .mcp_server
         .add_tool(Box::new(SecureAverage))
         .await;
-    demo_state
+    let _ = demo_state
         .mcp_server
         .add_tool(Box::new(SecureVariance))
         .await;
@@ -1460,7 +1467,7 @@ mod tests {
         // SAFETY: single-threaded test context.
         unsafe { std::env::set_var("OPENHTTPA_ALLOW_MOCK_HARDWARE", "1") };
         let state = AppState(Arc::new(DemoState::default()));
-        state.mcp_server.add_tool(Box::new(SecureSum)).await;
+        let _ = state.mcp_server.add_tool(Box::new(SecureSum)).await;
 
         let app = Router::new()
             .route("/api/mcp", post(mcp_handle))

@@ -9,10 +9,14 @@ use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use thiserror::Error;
 
+pub mod dcap_zk_verifier;
 pub mod prover;
 pub mod verifier;
 
+pub use dcap_zk_verifier::DcapZkVerifier;
 pub use prover::{OPENHTTPA_GUEST_ELF, OPENHTTPA_GUEST_ID};
+pub use prover::{Receipt as ZkReceipt, ZkProver};
+pub use verifier::ZkVerifier;
 
 /// Mode of the ZK operation.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -113,12 +117,40 @@ pub struct ZkConfig {
     pub compression_enabled: bool,
 }
 
+// clippy::derivable_impls: the manual impl preserves the SEC-08 comment
+// explaining why `use_mock_prover` MUST NOT derive a `false` default silently.
+#[allow(clippy::derivable_impls)]
 impl Default for ZkConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            use_mock_prover: cfg!(debug_assertions),
+            // SEC-08: Default to real proving even in debug builds.  Staging
+            // environments that silently use the mock prover can never catch
+            // guest-program bugs and may ship "verified" receipts that no
+            // honest verifier would accept.  Call `ZkConfig::with_mock_prover()`
+            // to explicitly opt in during tests.
+            use_mock_prover: false,
             compression_enabled: false,
+        }
+    }
+}
+
+impl ZkConfig {
+    /// Enable the mock (executor-only) prover for unit tests.
+    ///
+    /// # Availability
+    /// Only compiled when the `testing` feature is enabled **or** in
+    /// `#[cfg(test)]` contexts.  Calling this in a release binary requires
+    /// explicitly enabling the `testing` feature, making the intent clear.
+    ///
+    /// # Panics
+    /// Panics in production builds (no `test` cfg, no `testing` feature) to
+    /// prevent accidental mock-prover usage.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn with_mock_prover() -> Self {
+        Self {
+            use_mock_prover: true,
+            ..Self::default()
         }
     }
 }
@@ -144,8 +176,11 @@ mod tests {
         let config = ZkConfig::default();
         assert!(!config.enabled);
         assert!(!config.compression_enabled);
-        // use_mock_prover is determined by cfg!(debug_assertions)
-        assert_eq!(config.use_mock_prover, cfg!(debug_assertions));
+        // SEC-08: mock prover must be explicitly opted-in, never the default.
+        assert!(
+            !config.use_mock_prover,
+            "use_mock_prover must default to false"
+        );
     }
 
     #[test]

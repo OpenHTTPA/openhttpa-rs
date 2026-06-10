@@ -14,6 +14,8 @@ default = []
 zk = ["dep:risc0-zkvm", "dep:risc0-build"]
 # Mock prover for testing
 mock = []
+# Enables test helpers (e.g., with_mock_prover constructor on ZkConfig)
+testing = []
 # Hardware acceleration (requires zk)
 cuda = ["zk", "risc0-zkvm/cuda"]
 metal = ["zk", "risc0-zkvm/metal"]
@@ -21,6 +23,7 @@ metal = ["zk", "risc0-zkvm/metal"]
 [dependencies]
 openhttpa-proto = { workspace = true }
 openhttpa-crypto = { workspace = true }
+
 risc0-zkvm = { version = "3.0.5", default-features = false, features = ["prove"], optional = true }
 serde = { workspace = true }
 tracing = { workspace = true }
@@ -29,6 +32,8 @@ bytes = { workspace = true }
 serde-big-array = "0.5"
 serde_json = { workspace = true }
 postcard = { workspace = true }
+bincode = "1.3"
+hex = "0.4"
 
 [build-dependencies]
 risc0-build = { version = "3.0.5", default-features = false, optional = true }

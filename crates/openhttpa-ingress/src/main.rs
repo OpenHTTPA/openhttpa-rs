@@ -20,13 +20,51 @@ use tracing_subscriber::prelude::*;
 mod router;
 use router::IngressRouter;
 
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+pub struct IngressConfig {
+    pub bind_addr: SocketAddr,
+    pub event_broker_url: String,
+    #[serde(default)]
+    pub allow_mock_tee: bool,
+    #[serde(default = "default_log_level")]
+    pub log_level: String,
+}
+
+fn default_log_level() -> String {
+    "info".to_string()
+}
+
+impl IngressConfig {
+    pub fn load() -> Result<Self, config::ConfigError> {
+        config::Config::builder()
+            .set_default("bind_addr", "0.0.0.0:8443")?
+            .set_default("event_broker_url", "127.0.0.1:9092")?
+            .set_default("allow_mock_tee", false)?
+            .set_default("log_level", "info")?
+            .add_source(config::Environment::with_prefix("OPENHTTPA_INGRESS"))
+            .add_source(config::File::with_name("config/ingress").required(false))
+            .build()?
+            .try_deserialize()
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config = IngressConfig::load()?;
+
     tracing_subscriber::registry()
         .with(fmt::layer())
         .with(
             EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
+                .with_default_directive(
+                    config
+                        .log_level
+                        .parse::<LevelFilter>()
+                        .unwrap_or(LevelFilter::INFO)
+                        .into(),
+                )
                 .from_env_lossy(),
         )
         .init();
@@ -34,7 +72,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Starting TEE-native OpenHTTPA Ingress Controller...");
 
     // 1. Detect Hardware TEE (TDX, SGX, etc.)
-    let tee_config = TeeConfig::default();
+    let tee_config = TeeConfig {
+        allow_mock: config.allow_mock_tee,
+        ..Default::default()
+    };
     let provider: Arc<dyn TeeProvider> = match detect_best_provider(&tee_config) {
         Ok(p) => {
             info!("Found TEE Provider: {:?}", p.quote_type());
@@ -58,12 +99,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let registry = Arc::new(AtbRegistry::with_capacity(10_000));
 
     // 3. Initialize Event Bus / Routing Engine
-    let broker_url =
-        std::env::var("EVENT_BROKER_URL").unwrap_or_else(|_| "127.0.0.1:9092".to_string());
-    let ingress_router = Arc::new(IngressRouter::new(&broker_url).await?);
+    let ingress_router = Arc::new(IngressRouter::new(&config.event_broker_url).await?);
 
     // 4. Start HTTP Server inside the Enclave
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8443));
+    let addr = config.bind_addr;
     let listener = TcpListener::bind(addr).await?;
     info!("Listening for OpenHTTPA connections natively on {}", addr);
 

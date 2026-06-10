@@ -27,5 +27,6 @@ pub mod state;
 pub use handshake::{AtHsExecutor, AtHsResult};
 pub use replay_guard::ReplayGuard;
 pub use session::{AttestSession, ReplayStrategy, SessionState};
-pub use sha2;
+// INFO-03: `pub use sha2` removed — it leaked a transitive dep into the public
+// API surface, coupling downstream crates to a specific sha2 version.
 pub use state::{ProtocolPhase, TransitionError};

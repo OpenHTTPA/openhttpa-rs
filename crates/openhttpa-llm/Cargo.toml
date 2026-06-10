@@ -14,8 +14,10 @@ keywords.workspace = true
 
 [dependencies]
 openhttpa-proto        = { workspace = true }
-openhttpa-crypto       = { workspace = true }
-openhttpa-client       = { workspace = true }
+openhttpa-crypto = { workspace = true }
+openhttpa-client = { workspace = true }
+openhttpa-transport = { workspace = true }
+http-body-util = { workspace = true }
 openhttpa-core         = { workspace = true }
 openhttpa-tee          = { workspace = true }
 openhttpa-zk           = { workspace = true }

@@ -3,6 +3,7 @@
 
 //! HTTP transport adapter using reqwest.
 
+use futures::stream::StreamExt;
 use tracing::debug;
 
 use crate::connection::{AttestTransport, SendError, TransportRequest, TransportResponse};
@@ -48,11 +49,16 @@ impl AttestTransport for ReqwestTransport {
                 request.method, request.uri
             );
 
+            let body_stream = http_body_util::BodyStream::new(request.body).map(|res| {
+                res.map(|frame| frame.into_data().unwrap_or_default())
+                    .map_err(|e| std::io::Error::other(e.to_string()))
+            });
+
             let mut req_builder = self
                 .client
                 .request(request.method, request.uri.to_string())
                 .headers(request.headers)
-                .body(reqwest::Body::wrap_stream(request.body.into_data_stream()));
+                .body(reqwest::Body::wrap_stream(body_stream));
 
             if let Some(trailers) = request.trailers {
                 for (name, value) in trailers {
@@ -69,7 +75,13 @@ impl AttestTransport for ReqwestTransport {
 
             let status = resp.status();
             let headers = resp.headers().clone();
-            let body = axum::body::Body::from_stream(resp.bytes_stream());
+
+            let resp_stream = resp.bytes_stream().map(|res| {
+                res.map(http_body::Frame::data)
+                    .map_err(|e| std::io::Error::other(e.to_string()))
+            });
+
+            let body = http_body_util::BodyExt::boxed(http_body_util::StreamBody::new(resp_stream));
 
             Ok(TransportResponse {
                 status,
@@ -93,7 +105,7 @@ mod tests {
             method: http::Method::POST,
             uri: "http://invalid-domain.test".parse().unwrap(),
             headers: http::HeaderMap::new(),
-            body: axum::body::Body::empty(),
+            body: crate::connection::empty_body(),
             trailers: None,
         };
 

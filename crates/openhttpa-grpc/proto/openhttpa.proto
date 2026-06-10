@@ -11,7 +11,7 @@ package openhttpa;
 // ─── AtHS (Attest Handshake) ─────────────────────────────────────────────────
 
 message AtHsRequest {
-  // Serialised client key share (JSON: {ecdhe_public, mlkem_public})
+  // Serialised client key share (JSON: {`ecdhe_public`, `mlkem_public`})
   bytes  key_share          = 1;
   // 32-byte random nonce
   bytes  random             = 2;
@@ -21,10 +21,12 @@ message AtHsRequest {
   repeated string versions  = 4;
   // RFC 3339 UTC timestamp
   string date               = 5;
-  // Requested AtB creation mode: "new" | "reuse" | "shared"
+  // Requested `AtB` creation mode: "new" | "reuse" | "shared"
   string base_creation      = 6;
   // Client TEE attestation quote (optional, for mHTTPA)
   AttestQuote client_quote  = 7;
+  // 48-byte challenge nonce for transcript binding (GRPC-AUTH-01)
+  bytes        challenge     = 8;
 }
 
 message AtHsResponse {
@@ -32,13 +34,13 @@ message AtHsResponse {
   string         cipher_suite  = 1;
   // 32-byte server random
   bytes          random        = 2;
-  // Server key share (JSON: {ecdhe_public, mlkem_ciphertext})
+  // Server key share (JSON: {`ecdhe_public`, `mlkem_ciphertext`})
   bytes          key_share     = 3;
-  // Allocated AtB identifier (UUID)
+  // Allocated `AtB` identifier (UUID)
   string         base_id       = 4;
   // Selected HTTPA version
   string         version       = 5;
-  // AtB TTL in seconds
+  // `AtB` TTL in seconds
   uint64         expires_secs  = 6;
   // Server TEE attestation quotes
   repeated AttestQuote quotes  = 7;
@@ -47,7 +49,7 @@ message AtHsResponse {
 // ─── Trusted Request (TrR) ───────────────────────────────────────────────────
 
 message TrustedRequest {
-  // AtB identifier
+  // `AtB` identifier
   string base_id          = 1;
   // AEAD-encrypted request payload
   bytes  ciphertext       = 2;
@@ -67,7 +69,7 @@ message TrustedResponse {
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
 message AttestQuote {
-  // "sgx" | "tdx" | "sev_snp" | "trustzone" | "mock"
+  // "sgx" | "tdx" | "`sev_snp`" | "trustzone" | "mock"
   string quote_type = 1;
   bytes  raw        = 2;
   bytes  qudd       = 3;

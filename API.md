@@ -99,7 +99,7 @@ Optional, high-privacy extension using Zero-Knowledge proofs to wrap TEE attesta
 
 - **Classical**: X25519 or P-384
 - **Post-Quantum**: ML-KEM-768 or ML-KEM-1024 (FIPS 203)
-- **Signatures**: ML-DSA-65 or higher (FIPS 204) for post-quantum identity.
+- **Signatures**: ML-DSA-65 or higher (FIPS 204) for post-quantum identity. (See [ADR-002](docs/adr/ADR-002-mldsa-fips-conflict.md) regarding FIPS migration status).
 
 ### AEAD
 
@@ -322,3 +322,10 @@ The `Attest-Provenance` header maintains an immutable log of the delegation path
 ## 9. ZAA Compression & Optimization
 
 To reduce the bandwidth overhead of large hardware attestation quotes (e.g. AMD SEV-SNP or composite quotes), `OpenHTTPA` supports optional ZAA (Zstandard Attestation Archival) compression over the attestation payload. This drastically reduces the size of the `Attest-Quotes` header during the Preflight and Handshake phases.
+
+## 10. Architecture Notes (Implementation)
+
+While `OpenHTTPA` defines the wire protocol, the `openhttpa-rs` reference implementation incorporates specific architectural isolation strategies:
+
+- **Transport Abstraction**: Core protocol parsing and client libraries (`openhttpa-client`, `openhttpa-transport`) utilize `http-body-util` and avoid heavy framework coupling (like `axum`). See [ADR-003](docs/adr/ADR-003-transport-zk-isolation.md).
+- **ZK Prover Isolation**: High-assurance succinct proof generation (ZAA) using `risc0` is isolated into `openhttpa-zk`, decoupling the heavy zero-knowledge compilation environment from the core `openhttpa-attestation` verifier logic. See [ADR-003](docs/adr/ADR-003-transport-zk-isolation.md).

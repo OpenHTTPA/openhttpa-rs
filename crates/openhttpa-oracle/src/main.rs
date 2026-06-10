@@ -52,11 +52,49 @@ impl FromRef<AppState> for Arc<AtHsHandlerState> {
     }
 }
 
+use serde::Deserialize;
+use std::net::SocketAddr;
+
+#[derive(Debug, Deserialize)]
+pub struct OracleConfig {
+    pub bind_addr: SocketAddr,
+    #[serde(default)]
+    pub allow_mock_tee: bool,
+    #[serde(default = "default_log_level")]
+    pub log_level: String,
+    #[serde(default = "default_atb_ttl")]
+    pub atb_ttl_secs: u64,
+}
+
+fn default_log_level() -> String {
+    "info".to_string()
+}
+
+fn default_atb_ttl() -> u64 {
+    3600
+}
+
+impl OracleConfig {
+    pub fn load() -> Result<Self, config::ConfigError> {
+        config::Config::builder()
+            .set_default("bind_addr", "127.0.0.1:3002")?
+            .set_default("allow_mock_tee", true)?
+            .set_default("log_level", "info")?
+            .set_default("atb_ttl_secs", 3600)?
+            .add_source(config::Environment::with_prefix("OPENHTTPA_ORACLE"))
+            .add_source(config::File::with_name("config/oracle").required(false))
+            .build()?
+            .try_deserialize()
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = OracleConfig::load()?;
+
     // 1. Initialize Tracing
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::INFO)
+        .with_max_level(config.log_level.parse::<Level>().unwrap_or(Level::INFO))
         .finish();
     tracing::subscriber::set_global_default(subscriber)?;
 
@@ -64,7 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 2. Initialize TEE Provider (Auto-detect with fallback to Mock)
     let tee_config = TeeConfig {
-        allow_mock: true,
+        allow_mock: config.allow_mock_tee,
         ..Default::default()
     };
     let tee_provider = detect_best_provider(&tee_config)?;
@@ -84,7 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         registry: registry.clone(),
         tee_provider: tee_provider.clone(),
         verifier: Some(Arc::new(MockVerifier::default())),
-        atb_ttl: Duration::from_secs(3600),
+        atb_ttl: Duration::from_secs(config.atb_ttl_secs),
         challenge_key: random_challenge_key().into(),
         identity_key: None,
     });
@@ -103,7 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(state);
 
     // 5. Start Server
-    let addr = "127.0.0.1:3002";
+    let addr = config.bind_addr;
     let listener = TcpListener::bind(addr).await?;
     info!("Oracle Node listening on {}", addr);
 

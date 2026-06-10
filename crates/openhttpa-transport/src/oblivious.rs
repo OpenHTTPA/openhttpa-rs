@@ -162,7 +162,7 @@ impl AttestTransport for ObliviousClient {
                 body,
                 trailers,
             } = req;
-            let body_bytes = axum::body::to_bytes(body, 100 * 1024 * 1024)
+            let body_bytes = crate::connection::to_bytes(body, 100 * 1024 * 1024)
                 .await
                 .map_err(|e| SendError::Protocol(format!("body collect error: {e}")))?;
             let enc_payload = aes_encrypt(&req_key, &body_bytes)
@@ -190,13 +190,13 @@ impl AttestTransport for ObliviousClient {
                     method,
                     uri,
                     headers,
-                    body: axum::body::Body::from(enc_body),
+                    body: crate::connection::full_body(enc_body),
                     trailers,
                 })
                 .await?;
 
             // 6. Decrypt the response.
-            let resp_body = axum::body::to_bytes(resp.body, 100 * 1024 * 1024)
+            let resp_body = crate::connection::to_bytes(resp.body, 100 * 1024 * 1024)
                 .await
                 .map_err(|e| SendError::Protocol(format!("resp body collect error: {e}")))?;
             let plaintext = aes_decrypt(&resp_key, &resp_body)
@@ -205,7 +205,7 @@ impl AttestTransport for ObliviousClient {
             Ok(TransportResponse {
                 status: resp.status,
                 headers: resp.headers,
-                body: axum::body::Body::from(plaintext),
+                body: crate::connection::full_body(plaintext),
                 trailers: resp.trailers,
             })
         })
@@ -317,7 +317,9 @@ mod tests {
         > {
             let server = Arc::clone(&self.server);
             Box::pin(async move {
-                let body_bytes = axum::body::to_bytes(req.body, 1024 * 1024).await.unwrap();
+                let body_bytes = crate::connection::to_bytes(req.body, 1024 * 1024)
+                    .await
+                    .unwrap();
                 let (plaintext, resp_key) = server
                     .decapsulate(&body_bytes)
                     .expect("server decapsulate failed");
@@ -330,7 +332,7 @@ mod tests {
                 Ok(TransportResponse {
                     status: StatusCode::OK,
                     headers: http::HeaderMap::default(),
-                    body: axum::body::Body::from(resp_bytes),
+                    body: crate::connection::full_body(resp_bytes),
                     trailers: None,
                 })
             })
@@ -416,14 +418,16 @@ mod tests {
             method: Method::POST,
             uri: "http://example.com/".parse().unwrap(),
             headers: http::HeaderMap::default(),
-            body: axum::body::Body::from("hello server"),
+            body: crate::connection::full_body("hello server"),
             trailers: None,
         };
 
         let resp = client.send(req).await.expect("client.send failed");
         assert_eq!(resp.status, StatusCode::OK);
 
-        let resp_body = axum::body::to_bytes(resp.body, 1024 * 1024).await.unwrap();
+        let resp_body = crate::connection::to_bytes(resp.body, 1024 * 1024)
+            .await
+            .unwrap();
         assert_eq!(resp_body.as_ref(), b"hello client");
     }
 
@@ -454,7 +458,7 @@ mod tests {
             method: Method::POST,
             uri: "http://example.com/".parse().unwrap(),
             headers: http::HeaderMap::default(),
-            body: axum::body::Body::from("ignored"),
+            body: crate::connection::full_body("ignored"),
             trailers: None,
         };
 

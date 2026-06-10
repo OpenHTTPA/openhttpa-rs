@@ -8,6 +8,20 @@ use std::io::Write as _;
 use std::path::PathBuf;
 
 /// A file-backed wrapper around `ReplayGuard` for persistent anti-replay protection.
+///
+/// # Storage characteristics (REL-04)
+///
+/// The on-disk footprint is **fixed and bounded**: the JSON state file stores
+/// exactly `W` `u64` words (a sliding bitmask) plus one `u64` for `highest`,
+/// giving a maximum on-disk size of roughly `(W + 1) * 20` bytes for the JSON
+/// representation.  The file is rewritten atomically on every [`check`] call.
+///
+/// The in-memory `ReplayGuard<W>` uses `O(W)` space regardless of the number of
+/// nonces processed — it does **not** accumulate history.  Callers should choose
+/// `W` so that `W * 64` covers the maximum expected nonce skew within the replay
+/// window.
+///
+/// [`check`]: FileReplayGuard::check
 pub struct FileReplayGuard<const W: usize = 64> {
     guard: ReplayGuard<W>,
     path: PathBuf,

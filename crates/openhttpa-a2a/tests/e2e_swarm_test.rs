@@ -69,9 +69,12 @@ async fn test_e2e_swarm_sdmf_and_aiql() {
         namespace: "core".to_string(),
     };
 
-    assert_eq!(aiql.evaluate_payload(&valid_ctx), PolicyAction::Allow);
     assert_eq!(
-        aiql.evaluate_payload(&invalid_ctx),
+        aiql.evaluate_payload(&valid_ctx).unwrap(),
+        PolicyAction::Allow
+    );
+    assert_eq!(
+        aiql.evaluate_payload(&invalid_ctx).unwrap(),
         PolicyAction::Quarantine
     );
 
@@ -160,17 +163,17 @@ async fn test_e2e_swarm_sdmf_and_aiql() {
     };
 
     assert_eq!(
-        aiql.evaluate_payload(&admin_ctx),
+        aiql.evaluate_payload(&admin_ctx).unwrap(),
         PolicyAction::Allow,
         "Valid nested AND condition failed"
     );
     assert_eq!(
-        aiql.evaluate_payload(&public_ctx),
+        aiql.evaluate_payload(&public_ctx).unwrap(),
         PolicyAction::Allow,
         "Valid OR branch failed"
     );
     assert_eq!(
-        aiql.evaluate_payload(&malicious_admin_ctx),
+        aiql.evaluate_payload(&malicious_admin_ctx).unwrap(),
         PolicyAction::Quarantine,
         "Malicious context bypassed strict MRENCLAVE check"
     );

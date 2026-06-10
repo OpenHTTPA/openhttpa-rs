@@ -188,7 +188,7 @@ impl OpenHttpaClient {
             .await?;
 
         if !response.status.is_success() {
-            let err_body = axum::body::to_bytes(response.body, 4096)
+            let err_body = openhttpa_transport::connection::to_bytes(response.body, 4096)
                 .await
                 .unwrap_or_default();
             return Err(ClientError::Handshake(format!(
@@ -214,7 +214,7 @@ impl OpenHttpaClient {
 
         // 5. Compute transcript hash (M-01).
         // Must match AtHsExecutor::execute_server: canonical length-prefixed fields.
-        let mut hasher = openhttpa_core::sha2::Sha384::new();
+        let mut hasher = sha2::Sha384::new();
 
         // 1. Client Random
         hasher.update((client_random.len() as u64).to_be_bytes());
@@ -326,11 +326,18 @@ impl OpenHttpaClient {
             .as_ref()
             .ok_or_else(|| ClientError::Transport("No transport".to_string()))?;
 
+        let uri = format!(
+            "{}/attest",
+            self.server_uri.to_string().trim_end_matches('/')
+        )
+        .parse()
+        .unwrap();
+
         let req = TransportRequest {
             method: http::Method::OPTIONS,
-            uri: self.server_uri.clone(),
+            uri,
             headers: http::HeaderMap::new(),
-            body: axum::body::Body::empty(),
+            body: openhttpa_transport::connection::empty_body(),
             trailers: None,
         };
 
@@ -346,7 +353,7 @@ impl OpenHttpaClient {
             )));
         }
 
-        let _resp_bytes = axum::body::to_bytes(resp.body, 1024 * 1024)
+        let _resp_bytes = openhttpa_transport::connection::to_bytes(resp.body, 1024 * 1024)
             .await
             .map_err(|e| ClientError::Handshake(format!("preflight body error: {e}")))?;
 
@@ -363,7 +370,7 @@ impl OpenHttpaClient {
         client_share: &ClientKeyShare,
         challenge: Option<&[u8]>,
     ) -> Result<Vec<openhttpa_proto::AttestQuote>, ClientError> {
-        let mut hasher = openhttpa_core::sha2::Sha384::new();
+        let mut hasher = sha2::Sha384::new();
 
         // 1. Client Random
         hasher.update((client_random.len() as u64).to_be_bytes());
@@ -433,11 +440,18 @@ impl OpenHttpaClient {
             .as_ref()
             .ok_or_else(|| ClientError::Transport("No transport".to_string()))?;
 
+        let uri = format!(
+            "{}/attest",
+            self.server_uri.to_string().trim_end_matches('/')
+        )
+        .parse()
+        .unwrap();
+
         let req = openhttpa_transport::connection::TransportRequest {
             method: http::Method::from_bytes(b"ATTEST").unwrap(),
-            uri: self.server_uri.clone(),
+            uri,
             headers: req_headers.encode(),
-            body: axum::body::Body::empty(),
+            body: openhttpa_transport::connection::empty_body(),
             trailers: None,
         };
 
@@ -521,8 +535,8 @@ impl OpenHttpaClient {
         session: &AttestSession,
         method: &str,
         path: &str,
-        body_stream: axum::body::Body,
-    ) -> Result<axum::body::Body, ClientError> {
+        body_stream: openhttpa_transport::connection::TransportBody,
+    ) -> Result<openhttpa_transport::connection::TransportBody, ClientError> {
         if !session.is_alive() {
             return Err(ClientError::NotAttested);
         }
@@ -567,6 +581,7 @@ impl OpenHttpaClient {
 
         // 2. Wrap body stream in encryption
         use futures::StreamExt;
+        use http_body_util::BodyExt;
         let session = session.clone();
         let current_aad = aad.clone();
 
@@ -593,8 +608,10 @@ impl OpenHttpaClient {
                     for (i, b) in count_bytes.iter().enumerate() {
                         nonce_bytes[4 + i] ^= b;
                     }
-                    let aead_nonce =
-                        openhttpa_crypto::aead::AeadNonce::from_slice(&nonce_bytes).unwrap();
+                    let aead_nonce = openhttpa_crypto::aead::AeadNonce::from_slice(&nonce_bytes)
+                        .map_err(|_| {
+                            ClientError::Handshake("nonce length invariant violated".to_owned())
+                        })?;
 
                     let key = openhttpa_crypto::aead::AeadKey::new(
                         openhttpa_crypto::aead::AeadAlgorithm::Aes256Gcm,
@@ -638,10 +655,12 @@ impl OpenHttpaClient {
         );
 
         let req = TransportRequest {
-            method: http::Method::from_bytes(method.as_bytes()).unwrap(),
+            method: http::Method::from_bytes(method.as_bytes()).map_err(|e| {
+                ClientError::Transport(format!("invalid HTTP method '{method}': {e}"))
+            })?,
             uri: full_uri,
             headers,
-            body: axum::body::Body::from_stream(encrypted_stream),
+            body: openhttpa_transport::connection::full_body_from_stream(encrypted_stream),
             trailers: None,
         };
 
@@ -678,7 +697,9 @@ impl OpenHttpaClient {
                     for (i, b) in count_bytes.iter().enumerate() {
                         nonce_bytes[4 + i] ^= b;
                     }
-                    let aead_nonce = AeadNonce::from_slice(&nonce_bytes).unwrap();
+                    let aead_nonce = AeadNonce::from_slice(&nonce_bytes).map_err(|_| {
+                        ClientError::Handshake("nonce length invariant violated".to_owned())
+                    })?;
 
                     let key = openhttpa_crypto::aead::AeadKey::new(
                         AeadAlgorithm::Aes256Gcm,
@@ -717,7 +738,9 @@ impl OpenHttpaClient {
             },
         );
 
-        Ok(axum::body::Body::from_stream(decrypted_stream))
+        Ok(openhttpa_transport::connection::full_body_from_stream(
+            decrypted_stream,
+        ))
     }
 
     /// Send a trusted request on an attested session with optional extra headers.
@@ -780,14 +803,16 @@ impl OpenHttpaClient {
         );
 
         let req = TransportRequest {
-            method: http::Method::from_bytes(method.as_bytes()).unwrap(),
+            method: http::Method::from_bytes(method.as_bytes()).map_err(|e| {
+                ClientError::Transport(format!("invalid HTTP method '{method}': {e}"))
+            })?,
             uri: full_uri,
             headers,
-            body: axum::body::Body::from(
+            body: openhttpa_transport::connection::full_body(
                 serde_json::to_vec(&serde_json::json!({
                     "ciphertext": hex::encode(encrypted_body)
                 }))
-                .unwrap(),
+                .map_err(|e| ClientError::Transport(e.to_string()))?,
             ),
             trailers: None,
         };
@@ -805,9 +830,10 @@ impl OpenHttpaClient {
         }
 
         // 3. Unseal response body (bounded by max_response_size to prevent DoS).
-        let resp_bytes = axum::body::to_bytes(resp.body, self.max_response_size)
-            .await
-            .map_err(|e| ClientError::Transport(e.to_string()))?;
+        let resp_bytes =
+            openhttpa_transport::connection::to_bytes(resp.body, self.max_response_size)
+                .await
+                .map_err(|e| ClientError::Transport(e.to_string()))?;
 
         Self::unseal_response_body(session, &resp_bytes, &aad)
     }
@@ -874,13 +900,17 @@ impl OpenHttpaClient {
                 for (i, b) in count_bytes.iter().enumerate() {
                     nonce_bytes[4 + i] ^= b;
                 }
-                let _aead_nonce =
-                    openhttpa_crypto::aead::AeadNonce::from_slice(&nonce_bytes).unwrap();
+                let _aead_nonce = openhttpa_crypto::aead::AeadNonce::from_slice(&nonce_bytes)
+                    .map_err(|_| {
+                        ClientError::Handshake("nonce length invariant violated".to_owned())
+                    })?;
 
                 let bound_key = openhttpa_crypto::aead::BoundAeadKey::new(
                     openhttpa_crypto::aead::AeadAlgorithm::Aes256Gcm,
                     &keys.client_write_key,
-                    keys.client_write_iv.clone().try_into().unwrap(),
+                    keys.client_write_iv.clone().try_into().map_err(|_| {
+                        ClientError::Handshake("client_write_iv has wrong length".to_owned())
+                    })?,
                 )
                 .map_err(|e| ClientError::Handshake(format!("Key setup failed: {e}")))?;
 
@@ -892,10 +922,13 @@ impl OpenHttpaClient {
                 let mut hdrs = extra_headers.map_or_else(http::HeaderMap::new, Clone::clone);
                 hdrs.insert(
                     &*HDR_ATTEST_BASE_ID,
-                    http::HeaderValue::from_str(&base_id.to_string()).unwrap(),
+                    http::HeaderValue::from_str(&base_id.to_string()).map_err(|e| {
+                        ClientError::Handshake(format!("invalid base-id header value: {e}"))
+                    })?,
                 );
 
-                let mut hmac = HmacSha384::new_from_slice(&keys.client_mac_key).unwrap();
+                let mut hmac = HmacSha384::new_from_slice(&keys.client_mac_key)
+                    .map_err(|e| ClientError::Handshake(format!("HMAC key setup failed: {e}")))?;
                 hmac.update(&counter.to_be_bytes());
                 // SEC-01: pass query so that parameter manipulation is detected.
                 openhttpa_headers::update_ahl(method, path, query, authority, &hdrs, |chunk| {
@@ -967,7 +1000,7 @@ struct StreamFrameReader<S> {
 
 impl<S> StreamFrameReader<S>
 where
-    S: futures::Stream<Item = Result<bytes::Bytes, axum::Error>> + Unpin,
+    S: futures::Stream<Item = Result<bytes::Bytes, std::io::Error>> + Unpin,
 {
     fn new(stream: S) -> Self {
         Self {
@@ -1045,7 +1078,7 @@ mod tests {
                     return Ok(openhttpa_transport::connection::TransportResponse {
                         status: http::StatusCode::OK,
                         headers: resp_hdrs.encode(),
-                        body: axum::body::Body::empty(),
+                        body: openhttpa_transport::connection::empty_body(),
                         trailers: None,
                     });
                 }
@@ -1091,7 +1124,7 @@ mod tests {
                 Ok(openhttpa_transport::connection::TransportResponse {
                     status: http::StatusCode::OK,
                     headers: resp_hdrs.encode(),
-                    body: axum::body::Body::empty(),
+                    body: openhttpa_transport::connection::empty_body(),
                     trailers: None,
                 })
             })

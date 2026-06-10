@@ -24,6 +24,7 @@ members = [
     "bindings/nodejs",
     "bindings/python",
     "bindings/wasm",
+    "tests/integration",
     "demo/multiparty-webapp/backend",
     "demo/multiparty-webapp/healthcheck",
     "demo/cli",
@@ -57,7 +58,9 @@ default-members = [
     "crates/openhttpa-a2a",
     "crates/openhttpa-zk",
     "crates/openhttpa-ingress",
-    "crates/openhttpa-broker",
+    # ARCH-02: openhttpa-broker is deprecated (identical to openhttpa-ingress).
+    # Removed from default-members so `cargo build --workspace` uses ingress.
+    # Still in workspace `members` above for backwards-compat CI builds.
     "bindings/c",
     "bindings/nodejs",
     "demo/multiparty-webapp/backend",
@@ -109,6 +112,8 @@ hpke             = "0.13"
 
 # ── HTTP / network ─────────────────────────────────────────────────────────────
 http             = "1"
+http-body        = "1"
+http-body-util   = "0.1"
 hyper            = { version = "1", features = ["http1", "http2", "client", "server"] }
 hyper-util       = { version = "0.1", features = ["tokio", "client", "server"] }
 h2               = "0.4"
@@ -123,7 +128,9 @@ redis            = { version = "1.2", features = ["tokio-comp", "connection-mana
 
 # ── gRPC ───────────────────────────────────────────────────────────────────────
 tonic            = { version = "0.14", features = ["tls-aws-lc"] }
+tonic-build      = "0.14"
 prost            = "0.14"
+prost-build      = "0.13"
 
 # ── TLS / certs ────────────────────────────────────────────────────────────────
 hmac             = "0.13"
