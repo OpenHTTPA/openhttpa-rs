@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-inter: var(--font-inter);
+  --font-outfit: var(--font-outfit);
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-slate-800/60 backdrop-blur-md border border-white/10 rounded-2xl shadow-xl transition-transform duration-300;
+  }
+  .glass-panel:hover {
+    @apply -translate-y-1;
+  }
+}
+
+body {
+  background: radial-gradient(circle at top right, #1e1b4b, #0f172a);
+}

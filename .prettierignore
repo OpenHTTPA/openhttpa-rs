@@ -66,3 +66,4 @@ docs/ietf/*.html
 docs/ietf/*.xml
 
 
+crates/openhttpa-contract/cache/solidity-files-cache.json

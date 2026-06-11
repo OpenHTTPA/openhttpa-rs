@@ -1184,6 +1184,17 @@ pub struct VerificationResult {
     pub secondary: Vec<Self>,
 }
 
+/// Describes the detected security posture of the client after handshake negotiation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ClientSecurityPosture {
+    /// Client provided a genuine hardware TEE quote (Mutual Attestation).
+    MutualTee(TeeClass),
+    /// Client provided a Mock/Simulated quote for testing/demo.
+    SimulatedTee,
+    /// Client provided no quote, operating in a non-TEE environment (One-directional from Server).
+    OneDirectional,
+}
+
 impl VerificationResult {
     /// Enforce that production environments do not accept debug builds.
     ///

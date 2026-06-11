@@ -107,7 +107,8 @@ verify-all: verify-core check-bindings verify-examples ci ## Exhaustive formal v
 	trap '$(MAKE) demo-down' EXIT; \
 	$(MAKE) demo-up; \
 	$(MAKE) test-bindings-run; \
-	$(MAKE) verify-demo-run
+	$(MAKE) verify-demo-run; \
+	$(MAKE) agent-e2e
 	@echo "--- ALL FORMAL VALIDATION AND VERIFICATION COMPLETED SUCCESSFULLY ---"
 	@echo "The OpenHTTPA project stack is verified for production readiness."
 
@@ -459,6 +460,33 @@ demo-native-up: native-build ## Launch the native module demo stack
 .PHONY: demo-native-down
 demo-native-down: ## Stop the native module demo stack
 	cd demo/native-modules && docker-compose down
+
+## -- Agent Demo --
+
+.PHONY: agent-down
+agent-down: ## Stop all agent services and clean up ports
+	@echo "Stopping agent services..."
+	@-fuser -k -15 3000/tcp 2>/dev/null || true
+	@-fuser -k -15 8081/tcp 2>/dev/null || true
+	@-killall -15 openhttpa-agent-server 2>/dev/null || true
+	@echo "Agent services stopped."
+
+.PHONY: agent-server
+agent-server: ## Run the OpenHTTPA Agent Server locally
+	@trap '$(MAKE) agent-down' EXIT INT TERM; \
+	cargo run -p openhttpa-agent-server; RET=$$?; \
+	if [ $$RET -eq 130 ] || [ $$RET -eq 143 ] || [ $$RET -eq 137 ]; then exit 0; else exit $$RET; fi
+
+.PHONY: agent-webapp
+agent-webapp: ## Run the Next.js Agent WebApp UI locally
+	@trap '$(MAKE) -C $(CURDIR) agent-down' EXIT INT TERM; \
+	cd demo/agent-webapp && npm install && npm run dev; RET=$$?; \
+	if [ $$RET -eq 130 ] || [ $$RET -eq 143 ] || [ $$RET -eq 137 ]; then exit 0; else exit $$RET; fi
+
+.PHONY: agent-e2e
+agent-e2e: ## Run the autonomous Playwright E2E suite for the Agent WebApp
+	@trap '$(MAKE) -C $(CURDIR) agent-down' EXIT INT TERM; \
+	cd demo/agent-webapp && npm install && npm run test:e2e
 
 ## -- Agentic Mesh --
 

@@ -1,0 +1,32 @@
+[package]
+name = "openhttpa-agent-server"
+version = "0.1.1"
+edition = "2024"
+publish = false
+license.workspace = true
+
+[dependencies]
+axum = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+redis = { workspace = true }
+openhttpa-core = { workspace = true }
+openhttpa-proto = { workspace = true }
+openhttpa-crypto = { workspace = true }
+openhttpa-tee = { workspace = true }
+openhttpa-a2a = { workspace = true }
+openhttpa-zk = { workspace = true }
+openhttpa-identity-chain = { workspace = true }
+openhttpa-mcp = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+async-graphql = "7.2.1"
+async-graphql-axum = "7.2.1"
+futures = { workspace = true }
+async-trait = "0.1"
+openhttpa-aiql = { workspace = true }
+openhttpa-llm = { workspace = true }
+uuid = { version = "1.8.0", features = ["v4"] }
+sha2 = { workspace = true }
+base64ct = { workspace = true }

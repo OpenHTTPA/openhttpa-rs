@@ -147,6 +147,7 @@ skip = [
     # ── Group C: candle-core / zip ────────────────────────────────────────────
     # candle-core 0.10 uses zip 7.x, while risc0 3.x uses zip 2.x
     { name = "zip",                version = "2.4.2"  },
+    { name = "yaml-rust2",         version = "0.10.4" },
 ]
 wildcards = "allow"
 deny = [

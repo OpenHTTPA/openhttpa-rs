@@ -38,7 +38,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use openhttpa_crypto::hkdf::SessionKeys;
-use openhttpa_proto::{AtbId, CipherSuite, ProtocolVersion, VerificationResult};
+use openhttpa_proto::{
+    AtbId, CipherSuite, ClientSecurityPosture, ProtocolVersion, TeeClass, VerificationResult,
+};
 use thiserror::Error;
 
 use crate::{
@@ -147,6 +149,22 @@ pub struct SessionState {
     pub attestation_result: Option<VerificationResult>,
 }
 
+impl SessionState {
+    /// Evaluates the client's security posture from this session state snapshot.
+    #[must_use]
+    #[allow(clippy::option_if_let_else)]
+    pub const fn client_posture(&self) -> ClientSecurityPosture {
+        match &self.attestation_result {
+            Some(res) => match res.claims.tee_class {
+                Some(TeeClass::Mock) => ClientSecurityPosture::SimulatedTee,
+                Some(cls) => ClientSecurityPosture::MutualTee(cls),
+                None => ClientSecurityPosture::MutualTee(TeeClass::Unknown),
+            },
+            None => ClientSecurityPosture::OneDirectional,
+        }
+    }
+}
+
 /// A fully serialisable snapshot of a session, including secrets and replay state.
 #[derive(Serialize, Deserialize)]
 pub struct DurableSessionState {
@@ -235,6 +253,24 @@ impl AttestSession {
             expires_at,
             attestation_result,
         }
+    }
+
+    /// Evaluates the client's security posture based on the provided attestation quote (if any).
+    ///
+    /// # Panics
+    /// Panics if the session mutex is poisoned.
+    #[must_use]
+    pub fn client_posture(&self) -> ClientSecurityPosture {
+        let g = self.inner.lock().unwrap();
+        g.attestation_result
+            .as_ref()
+            .map_or(ClientSecurityPosture::OneDirectional, |res| {
+                match res.claims.tee_class {
+                    Some(TeeClass::Mock) => ClientSecurityPosture::SimulatedTee,
+                    Some(cls) => ClientSecurityPosture::MutualTee(cls),
+                    None => ClientSecurityPosture::MutualTee(TeeClass::Unknown),
+                }
+            })
     }
 
     /// Returns `true` if the session has not yet expired.
@@ -689,5 +725,84 @@ mod tests {
         let debug_str = format!("{sealed:?}");
         assert!(debug_str.contains("[REDACTED]"));
         assert!(!debug_str.contains("master_secret: [")); // Should not contain raw bytes
+    }
+
+    #[test]
+    fn test_client_posture_one_directional() {
+        let sess = AttestSession::new(
+            AtbId::new(),
+            CipherSuite::X25519MlKem768Aes256GcmSha384,
+            ProtocolVersion::V2,
+            dummy_keys(),
+            Instant::now() + std::time::Duration::from_secs(3600),
+            ReplayStrategy::default(),
+            None,
+        );
+        assert_eq!(
+            sess.client_posture(),
+            openhttpa_proto::ClientSecurityPosture::OneDirectional
+        );
+        assert_eq!(
+            sess.state().client_posture(),
+            openhttpa_proto::ClientSecurityPosture::OneDirectional
+        );
+    }
+
+    #[test]
+    fn test_client_posture_simulated_tee() {
+        let claims = openhttpa_proto::EatClaims {
+            tee_class: Some(openhttpa_proto::TeeClass::Mock),
+            ..Default::default()
+        };
+        let result = openhttpa_proto::VerificationResult {
+            claims,
+            ..Default::default()
+        };
+        let sess = AttestSession::new(
+            AtbId::new(),
+            CipherSuite::X25519MlKem768Aes256GcmSha384,
+            ProtocolVersion::V2,
+            dummy_keys(),
+            Instant::now() + std::time::Duration::from_secs(3600),
+            ReplayStrategy::default(),
+            Some(result),
+        );
+        assert_eq!(
+            sess.client_posture(),
+            openhttpa_proto::ClientSecurityPosture::SimulatedTee
+        );
+        assert_eq!(
+            sess.state().client_posture(),
+            openhttpa_proto::ClientSecurityPosture::SimulatedTee
+        );
+    }
+
+    #[test]
+    fn test_client_posture_mutual_tee() {
+        let claims = openhttpa_proto::EatClaims {
+            tee_class: Some(openhttpa_proto::TeeClass::IntelTdx),
+            ..Default::default()
+        };
+        let result = openhttpa_proto::VerificationResult {
+            claims,
+            ..Default::default()
+        };
+        let sess = AttestSession::new(
+            AtbId::new(),
+            CipherSuite::X25519MlKem768Aes256GcmSha384,
+            ProtocolVersion::V2,
+            dummy_keys(),
+            Instant::now() + std::time::Duration::from_secs(3600),
+            ReplayStrategy::default(),
+            Some(result),
+        );
+        assert_eq!(
+            sess.client_posture(),
+            openhttpa_proto::ClientSecurityPosture::MutualTee(openhttpa_proto::TeeClass::IntelTdx)
+        );
+        assert_eq!(
+            sess.state().client_posture(),
+            openhttpa_proto::ClientSecurityPosture::MutualTee(openhttpa_proto::TeeClass::IntelTdx)
+        );
     }
 }

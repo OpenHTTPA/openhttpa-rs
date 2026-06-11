@@ -7,10 +7,13 @@ import { defineConfig, devices } from '@playwright/test';
 // /health to the Axum backend on port 8080.
 // All tests use a single base URL so there are no cross-origin issues.
 const BASE_URL = process.env.BASE_URL ?? 'http://127.0.0.1:3001';
+const isMultiparty = BASE_URL.includes('frontend') || BASE_URL.includes('3001');
 
 export default defineConfig({
   testDir: './tests/web',
+  testIgnore: isMultiparty ? /agent_webapp\.spec\.ts/ : undefined,
   timeout: 90_000,
+
   retries: 1,
   fullyParallel: false,
   workers: 1,
