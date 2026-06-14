@@ -27,6 +27,7 @@
 //!     atb_ttl:      Duration::from_secs(3600),
 //!     challenge_key: [0u8; 32].into(),
 //!     identity_key: None,
+//!     hpke_key: None,
 //! });
 //!
 //! let app: Router = Router::new()
@@ -120,6 +121,8 @@ pub struct AtHsHandlerState {
     pub challenge_key: ChallengeKey,
     /// Optional ML-DSA identity key for PQC signatures.
     pub identity_key: Option<Arc<openhttpa_crypto::pqc::MlDsaKeyPair>>,
+    /// Optional ML-KEM key pair for decapsulating Encrypted Client Hello.
+    pub hpke_key: Option<Arc<openhttpa_crypto::pqc::MlKemPair>>,
 }
 
 impl AtHsHandlerState {
@@ -170,6 +173,8 @@ impl AtHsHandlerState {
 /// The `AtHS` Axum handler function.
 ///
 /// Mount at `ATTEST /attest` (or any path) on the Axum router.
+/// State parameter is not fully parsed by `FromRequest` to avoid unnecessary copies.
+#[allow(clippy::too_many_lines)]
 #[instrument(skip_all, name = "handler.aths")]
 pub async fn aths_handler(
     State(state): State<Arc<AtHsHandlerState>>,
@@ -182,6 +187,67 @@ pub async fn aths_handler(
             return (StatusCode::BAD_REQUEST, format!("bad AtHS headers: {e}")).into_response();
         }
     };
+
+    // 1.5 Process Encrypted Client Hello if present
+    let mut is_cover_traffic = false;
+    if let Some(ref eh_payload) = req_headers.encrypted_hello {
+        if let Some(hpke_key) = state.hpke_key.as_ref() {
+            // ML-KEM-768 ciphertext is 1088 bytes. Tag is 16 bytes.
+            if eh_payload.len() < 1088 + 16 {
+                return (StatusCode::BAD_REQUEST, "Encrypted hello payload too short")
+                    .into_response();
+            }
+            let (mlkem_ct, rest) = eh_payload.split_at(1088);
+            let payload_ct = &rest[..rest.len() - 16];
+            let tag = &rest[rest.len() - 16..];
+
+            match openhttpa_crypto::hpke::HpkeServer::open(hpke_key, mlkem_ct, payload_ct, tag) {
+                Ok(decrypted) => {
+                    if let Ok(payload) =
+                        serde_json::from_slice::<openhttpa_proto::EncryptedHelloPayload>(&decrypted)
+                    {
+                        is_cover_traffic = payload.is_cover_traffic;
+                        // In a full implementation, `payload.inner_headers` would be merged into `req_headers`.
+                    }
+                }
+                Err(_) => {
+                    return (StatusCode::BAD_REQUEST, "Failed to decrypt Encrypted Hello")
+                        .into_response();
+                }
+            }
+        } else {
+            return (
+                StatusCode::BAD_REQUEST,
+                "Encrypted Hello not supported by this server",
+            )
+                .into_response();
+        }
+    }
+
+    if is_cover_traffic {
+        // Constant-time cover traffic response
+        let dummy_resp = AtHsResponseHeaders {
+            cipher_suite: CipherSuite::X25519MlKem768Aes256GcmSha384,
+            random: vec![0u8; 32],
+            key_share_json: vec![0u8; 256], // Dummy size
+            base_id: openhttpa_proto::AtbId::new(),
+            version: ProtocolVersion::V2,
+            expires_secs: 0,
+            quotes: vec![],
+            secrets: vec![],
+            cargo: None,
+            ticket_resumption: None,
+            server_signatures: vec![],
+            #[cfg(feature = "zk")]
+            zk_proof: None,
+            #[cfg(not(feature = "zk"))]
+            zk_proof: None,
+        };
+        let header_map = dummy_resp.encode();
+        let mut response = (StatusCode::OK, Body::empty()).into_response();
+        response.headers_mut().extend(header_map);
+        return response;
+    }
 
     // 2. Deserialise the client key share from JSON.
     let client_share: ClientKeyShare = match serde_json::from_slice(&req_headers.key_shares_json) {
@@ -490,5 +556,64 @@ mod tests {
             result.is_ok(),
             "challenge within window rejected: {result:?}"
         );
+    }
+
+    // ── Encrypted Hello handling ─────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_encrypted_hello_cover_traffic() {
+        use openhttpa_crypto::pqc::MlKemPair;
+
+        let hpke_key = Arc::new(MlKemPair::generate().unwrap());
+        let state = Arc::new(AtHsHandlerState {
+            executor: Arc::new(openhttpa_core::handshake::AtHsExecutor::new(vec![], vec![])),
+            registry: crate::atb_registry::AtbRegistry::new(),
+            tee_provider: Arc::new(openhttpa_tee::mock::MockTeeProvider::default()),
+            verifier: None,
+            atb_ttl: std::time::Duration::from_secs(3600),
+            challenge_key: [0u8; 32].into(),
+            identity_key: None,
+            hpke_key: Some(hpke_key.clone()),
+        });
+
+        // Construct encrypted hello payload for cover traffic
+        let payload = openhttpa_proto::EncryptedHelloPayload {
+            inner_headers: vec![],
+            is_cover_traffic: true,
+        };
+        let payload_bytes = serde_json::to_vec(&payload).unwrap();
+        let hpke_ct =
+            openhttpa_crypto::hpke::HpkeClient::seal(hpke_key.public_encap_key(), &payload_bytes)
+                .unwrap();
+        let mut eh = hpke_ct.mlkem_ct;
+        eh.extend_from_slice(&hpke_ct.payload_ct);
+        eh.extend_from_slice(&hpke_ct.tag);
+
+        // Dummy standard request headers (will be ignored because of cover traffic)
+        let req_hdrs = openhttpa_headers::attest_headers::AtHsRequestHeaders {
+            cipher_suites: vec![openhttpa_proto::CipherSuite::X25519MlKem768Aes256GcmSha384],
+            random: vec![0u8; 32],
+            versions: vec![openhttpa_proto::ProtocolVersion::V2],
+            key_shares_json: b"{}".to_vec(),
+            date: "2026-04-27T00:00:00Z".to_owned(),
+            base_creation: openhttpa_proto::AtbCreation::New,
+            direct_attestation: true,
+            allow_untrusted_requests: true,
+            client_quotes: vec![],
+            challenge: Some(vec![0u8; 48]),
+            signatures: vec![],
+            ticket: None,
+            provenance: None,
+            encrypted_hello: Some(eh),
+        };
+
+        let mut req = axum::extract::Request::builder()
+            .uri("/attest")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        *req.headers_mut() = req_hdrs.encode();
+
+        let response = aths_handler(axum::extract::State(state), req).await;
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
     }
 }

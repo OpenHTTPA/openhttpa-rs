@@ -16,6 +16,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+#### Security — Metadata Protection & Memory Safety
+
+**Feature:**  
+`OpenHTTPA` now features ML-KEM HPKE Encrypted Client Hello for cover-traffic metadata protection, Strict Post-Quantum Cryptographic Memory Safety using `zeroize`, and E2E tested Replay Attack Prevention.
+
+**Changes:**
+
+- Added `EncryptedHelloPayload` for hiding cipher suites and protocol versions during `AtHS`.
+- Refactored `HpkeClient::seal` and `HpkeServer::open` to use strongly-typed `HpkeCiphertext` with `ZeroizeOnDrop` bound to it.
+- Enforced `ZeroizeOnDrop` across the `openhttpa-crypto` crate on highly sensitive structures like `SessionKeys` and `ClientWriteKey`.
+- Built an extensive E2E Replay Attack test (`test_replay_attack_prevention_e2e`) using a custom `RecordingTransport`.
+
+---
+
 #### Post-Quantum Identity — ML-DSA-65 Integration (FIPS 204)
 
 **Affected files:** `crates/openhttpa-crypto/src/pqc.rs`, `crates/openhttpa-core/src/handshake.rs`, `openhttpa-server/src/handlers.rs`

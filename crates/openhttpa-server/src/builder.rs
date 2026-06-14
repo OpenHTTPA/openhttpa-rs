@@ -19,6 +19,7 @@ pub struct OpenHttpaServerBuilder {
     atb_ttl: Duration,
     challenge_key: ChallengeKey,
     identity_key: Option<MlDsaKeyPair>,
+    hpke_key: Option<openhttpa_crypto::pqc::MlKemPair>,
     rate_limit: Option<RateLimitLayer>,
     // ARCH-01: fabric_config only exists when the `fabric` feature is enabled.
     // Omitting it eliminates the transitive pull of RocksDB, regorus, and
@@ -49,6 +50,7 @@ impl OpenHttpaServerBuilder {
             atb_ttl: Duration::from_secs(3600),
             challenge_key: ChallengeKey::new([0u8; 32]),
             identity_key: None,
+            hpke_key: None,
             rate_limit: None,
             #[cfg(feature = "fabric")]
             fabric_config: None,
@@ -94,6 +96,12 @@ impl OpenHttpaServerBuilder {
     #[must_use]
     pub fn with_identity_key(mut self, key: MlDsaKeyPair) -> Self {
         self.identity_key = Some(key);
+        self
+    }
+
+    #[must_use]
+    pub fn with_hpke_key(mut self, key: openhttpa_crypto::pqc::MlKemPair) -> Self {
+        self.hpke_key = Some(key);
         self
     }
 
@@ -198,6 +206,7 @@ impl OpenHttpaServerBuilder {
             atb_ttl: self.atb_ttl,
             challenge_key: self.challenge_key.clone(),
             identity_key: self.identity_key.map(Arc::new),
+            hpke_key: self.hpke_key.map(Arc::new),
         });
 
         let preflight_state = Arc::new(crate::handlers::PreflightHandlerState {

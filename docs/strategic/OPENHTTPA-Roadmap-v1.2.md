@@ -52,14 +52,15 @@ As `OpenHTTPA` matures into a production-ready protocol for high-assurance commu
 
 ## 3. Implementation Roadmap
 
-| Milestone | Feature              | Component                          | Status      |
-| :-------- | :------------------- | :--------------------------------- | :---------- |
-| **M1**    | Verified AI MVP      | `openhttpa-llm`, `openhttpa-mcp`   | Done        |
-| **M2**    | ZK-DCAP Compression  | `openhttpa-zk`, `openhttpa-tee`    | Done        |
-| **M3**    | OPA Policy Engine    | `openhttpa-mesh`, `openhttpa-core` | In Progress |
-| **M4**    | Multi-Vendor Sync    | `openhttpa-tee`                    | Backlog     |
-| **M5**    | Post-Quantum Attest  | `openhttpa-crypto`                 | Backlog     |
-| **M6**    | HTTPA/3 & 0-RTT Hard | `openhttpa-transport`              | Research    |
+| Milestone | Feature                                      | Component                            | Status      |
+| :-------- | :------------------------------------------- | :----------------------------------- | :---------- |
+| **M1**    | Verified AI MVP                              | `openhttpa-llm`, `openhttpa-mcp`     | Done        |
+| **M2**    | ZK-DCAP Compression                          | `openhttpa-zk`, `openhttpa-tee`      | Done        |
+| **M3**    | OPA Policy Engine                            | `openhttpa-mesh`, `openhttpa-core`   | In Progress |
+| **M4**    | Multi-Vendor Sync                            | `openhttpa-tee`                      | Backlog     |
+| **M5**    | Post-Quantum Attest                          | `openhttpa-crypto`                   | Backlog     |
+| **M6**    | HTTPA/3 & 0-RTT Hard                         | `openhttpa-transport`                | Research    |
+| **M7**    | Encrypted Client Hello (Metadata Protection) | `openhttpa-core`, `openhttpa-crypto` | Done        |
 
 ---
 

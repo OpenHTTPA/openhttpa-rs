@@ -50,6 +50,10 @@ The `Attest-Provenance` header MUST only contain the minimal information require
 
 `OpenHTTPA` ensures that all sensitive headers, including `Attest-Provenance`, are encrypted within the established AtHS session, protecting them from passive network observers.
 
+### 4.4 Encrypted Client Hello (Metadata Protection)
+
+Handshake parameters such as the requested protocol versions, cipher suites, and specific routing identifiers can uniquely fingerprint a client or agent prior to session establishment. `OpenHTTPA` mitigates this via the `Attest-Encrypted-Hello` extension, allowing the client to encapsulate these fields using ML-KEM HPKE. This reduces the observable metadata to cover traffic, hindering traffic analysis and censorship attempts.
+
 ## 5. User Agency and Transparency
 
 - **Policy Disclosure**: Service providers utilizing `OpenHTTPA` SHOULD disclose their attestation policies and whether hardware identifiers are used for tracking.

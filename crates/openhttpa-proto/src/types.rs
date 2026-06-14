@@ -460,6 +460,46 @@ pub struct TrustedCargo {
     pub encrypted_metadata: Vec<u8>,
     /// AEAD tag for `encrypted_metadata`.
     pub tag: Vec<u8>,
+    /// Configured padding length to thwart traffic analysis.
+    pub padding_length: u16,
+}
+
+// ─── Padding & Metadata Protection ───────────────────────────────────────────
+
+/// Configuration for constant-size or block-size padding of encrypted payloads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum PaddingConfig {
+    /// No padding applied.
+    None,
+    /// Pad to the next multiple of the given block size (e.g., 256 or 512).
+    BlockSize(usize),
+    /// Pad to a constant maximum size.
+    ConstantSize(usize),
+}
+
+impl Default for PaddingConfig {
+    fn default() -> Self {
+        Self::BlockSize(256)
+    }
+}
+
+/// Encapsulated metadata payload for the initial `AtHS` handshake (Encrypted Client Hello).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EncryptedHelloPayload {
+    /// The actual inner headers (JSON or SFV serialized).
+    pub inner_headers: Vec<u8>,
+    /// Flag indicating whether this is a dummy cover traffic request.
+    pub is_cover_traffic: bool,
+}
+
+/// Configuration for Oblivious HTTPA (OHTTPA) relays.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OhttpRelayConfig {
+    /// The relay endpoint URI.
+    pub relay_uri: String,
+    /// Whether to enforce IP address stripping.
+    pub enforce_ip_stripping: bool,
 }
 
 // ─── Attest Secret ───────────────────────────────────────────────────────────

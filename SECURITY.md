@@ -48,6 +48,9 @@ The `OpenHTTPA` project is built with a "Zero-Warning" policy and undergoes cont
 - **Integrity**: Message-level authentication prevents modification by any party, including the host OS.
 - **Authenticity**: Every session is bound to a TEE attestation quote, proving the identity and integrity of the remote enclave.
 - **ZK Prover Isolation**: The zero-knowledge proof generation (`risc0-zkvm`) has been decoupled from `openhttpa-attestation` into `openhttpa-zk`, significantly reducing the attestation verifier's dependency footprint and attack surface (See [ADR-003](docs/adr/ADR-003-transport-zk-isolation.md)).
+- **Replay Attack Prevention**: The protocol implements hardened replay protection using deterministic nonces and HMACs bound to the `Attest-Ticket`. Our internal middleware strictly rejects reused and unauthorized MAC/nonce pairs.
+- **Memory Safety & Zeroization**: `OpenHTTPA` enforces PQC strictness by heavily utilizing the `zeroize` crate (`ZeroizeOnDrop`) across all cryptographic buffers, ensuring deterministic erasure of keys to eliminate cross-request leakage.
+- **Metadata Protection**: Handshake configuration metadata (such as version constraints and cipher suite preferences) is shielded using Encrypted Client Hello structures via ML-KEM Hybrid Public Key Encryption (HPKE).
 
 ### CI/CD Runner Provenance (CI-03)
 

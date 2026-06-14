@@ -58,8 +58,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tee_provider: Arc::new(MockTeeProvider::default()),
         verifier: Some(Arc::new(MockVerifier::default())),
         atb_ttl: Duration::from_secs(3600),
-        challenge_key: [0u8; 32].into(),
+        challenge_key: openhttpa_server::handlers::ChallengeKey::new([0u8; 32]),
         identity_key: None,
+        hpke_key: None,
     });
 
     let state = HubState {

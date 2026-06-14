@@ -164,10 +164,11 @@ method (or a fallback `POST` with specific headers).
 
 The client sends its preferred cipher suites, versions, nonces, and public key shares.
 
-- `Attest-Versions`: Supported versions.
-- `Attest-Cipher-Suites`: Preferred hybrid suites (e.g., `X25519_ML_KEM768_AES256GCM_SHA384`).
+- `Attest-Versions`: Supported versions. (Omitted if `Attest-Encrypted-Hello` is used).
+- `Attest-Cipher-Suites`: Preferred hybrid suites (e.g., `X25519_ML_KEM768_AES256GCM_SHA384`). (Omitted if `Attest-Encrypted-Hello` is used).
 - `Attest-Random`: 32-byte client nonce.
 - `Attest-Key-Shares`: Structured list of ECDHE and ML-KEM public keys.
+- `Attest-Encrypted-Hello`: (Optional) ML-KEM HPKE-encapsulated metadata shielding cipher suites, protocol versions, and routing identifiers from network observers to provide cover-traffic metadata protection.
 
 ### AtHS Response
 
@@ -692,6 +693,7 @@ Protocol (HTTP) Field Name Registry":
 | `Attest-Key-Shares`              | SFV      | This document |
 | `Attest-Key-Share`               | SFV      | This document |
 | `Attest-Random`                  | SFV      | This document |
+| `Attest-Encrypted-Hello`         | SFV      | This document |
 | `Attest-Policies`                | SFV      | This document |
 | `Attest-Base-Creation`           | SFV      | This document |
 | `Attest-Blocklist`               | SFV      | This document |

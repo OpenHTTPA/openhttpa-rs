@@ -118,6 +118,7 @@ async fn run_server(port: u16, mutual: bool) -> anyhow::Result<()> {
         // debug builds only. NEVER use an all-zero key in production.
         challenge_key: demo_challenge_key("OPENHTTPA_CHALLENGE_KEY").into(),
         identity_key: None,
+        hpke_key: None,
     });
 
     let app_state = AppState { aths: aths_state };

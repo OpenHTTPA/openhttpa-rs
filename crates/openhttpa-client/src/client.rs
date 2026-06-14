@@ -433,6 +433,7 @@ impl OpenHttpaClient {
             signatures: vec![],
             ticket: None,
             provenance: None,
+            encrypted_hello: None,
         };
 
         let transport = self

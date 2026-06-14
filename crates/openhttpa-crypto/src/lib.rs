@@ -21,6 +21,7 @@
 
 pub mod aead;
 pub mod hkdf;
+pub mod hpke;
 pub mod key_exchange;
 pub mod nonce;
 pub mod pqc;
@@ -29,6 +30,7 @@ pub use aws_lc_rs::rand;
 
 pub use aead::{AeadAlgorithm, AeadError, AeadKey, AeadNonce, BoundAeadError, BoundAeadKey};
 pub use hkdf::HkdfExpander;
+pub use hpke::{HpkeClient, HpkeError, HpkeServer};
 pub use key_exchange::{EcdhePair, HybridKemPair, KeyShare};
 pub use nonce::NonceManager;
 pub use pqc::{MlDsaKeyPair, MlKemPair};

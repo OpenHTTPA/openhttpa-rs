@@ -47,6 +47,7 @@
 //!     signatures: vec![],
 //!     ticket: None,
 //!     provenance: None,
+//!     encrypted_hello: None,
 //! };
 //! let header_map: HeaderMap = req.encode();
 //!
@@ -114,6 +115,7 @@ header_name!(HDR_ATTEST_PROVENANCE, "attest-provenance");
 header_name!(HDR_ATTEST_TICKET_RESUMPTION, "attest-ticket-resumption");
 header_name!(HDR_ATTEST_ZK_PROOF, "attest-zk-proof");
 header_name!(HDR_ATTEST_AI_PROVENANCE_PROOF, "attest-ai-provenance-proof");
+header_name!(HDR_ATTEST_ENCRYPTED_HELLO, "attest-encrypted-hello");
 
 // ─── AHL canonicalization ────────────────────────────────────────────────────
 
@@ -581,6 +583,8 @@ pub struct AtHsRequestHeaders {
     pub ticket: Option<SessionTicket>,
     /// Optional provenance chain for multi-hop tracking (Phase 4).
     pub provenance: Option<ProvenanceChain>,
+    /// Optional Encrypted Client Hello payload (HPKE encapsulated).
+    pub encrypted_hello: Option<Vec<u8>>,
 }
 
 impl AtHsRequestHeaders {
@@ -686,6 +690,10 @@ impl AtHsRequestHeaders {
             );
         }
 
+        if let Some(ref eh) = self.encrypted_hello {
+            map.insert(HDR_ATTEST_ENCRYPTED_HELLO.clone(), encode_bytes_sfv(eh));
+        }
+
         map
     }
 
@@ -752,6 +760,8 @@ impl AtHsRequestHeaders {
             .ok()
             .and_then(|b| serde_json::from_slice(&b).ok());
 
+        let encrypted_hello = decode_bytes_sfv(map, &HDR_ATTEST_ENCRYPTED_HELLO).ok();
+
         Ok(Self {
             cipher_suites,
             random,
@@ -766,6 +776,7 @@ impl AtHsRequestHeaders {
             signatures: vec![],
             ticket,
             provenance,
+            encrypted_hello,
         })
     }
 }
@@ -1187,6 +1198,7 @@ mod tests {
             signatures: vec![],
             ticket: None,
             provenance: None,
+            encrypted_hello: None,
         }
     }
 
@@ -1574,6 +1586,7 @@ mod proptest_headers {
                 signatures: vec![],
                 ticket: None,
                 provenance: None,
+                encrypted_hello: None,
             };
             let map = req.encode();
             let decoded = AtHsRequestHeaders::decode(&map).unwrap();
@@ -1631,6 +1644,7 @@ mod proptest_headers {
                 signatures: vec![],
                 ticket: None,
                 provenance: None,
+                encrypted_hello: None,
             };
             let map = req.encode();
             let decoded = AtHsRequestHeaders::decode(&map).unwrap();

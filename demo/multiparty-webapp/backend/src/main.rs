@@ -126,6 +126,7 @@ impl Default for DemoState {
             // debug builds only. NEVER use an all-zero key in production.
             challenge_key: challenge_key.clone(),
             identity_key: Some(identity_key.clone()),
+            hpke_key: None,
         });
 
         let (tx, _rx) = broadcast::channel::<WsPayload>(100);

@@ -125,6 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         atb_ttl: Duration::from_secs(config.atb_ttl_secs),
         challenge_key: random_challenge_key().into(),
         identity_key: None,
+        hpke_key: None,
     });
 
     let state = AppState {

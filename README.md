@@ -38,6 +38,8 @@ Traditional Transport Layer Security (TLS) terminates at the network edge (e.g.,
 - **Hardware-Rooted Trust (SIGMA-I)**: Integrates hardware attestation quotes (Entity Attestation Tokens) directly into the key exchange, enabling mutual, hardware-verified authentication.
 - **Semantic Context Binding**: Introduces the Attested Header List (AHL) to cryptographically bind Application Layer (L7) semantics (HTTP Method, Request-URI) to the session MAC, mitigating Confused Deputy and semantic re-routing vectors.
 - **Post-Quantum Cryptographic Agility**: Implements a hybrid key exchange and signature scheme utilizing NIST-standardized ML-KEM-768 and ML-DSA-65 to ensure resilience against "Harvest Now, Decrypt Later" (HNDL) quantum threats.
+- **Encrypted Client Hello (Metadata Protection)**: Employs ML-KEM HPKE encapsulation during the initial handshake to conceal requested protocol versions and cipher suites, making the setup sequence highly resistant to observer fingerprinting.
+- **Strict Post-Quantum Memory Safety**: Leverages `zeroize` across all cryptographic buffers to guarantee deterministic key destruction upon variable drop, effectively neutralizing use-after-free and cross-request data leaks.
 
 ## Use Cases
 

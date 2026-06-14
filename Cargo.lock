@@ -6352,9 +6352,11 @@ dependencies = [
 name = "openhttpa-integration"
 version = "0.1.1"
 dependencies = [
+ "async-trait",
  "axum",
  "bytes",
  "hex",
+ "hmac 0.13.0",
  "http-body-util",
  "hyper",
  "openhttpa-attestation",
@@ -6366,7 +6368,9 @@ dependencies = [
  "openhttpa-server",
  "openhttpa-tee",
  "openhttpa-transport",
+ "reqwest 0.13.4",
  "serde_json",
+ "sha2 0.11.0",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.23",
