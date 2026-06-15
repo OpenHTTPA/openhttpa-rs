@@ -145,9 +145,14 @@ impl ConfidentialLlmClient {
             let receipt: openhttpa_zk::prover::Receipt = serde_json::from_slice(&proof_bytes)
                 .map_err(|e| LlmError::InvalidResponse(format!("invalid proof format: {e}")))?;
 
-            // Transcript hash for application data is currently empty or binds to AtB ID.
-            // For now, we use a placeholder [0; 48] as defined in the ZK mock.
-            let transcript_hash = [0x42u8; 48];
+            let transcript_hash = if self.bypass_attestation {
+                [0x42u8; 48]
+            } else {
+                let session = self.ensure_session().await?;
+                session
+                    .peek_keys(|keys| keys.transcript_hash)
+                    .map_err(|e| LlmError::Inference(format!("session keys unavailable: {e}")))?
+            };
 
             match openhttpa_zk::verifier::ZkVerifier::verify(&receipt, &transcript_hash) {
                 Ok(output) => {

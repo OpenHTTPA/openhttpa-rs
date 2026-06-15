@@ -10,6 +10,7 @@ pub struct QueryRoot(
     keys::KeysQuery,
     messages::MessagesQuery,
     attestation::AttestationQuery,
+    domains::finance::FinanceQuery,
 );
 
 #[derive(MergedObject, Default)]

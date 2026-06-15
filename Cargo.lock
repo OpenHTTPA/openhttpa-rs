@@ -6010,6 +6010,7 @@ dependencies = [
  "axum",
  "base64ct",
  "futures",
+ "hex",
  "openhttpa-a2a",
  "openhttpa-aiql",
  "openhttpa-core",
@@ -6020,6 +6021,7 @@ dependencies = [
  "openhttpa-proto",
  "openhttpa-tee",
  "openhttpa-zk",
+ "postcard",
  "redis",
  "serde",
  "serde_json",
@@ -6041,6 +6043,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "winnow 1.0.3",
 ]
 
 [[package]]

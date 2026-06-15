@@ -117,8 +117,8 @@ Fetches data from `url`, generates a TEE quote, and optionally produces a ZK pro
 2. **HTTP fetch**: Sends a `GET` request via the hardened client; collects the full response body as bytes.
 3. **QUDD construction**: Builds the 64-byte QUDD:
    ```
-   report_data[0..19]  = b"openhttpa hs server"
-   report_data[32..64] = transcript_hash[0..32]
+   report_data[0..16]  = b"openhttpa oracle"
+   report_data[16..64] = transcript_hash[0..48]
    ```
 4. **TEE quote generation**: Calls `tee_provider.generate_quote(&QuoteRequest { report_data })`.
 5. **ZK proof** (if requested): Calls `ZkProver::prove` with `ZkMode::Oracle`, supplying the raw quote bytes, report data, and the fetched response body as `oracle_data`.
