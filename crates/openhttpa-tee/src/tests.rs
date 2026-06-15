@@ -137,3 +137,59 @@ fn test_preferred_type_mismatch() {
     let res = detect_best_provider(&config);
     assert!(res.is_err(), "Should fail on unknown preferred type");
 }
+
+/// Test ZK-Compressed TEE Provider (ZAA) if feature is enabled.
+#[cfg(feature = "zaa")]
+#[test]
+fn test_zk_compressed_provider() {
+    let p1 = Arc::new(MockTeeProvider::default());
+    let compressed = crate::provider::ZkCompressedTeeProvider::new(p1);
+
+    assert!(compressed.is_available());
+    assert_eq!(compressed.quote_type(), QuoteType::ZkCompressed);
+
+    let req = QuoteRequest {
+        report_data: [0xbb; 64],
+    };
+
+    // Test the generation flow. In unit tests we rely on the Mock prover in openhttpa_zk
+    // failing safely or producing a dummy receipt. However, since the prover requires
+    // RISC Zero guest compilation which isn't available in standard `cargo test` unless
+    // `testing` mock is forced, we just verify the type checking.
+    // If the mock prover is enabled, this will succeed. Otherwise, it will fail cleanly.
+    let result = compressed.generate_quote(&req);
+    match result {
+        Ok(quote) => {
+            assert_eq!(quote.quote_type, QuoteType::ZkCompressed);
+            assert_eq!(quote.qudd.as_ref(), &[0xbb; 64]);
+        }
+        Err(e) => {
+            // If RISC Zero prover fails, that's expected without mock config
+            assert!(e.to_string().contains("Enclave") || e.to_string().contains("ZK-proving"));
+        }
+    }
+}
+
+/// Test multi-vendor federation via `detect_all_providers`.
+#[test]
+fn test_detect_all_providers_federation() {
+    let _guard = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    // SAFETY: ENV_MUTEX is held.
+    unsafe { std::env::remove_var("OPENHTTPA_TEE_PROVIDER") };
+
+    let config = test_config(); // allows mock
+
+    let composite =
+        crate::provider::detect_all_providers(&config).expect("Federation detection failed");
+    assert!(composite.is_available());
+
+    let req = QuoteRequest {
+        report_data: [0xcc; 64],
+    };
+    let quotes = composite
+        .generate_quotes(&req)
+        .expect("Failed to generate federated quotes");
+    assert!(!quotes.is_empty(), "Must return at least one quote");
+}

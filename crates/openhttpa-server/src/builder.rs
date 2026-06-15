@@ -20,6 +20,8 @@ pub struct OpenHttpaServerBuilder {
     challenge_key: ChallengeKey,
     identity_key: Option<MlDsaKeyPair>,
     hpke_key: Option<openhttpa_crypto::pqc::MlKemPair>,
+    #[cfg(feature = "mesh")]
+    policy_engine: Option<Arc<dyn openhttpa_mesh::policy::PolicyEngine>>,
     rate_limit: Option<RateLimitLayer>,
     // ARCH-01: fabric_config only exists when the `fabric` feature is enabled.
     // Omitting it eliminates the transitive pull of RocksDB, regorus, and
@@ -51,6 +53,8 @@ impl OpenHttpaServerBuilder {
             challenge_key: ChallengeKey::new([0u8; 32]),
             identity_key: None,
             hpke_key: None,
+            #[cfg(feature = "mesh")]
+            policy_engine: None,
             rate_limit: None,
             #[cfg(feature = "fabric")]
             fabric_config: None,
@@ -108,6 +112,16 @@ impl OpenHttpaServerBuilder {
     #[must_use]
     pub fn with_rate_limit(mut self, layer: RateLimitLayer) -> Self {
         self.rate_limit = Some(layer);
+        self
+    }
+
+    #[cfg(feature = "mesh")]
+    #[must_use]
+    pub fn with_policy_engine(
+        mut self,
+        engine: Arc<dyn openhttpa_mesh::policy::PolicyEngine>,
+    ) -> Self {
+        self.policy_engine = Some(engine);
         self
     }
 
@@ -203,6 +217,8 @@ impl OpenHttpaServerBuilder {
                 .tee_provider
                 .unwrap_or_else(|| Arc::new(openhttpa_tee::mock::MockTeeProvider::default())),
             verifier: self.verifier,
+            #[cfg(feature = "mesh")]
+            policy_engine: self.policy_engine,
             atb_ttl: self.atb_ttl,
             challenge_key: self.challenge_key.clone(),
             identity_key: self.identity_key.map(Arc::new),

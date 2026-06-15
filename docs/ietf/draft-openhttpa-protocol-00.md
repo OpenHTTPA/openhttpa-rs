@@ -84,9 +84,10 @@ seamlessly bind these hardware proofs to HTTP sessions.
 1.  **Enclave-to-Enclave Security**: Cryptographic termination inside the TEE.
 2.  **Mutual Attestation**: Integration of TEE hardware quotes into the handshake via the
     SIGMA-I model.
-3.  **Post-Quantum Resilience**: A hybrid key exchange combining classical X25519 with
-    ML-KEM {{FIPS-203}} and post-quantum identity via ML-DSA {{FIPS-204}}.
-4.  **Semantic Intent Binding**: The Attested Header List (AHL) mechanism, which binds HTTP
+3.  **PQC Exclusivity**: Enforced Post-Quantum Cryptography for identity and signatures using
+    ML-DSA {{FIPS-204}}, completely eliminating classical ECDSA/RSA dependencies. Key exchange utilizes a hybrid combiner of classical X25519 with ML-KEM {{FIPS-203}}.
+4.  **Policy-as-Code (PaC)**: Dynamic admission control during the Attestation Handshake (AtHS) powered by Open Policy Agent (OPA/Rego) to enforce context-aware rules on hardware provenance and claims.
+5.  **Semantic Intent Binding**: The Attested Header List (AHL) mechanism, which binds HTTP
     semantic context (Method, Path, Query) to the hardware-verified session.
 
 ## Working Group Target

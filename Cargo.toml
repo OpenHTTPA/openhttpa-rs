@@ -29,6 +29,7 @@ members = [
     "demo/multiparty-webapp/backend",
     "demo/multiparty-webapp/healthcheck",
     "demo/cli",
+    "demo/agentic_swarm",
     "modules/nginx", "crates/openhttpa-oracle",
     "crates/openhttpa-zk/methods/guest",
     # cargo-fuzz harness: included in members so the workspace-root

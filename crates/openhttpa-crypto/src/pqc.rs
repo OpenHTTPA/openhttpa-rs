@@ -263,6 +263,22 @@ mod tests {
     }
 
     #[test]
+    fn mlkem_invalid_peer_key() {
+        let alice = MlKemPair::generate().unwrap();
+        // Provide truncated/invalid key
+        let result = alice.encapsulate(b"invalid_short_key");
+        assert!(matches!(result, Err(PqcError::KemEncap(_))));
+    }
+
+    #[test]
+    fn mlkem_invalid_ciphertext() {
+        let alice = MlKemPair::generate().unwrap();
+        // Attempt to decapsulate random junk
+        let result = alice.decapsulate(b"random_junk_ciphertext");
+        assert!(matches!(result, Err(PqcError::KemDecap(_))));
+    }
+
+    #[test]
     fn mldsa_sign_verify() {
         let kp = MlDsaKeyPair::generate().unwrap();
         let msg = b"`OpenHTTPA` handshake transcript";
@@ -277,5 +293,30 @@ mod tests {
         let sig = kp.sign(msg).unwrap();
         let result = MlDsaKeyPair::verify(&kp.public_key, b"tampered", &sig);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn mldsa_invalid_public_key() {
+        let kp = MlDsaKeyPair::generate().unwrap();
+        let msg = b"test message";
+        let sig = kp.sign(msg).unwrap();
+        // Provide invalid public key (truncated)
+        let mut bad_pk = kp.public_key.clone();
+        bad_pk.truncate(32);
+        let result = MlDsaKeyPair::verify(&bad_pk, msg, &sig);
+        assert!(matches!(
+            result,
+            Err(PqcError::Verify | PqcError::SigKeyGen(_))
+        ));
+    }
+
+    #[test]
+    fn mldsa_invalid_signature_format() {
+        let kp = MlDsaKeyPair::generate().unwrap();
+        let msg = b"test message";
+        // Provide invalid signature format (too short)
+        let bad_sig = b"short_sig";
+        let result = MlDsaKeyPair::verify(&kp.public_key, msg, bad_sig);
+        assert!(matches!(result, Err(PqcError::Verify)));
     }
 }

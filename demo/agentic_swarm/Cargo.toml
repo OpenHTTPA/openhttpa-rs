@@ -1,0 +1,15 @@
+[package]
+name = "agentic_swarm"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+publish = false
+
+[dependencies]
+openhttpa-llm = { workspace = true }
+openhttpa-mcp = { workspace = true }
+openhttpa-client = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

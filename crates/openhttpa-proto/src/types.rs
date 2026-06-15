@@ -42,8 +42,8 @@ impl ProtocolVersion {
 impl std::fmt::Display for ProtocolVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::V1 => f.write_str("httpa/1"),
-            Self::V2 => f.write_str("openhttpa"),
+            Self::V1 => f.write_str(crate::constants::PROTOCOL_VERSION_V1),
+            Self::V2 => f.write_str(crate::constants::PROTOCOL_VERSION_V2),
         }
     }
 }
@@ -52,8 +52,8 @@ impl std::str::FromStr for ProtocolVersion {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "httpa/1" => Ok(Self::V1),
-            "openhttpa" => Ok(Self::V2),
+            crate::constants::PROTOCOL_VERSION_V1 => Ok(Self::V1),
+            crate::constants::PROTOCOL_VERSION_V2 => Ok(Self::V2),
             _ => Err(()),
         }
     }
@@ -150,11 +150,17 @@ impl std::fmt::Display for CipherSuite {
     #[allow(deprecated)] // P256Aes256GcmSha256 retained for wire-format compatibility (S-04)
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            Self::X25519MlKem768Aes256GcmSha384 => "X25519_ML_KEM768_AES256GCM_SHA384",
-            Self::P384MlKem1024Aes256GcmSha384 => "P384_ML_KEM1024_AES256GCM_SHA384",
-            Self::X25519Aes256GcmSha384 => "X25519_AES256GCM_SHA384",
-            Self::P256Aes256GcmSha256 => "P256_AES256GCM_SHA256",
-            Self::X25519ChaCha20Poly1305Sha256 => "X25519_CHACHA20POLY1305_SHA256",
+            Self::X25519MlKem768Aes256GcmSha384 => {
+                crate::constants::CIPHER_SUITE_X25519_ML_KEM768_AES256GCM_SHA384
+            }
+            Self::P384MlKem1024Aes256GcmSha384 => {
+                crate::constants::CIPHER_SUITE_P384_ML_KEM1024_AES256GCM_SHA384
+            }
+            Self::X25519Aes256GcmSha384 => crate::constants::CIPHER_SUITE_X25519_AES256GCM_SHA384,
+            Self::P256Aes256GcmSha256 => crate::constants::CIPHER_SUITE_P256_AES256GCM_SHA256,
+            Self::X25519ChaCha20Poly1305Sha256 => {
+                crate::constants::CIPHER_SUITE_X25519_CHACHA20POLY1305_SHA256
+            }
         };
         f.write_str(s)
     }
@@ -165,10 +171,16 @@ impl std::str::FromStr for CipherSuite {
     #[allow(deprecated)] // P256Aes256GcmSha256 retained for wire-format compatibility (S-04)
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "X25519_ML_KEM768_AES256GCM_SHA384" => Ok(Self::X25519MlKem768Aes256GcmSha384),
-            "P384_ML_KEM1024_AES256GCM_SHA384" => Ok(Self::P384MlKem1024Aes256GcmSha384),
-            "X25519_AES256GCM_SHA384" => Ok(Self::X25519Aes256GcmSha384),
-            "P256_AES256GCM_SHA256" => {
+            crate::constants::CIPHER_SUITE_X25519_ML_KEM768_AES256GCM_SHA384 => {
+                Ok(Self::X25519MlKem768Aes256GcmSha384)
+            }
+            crate::constants::CIPHER_SUITE_P384_ML_KEM1024_AES256GCM_SHA384 => {
+                Ok(Self::P384MlKem1024Aes256GcmSha384)
+            }
+            crate::constants::CIPHER_SUITE_X25519_AES256GCM_SHA384 => {
+                Ok(Self::X25519Aes256GcmSha384)
+            }
+            crate::constants::CIPHER_SUITE_P256_AES256GCM_SHA256 => {
                 // INFO-01: Wire-level deny for deprecated cipher suite after configurable cutoff.
                 if std::env::var("OPENHTTPA_ALLOW_DEPRECATED_CIPHERS").unwrap_or_default() == "1" {
                     Ok(Self::P256Aes256GcmSha256)
@@ -176,7 +188,9 @@ impl std::str::FromStr for CipherSuite {
                     Err(())
                 }
             }
-            "X25519_CHACHA20POLY1305_SHA256" => Ok(Self::X25519ChaCha20Poly1305Sha256),
+            crate::constants::CIPHER_SUITE_X25519_CHACHA20POLY1305_SHA256 => {
+                Ok(Self::X25519ChaCha20Poly1305Sha256)
+            }
             _ => Err(()),
         }
     }
@@ -213,15 +227,15 @@ pub enum QuoteType {
 impl std::fmt::Display for QuoteType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            Self::Sgx => "sgx",
-            Self::Tdx => "tdx",
-            Self::SevSnp => "sev_snp",
-            Self::TrustZone => "trustzone",
-            Self::Tpm => "tpm",
-            Self::NvidiaGpu => "nvidia_gpu",
-            Self::AwsNitro => "aws_nitro",
-            Self::ZkCompressed => "zk_compressed",
-            Self::Mock => "mock",
+            Self::Sgx => crate::constants::QUOTE_TYPE_SGX,
+            Self::Tdx => crate::constants::QUOTE_TYPE_TDX,
+            Self::SevSnp => crate::constants::QUOTE_TYPE_SEV_SNP,
+            Self::TrustZone => crate::constants::QUOTE_TYPE_TRUSTZONE,
+            Self::Tpm => crate::constants::QUOTE_TYPE_TPM,
+            Self::NvidiaGpu => crate::constants::QUOTE_TYPE_NVIDIA_GPU,
+            Self::AwsNitro => crate::constants::QUOTE_TYPE_AWS_NITRO,
+            Self::ZkCompressed => crate::constants::QUOTE_TYPE_ZK_COMPRESSED,
+            Self::Mock => crate::constants::QUOTE_TYPE_MOCK,
             Self::Unknown(s) => s,
         };
         f.write_str(s)
@@ -232,15 +246,15 @@ impl std::str::FromStr for QuoteType {
     type Err = std::convert::Infallible;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
-            "sgx" => Self::Sgx,
-            "tdx" => Self::Tdx,
-            "sev_snp" => Self::SevSnp,
-            "trustzone" => Self::TrustZone,
-            "tpm" => Self::Tpm,
-            "nvidia_gpu" => Self::NvidiaGpu,
-            "aws_nitro" => Self::AwsNitro,
-            "zk_compressed" => Self::ZkCompressed,
-            "mock" => Self::Mock,
+            crate::constants::QUOTE_TYPE_SGX => Self::Sgx,
+            crate::constants::QUOTE_TYPE_TDX => Self::Tdx,
+            crate::constants::QUOTE_TYPE_SEV_SNP => Self::SevSnp,
+            crate::constants::QUOTE_TYPE_TRUSTZONE => Self::TrustZone,
+            crate::constants::QUOTE_TYPE_TPM => Self::Tpm,
+            crate::constants::QUOTE_TYPE_NVIDIA_GPU => Self::NvidiaGpu,
+            crate::constants::QUOTE_TYPE_AWS_NITRO => Self::AwsNitro,
+            crate::constants::QUOTE_TYPE_ZK_COMPRESSED => Self::ZkCompressed,
+            crate::constants::QUOTE_TYPE_MOCK => Self::Mock,
             _ => Self::Unknown(s.to_owned()),
         })
     }

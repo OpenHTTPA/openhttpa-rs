@@ -10,10 +10,6 @@ use openhttpa_proto::EatClaims;
 /// Supported signature algorithms for COSE Sign1 EAT.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EatSignAlgorithm {
-    /// ECDSA using P-256 and SHA-256 (COSE algorithm 6 / ES256)
-    Es256,
-    /// ECDSA using P-384 and SHA-384 (COSE algorithm 34 / ES384)
-    Es384,
     /// ML-DSA-65 post-quantum signature (COSE algorithm -46)
     MlDsa65,
 }
@@ -21,12 +17,6 @@ pub enum EatSignAlgorithm {
 impl EatSignAlgorithm {
     const fn to_cose_algorithm(self) -> coset::Algorithm {
         match self {
-            Self::Es256 => {
-                coset::RegisteredLabelWithPrivate::Assigned(coset::iana::Algorithm::ES256)
-            }
-            Self::Es384 => {
-                coset::RegisteredLabelWithPrivate::Assigned(coset::iana::Algorithm::ES384)
-            }
             Self::MlDsa65 => {
                 coset::RegisteredLabelWithPrivate::Assigned(coset::iana::Algorithm::HSS_LMS)
             }
@@ -35,12 +25,6 @@ impl EatSignAlgorithm {
 
     fn from_cose_algorithm(alg: &coset::Algorithm) -> Result<Self, VerificationError> {
         match alg {
-            coset::RegisteredLabelWithPrivate::Assigned(coset::iana::Algorithm::ES256) => {
-                Ok(Self::Es256)
-            }
-            coset::RegisteredLabelWithPrivate::Assigned(coset::iana::Algorithm::ES384) => {
-                Ok(Self::Es384)
-            }
             coset::RegisteredLabelWithPrivate::Assigned(coset::iana::Algorithm::HSS_LMS)
             | coset::RegisteredLabelWithPrivate::PrivateUse(-46) => Ok(Self::MlDsa65),
             other => Err(VerificationError::Malformed(format!(
@@ -95,32 +79,6 @@ pub fn create_signed_eat(
     let tbs = cose_sign1.tbs_data(&[]);
 
     let signature = match algorithm {
-        EatSignAlgorithm::Es256 => {
-            let rng = aws_lc_rs::rand::SystemRandom::new();
-            let key_pair = aws_lc_rs::signature::EcdsaKeyPair::from_pkcs8(
-                &aws_lc_rs::signature::ECDSA_P256_SHA256_FIXED_SIGNING,
-                signing_key_der,
-            )
-            .map_err(|e| VerificationError::Malformed(format!("invalid P-256 PKCS#8 key: {e}")))?;
-            key_pair
-                .sign(&rng, &tbs)
-                .map_err(|_| VerificationError::SignatureInvalid)?
-                .as_ref()
-                .to_vec()
-        }
-        EatSignAlgorithm::Es384 => {
-            let rng = aws_lc_rs::rand::SystemRandom::new();
-            let key_pair = aws_lc_rs::signature::EcdsaKeyPair::from_pkcs8(
-                &aws_lc_rs::signature::ECDSA_P384_SHA384_FIXED_SIGNING,
-                signing_key_der,
-            )
-            .map_err(|e| VerificationError::Malformed(format!("invalid P-384 PKCS#8 key: {e}")))?;
-            key_pair
-                .sign(&rng, &tbs)
-                .map_err(|_| VerificationError::SignatureInvalid)?
-                .as_ref()
-                .to_vec()
-        }
         EatSignAlgorithm::MlDsa65 => {
             let sig = oqs::sig::Sig::new(oqs::sig::Algorithm::MlDsa65)
                 .map_err(|e| VerificationError::Malformed(e.to_string()))?;
@@ -160,24 +118,6 @@ pub fn verify_signed_eat(
     let tbs = cose_sign1.tbs_data(&[]);
 
     match algorithm {
-        EatSignAlgorithm::Es256 => {
-            let peer_pub = aws_lc_rs::signature::UnparsedPublicKey::new(
-                &aws_lc_rs::signature::ECDSA_P256_SHA256_FIXED,
-                verification_key_der,
-            );
-            peer_pub
-                .verify(&tbs, &cose_sign1.signature)
-                .map_err(|_| VerificationError::SignatureInvalid)?;
-        }
-        EatSignAlgorithm::Es384 => {
-            let peer_pub = aws_lc_rs::signature::UnparsedPublicKey::new(
-                &aws_lc_rs::signature::ECDSA_P384_SHA384_FIXED,
-                verification_key_der,
-            );
-            peer_pub
-                .verify(&tbs, &cose_sign1.signature)
-                .map_err(|_| VerificationError::SignatureInvalid)?;
-        }
         EatSignAlgorithm::MlDsa65 => {
             let sig = oqs::sig::Sig::new(oqs::sig::Algorithm::MlDsa65)
                 .map_err(|e| VerificationError::Malformed(e.to_string()))?;
@@ -202,7 +142,6 @@ pub fn verify_signed_eat(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aws_lc_rs::signature::KeyPair;
 
     #[test]
     fn test_eat_claims_cbor_round_trip() {
@@ -234,43 +173,6 @@ mod tests {
     }
 
     #[test]
-    fn test_cose_sign1_es256_round_trip() {
-        let claims = EatClaims {
-            hwmodel: Some("Confidential VM".to_owned()),
-            dbgstat: Some(0),
-            ..Default::default()
-        };
-
-        // Generate a standard P-256 key pair via aws-lc-rs
-        let rng = aws_lc_rs::rand::SystemRandom::new();
-        let doc = aws_lc_rs::signature::EcdsaKeyPair::generate_pkcs8(
-            &aws_lc_rs::signature::ECDSA_P256_SHA256_FIXED_SIGNING,
-            &rng,
-        )
-        .unwrap();
-
-        let key_pair = aws_lc_rs::signature::EcdsaKeyPair::from_pkcs8(
-            &aws_lc_rs::signature::ECDSA_P256_SHA256_FIXED_SIGNING,
-            doc.as_ref(),
-        )
-        .unwrap();
-        let pub_key = key_pair.public_key().as_ref().to_vec();
-
-        // Sign
-        let token = create_signed_eat(&claims, doc.as_ref(), EatSignAlgorithm::Es256).unwrap();
-
-        // Verify
-        let decoded_claims = verify_signed_eat(&token, &pub_key).unwrap();
-        assert_eq!(decoded_claims.hwmodel, Some("Confidential VM".to_owned()));
-
-        // Tamper
-        let mut tampered = token;
-        let len = tampered.len();
-        tampered[len - 5] ^= 0xFF; // Flip signature byte
-        assert!(verify_signed_eat(&tampered, &pub_key).is_err());
-    }
-
-    #[test]
     fn test_cose_sign1_mldsa65_round_trip() {
         let claims = EatClaims {
             hwmodel: Some("Confidential GPU Realm".to_owned()),
@@ -297,5 +199,52 @@ mod tests {
         let len = tampered.len();
         tampered[len - 5] ^= 0xFF; // Flip signature byte
         assert!(verify_signed_eat(&tampered, pk.as_ref()).is_err());
+    }
+
+    #[test]
+    fn test_eat_invalid_malformed_cbor() {
+        // Provide junk data to deserialize
+        let result = deserialize_claims(b"this is not valid cbor");
+        assert!(matches!(result, Err(VerificationError::Malformed(_))));
+    }
+
+    #[test]
+    fn test_eat_mldsa65_wrong_key_fails() {
+        let claims = EatClaims {
+            hwmodel: Some("Confidential GPU Realm".to_owned()),
+            dbgstat: Some(1),
+            ..Default::default()
+        };
+
+        let sig = oqs::sig::Sig::new(oqs::sig::Algorithm::MlDsa65).unwrap();
+        let (_pk1, sk1) = sig.keypair().unwrap();
+        let (pk2, _sk2) = sig.keypair().unwrap();
+
+        // Sign with key 1
+        let token = create_signed_eat(&claims, sk1.as_ref(), EatSignAlgorithm::MlDsa65).unwrap();
+
+        // Verify with key 2 (should fail)
+        assert!(verify_signed_eat(&token, pk2.as_ref()).is_err());
+    }
+
+    #[test]
+    fn test_eat_invalid_mldsa65_key_len() {
+        let claims = EatClaims {
+            dbgstat: Some(0),
+            ..Default::default()
+        };
+        // Sign with invalid secret key len
+        let bad_sk = vec![0u8; 32];
+        let result = create_signed_eat(&claims, &bad_sk, EatSignAlgorithm::MlDsa65);
+        assert!(matches!(result, Err(VerificationError::Malformed(_))));
+    }
+
+    #[test]
+    fn test_eat_invalid_cose_envelope() {
+        // Not a COSE structure at all
+        let junk_envelope = vec![0x00, 0xFF, 0xAA];
+        let bad_pk = vec![0u8; 100];
+        let result = verify_signed_eat(&junk_envelope, &bad_pk);
+        assert!(matches!(result, Err(VerificationError::Malformed(_))));
     }
 }

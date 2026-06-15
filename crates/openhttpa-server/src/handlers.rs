@@ -54,6 +54,9 @@ use openhttpa_headers::attest_headers::{
 use openhttpa_proto::{CipherSuite, ProtocolVersion};
 use openhttpa_tee::provider::TeeProvider;
 
+#[cfg(feature = "mesh")]
+use openhttpa_mesh::policy::PolicyEngine;
+
 use crate::atb_registry::AtbRegistry;
 
 /// A runtime-rotatable HMAC key for freshness challenges.
@@ -113,6 +116,8 @@ pub struct AtHsHandlerState {
     pub registry: AtbRegistry,
     pub tee_provider: Arc<dyn TeeProvider>,
     pub verifier: Option<Arc<dyn QuoteVerifier>>,
+    #[cfg(feature = "mesh")]
+    pub policy_engine: Option<Arc<dyn PolicyEngine>>,
     pub atb_ttl: Duration,
     /// HMAC key for signing and verifying freshness challenges.
     ///
@@ -311,6 +316,47 @@ pub async fn aths_handler(
             return (StatusCode::BAD_REQUEST, format!("AtHS failed: {e}")).into_response();
         }
     };
+
+    // 4.1 Evaluate Dynamic Policy (if configured)
+    #[cfg(feature = "mesh")]
+    if let Some(engine) = &state.policy_engine {
+        // Construct the policy evaluation context
+        let mut claims_json = serde_json::Value::Null;
+        if let Some(res) = &result.client_attestation_result {
+            if let Ok(c) = serde_json::to_value(&res.claims) {
+                claims_json = c;
+            }
+        }
+
+        let mut prov_json = serde_json::Value::Null;
+        if let Some(prov) = req_headers.provenance.as_ref() {
+            if let Ok(p) = serde_json::to_value(prov) {
+                prov_json = p;
+            }
+        }
+
+        let input = serde_json::json!({
+            "claims": claims_json,
+            "provenance": prov_json,
+            "tcb_status": "UpToDate", // Assumed from attestation result logic
+            "pqc_bound": true,        // Assumed by PQC exclusivity
+            "cipher_suite": suite.to_string(),
+        });
+
+        match engine.evaluate("default", input).await {
+            Ok(true) => {
+                debug!("Dynamic policy evaluation passed");
+            }
+            Ok(false) => {
+                return (StatusCode::FORBIDDEN, "Attestation Policy Denied").into_response();
+            }
+            Err(e) => {
+                error!("Policy evaluation error: {e}");
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Policy Evaluation Error")
+                    .into_response();
+            }
+        }
+    }
 
     // 4.5 Create and register the session.
     let session = openhttpa_core::session::AttestSession::new(

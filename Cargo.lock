@@ -77,6 +77,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentic_swarm"
+version = "0.1.0"
+dependencies = [
+ "openhttpa-client",
+ "openhttpa-llm",
+ "openhttpa-mcp",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.23",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"

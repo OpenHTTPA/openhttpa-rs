@@ -35,3 +35,6 @@ jobs:
 
       - name: Run Full Verification Suite
         run: make verify-all
+
+      - name: Run Formal Security Proofs
+        run: make formal-verify
