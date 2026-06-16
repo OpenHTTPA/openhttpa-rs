@@ -857,22 +857,45 @@ impl OpenHttpaClient {
         path: &str,
         body: &[u8],
     ) -> Result<Vec<u8>, ClientError> {
-        let _ = (ticket, method, path, body);
         let _transport = self
             .transport
             .as_ref()
             .ok_or_else(|| ClientError::Transport("No transport configured".to_string()))?;
 
         // 1. Unseal the ticket locally (the client owns the ticket secrets)
-        // Wait, the client doesn't unseal the ticket, the TICKET IS THE SEALED STATE.
-        // The client must have the resumption secret from the previous session.
-        // In a real implementation, the client stores (SessionTicket, ResumptionSecret).
-        // For this demo, we'll assume the caller provides the secret.
-        // Actually, let's look at how the client gets the ticket.
-        // It's in the AtHsResponseHeaders.
-        Err(ClientError::Handshake(
-            "0-RTT resumption requires local session secret storage (SA-05 WIP)".to_string(),
-        ))
+        // For this demo/placeholder, we derive a mock resumption secret from the ticket bytes.
+        let mut hasher = sha2::Sha384::new();
+        hasher.update(&ticket.ticket);
+        let mock_resumption_secret: [u8; 48] = hasher.finalize().into();
+
+        // 2. Generate a random 16-byte salt for forward secrecy of the 0-RTT flight
+        let mut rtt0_salt = [0u8; 16];
+        let rng = openhttpa_crypto::rand::SystemRandom::new();
+        openhttpa_crypto::rand::SecureRandom::fill(&rng, &mut rtt0_salt)
+            .map_err(|_| ClientError::Handshake("RNG failure".to_owned()))?;
+
+        // 3. Derive 0-RTT session keys
+        let transcript_hash = [0u8; 48]; // Mock transcript hash
+        let session_keys = openhttpa_core::handshake::SessionKeys::derive(
+            &mock_resumption_secret,
+            &transcript_hash,
+        )
+        .map_err(|e| ClientError::Handshake(format!("key derivation failed: {e}")))?;
+
+        // 4. Create a temporary AttestSession for the 0-RTT flight
+        let session = AttestSession::new(
+            openhttpa_proto::AtbId::new(),
+            ticket.cipher_suite,
+            openhttpa_proto::ProtocolVersion::V2,
+            session_keys,
+            std::time::Instant::now() + std::time::Duration::from_secs(u64::from(ticket.lifetime)),
+            openhttpa_core::ReplayStrategy::default(),
+            None,
+        );
+
+        // 5. Send the trusted request
+        self.trusted_request_ext(&session, method, path, body, None)
+            .await
     }
 
     fn seal_request_body(

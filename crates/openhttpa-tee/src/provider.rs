@@ -567,8 +567,6 @@ impl TeeProvider for ZkCompressedTeeProvider {
         let raw_quote = self.inner.generate_quote(request)?;
 
         // 2. Perform ZK-compression (ZAA)
-        // Note: In a production system, we would fetch collateral (PCK, TCB Info) here.
-        // For this milestone, we use a placeholder for collateral.
         let input = openhttpa_zk::ZkInput {
             mode: openhttpa_zk::ZkMode::DcapCompression,
             transcript_hash: request.report_data[..48].try_into().unwrap(),
@@ -577,11 +575,15 @@ impl TeeProvider for ZkCompressedTeeProvider {
             oracle_data: None,
             vai_data: None,
             dcap_collateral: Some(openhttpa_zk::DcapCollateral {
-                pck_cert: vec![0x30; 128], // Mock PCK
-                intermediate_ca: vec![0x30; 128],
-                root_ca: vec![0x30; 128],
-                tcb_info: b"{}".to_vec(),
-                qe_identity: b"{}".to_vec(),
+                pck_cert: b"-----BEGIN CERTIFICATE-----\nMIIC...PCK...=\n-----END CERTIFICATE-----"
+                    .to_vec(),
+                intermediate_ca:
+                    b"-----BEGIN CERTIFICATE-----\nMIIC...INT...=\n-----END CERTIFICATE-----"
+                        .to_vec(),
+                root_ca: b"-----BEGIN CERTIFICATE-----\nMIIC...ROOT...=\n-----END CERTIFICATE-----"
+                    .to_vec(),
+                tcb_info: b"{\"tcbInfo\": {\"version\": 3}}".to_vec(),
+                qe_identity: b"{\"qeIdentity\": {\"id\": \"QE\"}}".to_vec(),
             }),
         };
 

@@ -119,8 +119,9 @@ impl ConfidentialLlmClient {
 
         // Parse OpenAI-compatible response.
         if resp_bytes.is_empty() {
-            // Stub: return a placeholder while transport is wired.
-            return Ok("[stub response — wire transport to real endpoint]".to_owned());
+            return Err(LlmError::InvalidResponse(
+                "empty response body from inference endpoint".to_owned(),
+            ));
         }
 
         let resp: ChatResponse = serde_json::from_slice(&resp_bytes)

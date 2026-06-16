@@ -213,9 +213,11 @@ fn main() {
 
         // Skeleton: Extract public key and signature from quote_bytes (TDX/SNP specific)
         // For this demo, we assume the quote contains a valid ECDSA signature.
-        if input.quote_bytes.len() > 64 {
-            let vk_bytes = &input.quote_bytes[..33]; // Placeholder for public key
-            let sig_bytes = &input.quote_bytes[33..97]; // Placeholder for signature
+        if input.quote_bytes.len() > 97 {
+            let sig_offset = input.quote_bytes.len().saturating_sub(64);
+            let vk_offset = sig_offset.saturating_sub(33);
+            let vk_bytes = &input.quote_bytes[vk_offset..sig_offset];
+            let sig_bytes = &input.quote_bytes[sig_offset..];
 
             if let (Ok(vk), Ok(sig)) = (
                 VerifyingKey::from_sec1_bytes(vk_bytes),

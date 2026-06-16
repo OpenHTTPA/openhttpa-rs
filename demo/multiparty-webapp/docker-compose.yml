@@ -100,7 +100,7 @@ services:
       resources:
         limits:
           cpus: '2.0'
-          memory: 2G
+          memory: 4G
     security_opt:
       - no-new-privileges:true
     # SA-05: Drop all capabilities for the test runner; it only needs network

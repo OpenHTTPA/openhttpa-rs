@@ -26,5 +26,9 @@
       "bash -c 'OPENHTTPA_SKIP_ZK_BUILD=1 RISC0_SKIP_BUILD=1 RISC0_SKIP_BUILD_KERNELS=1 cargo clippy --workspace --all-targets -- -D warnings' --"
     ],
     "*.{js,ts,jsx,tsx,json,md}": "pnpm exec prettier --write"
+  },
+  "overrides": {
+    "js-yaml": "^4.2.0",
+    "postcss": "^8.5.10"
   }
 }

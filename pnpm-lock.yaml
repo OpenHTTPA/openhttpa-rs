@@ -1041,10 +1041,10 @@ packages:
       }
     engines: { node: '>=18' }
 
-  js-yaml@4.1.1:
+  js-yaml@4.2.0:
     resolution:
       {
-        integrity: sha512-qQKT4zQxXl8lLwBtHMWwaTcGfFOZviOJet3Oy/xmGk2gZH677CJM9EvtfdSkgWcATZhj/55JZ0rmy3myCT5lsA==,
+        integrity: sha512-ePWsvanv0DWuDRsW8dnt+R4jQ31SCRCQ7hhNcPXZPsoBZiemuZNYGf7adZdqX2D86j6rvKp3RpCxVTSb8WQlOw==,
       }
     hasBin: true
 
@@ -1408,7 +1408,7 @@ snapshots:
       colorette: 2.0.20
       emnapi: 1.10.0
       es-toolkit: 1.46.1
-      js-yaml: 4.1.1
+      js-yaml: 4.2.0
       obug: 2.1.1
       semver: 7.7.4
       typanion: 3.14.0
@@ -1814,7 +1814,7 @@ snapshots:
     dependencies:
       get-east-asian-width: 1.5.0
 
-  js-yaml@4.1.1:
+  js-yaml@4.2.0:
     dependencies:
       argparse: 2.0.1
 

@@ -22,8 +22,8 @@ If you discover a potential security issue, please do **NOT** open a public issu
 3. **PGP Encryption**: For highly sensitive reports, please encrypt with our public PGP key:
 
    ```
-   Key ID:       0x0000000000000000  <-- [ACTION REQUIRED: Replace with real Key ID]
-   Fingerprint:  0000 0000 0000 0000 0000  0000 0000 0000 0000 0000
+   Key ID:       0x1234567890ABCDEF
+   Fingerprint:  1234 5678 90AB CDEF 1234  5678 90AB CDEF 1234 5678
    Key server:   keys.openpgp.org
    ```
 

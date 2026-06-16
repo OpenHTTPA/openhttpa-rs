@@ -1,6 +1,17 @@
 use crate::agent::aiql_pipeline::{AiqlPipeline, ClarificationPrompt, IntentStatus};
 use async_graphql::*;
 use futures::stream::Stream;
+use std::sync::OnceLock;
+use tokio::sync::broadcast;
+
+fn message_bus() -> broadcast::Sender<SealedSenderMessage> {
+    static BUS: OnceLock<broadcast::Sender<SealedSenderMessage>> = OnceLock::new();
+    BUS.get_or_init(|| {
+        let (tx, _) = broadcast::channel(100);
+        tx
+    })
+    .clone()
+}
 
 #[derive(SimpleObject, Clone)]
 pub struct AiqlPolicyConfig {
@@ -16,7 +27,7 @@ pub struct AiqlPolicyConfigInput {
     pub policy_id: Option<String>,
 }
 
-#[derive(SimpleObject)]
+#[derive(SimpleObject, Clone)]
 pub struct SealedSenderMessage {
     pub recipient_device_id: String,
     pub agent_unsealable_payload: String,
@@ -88,9 +99,7 @@ impl MessagesMutation {
                 Ok(SendMessageResult::NeedsClarification(prompt))
             }
             IntentStatus::Clear(intent) => {
-                // Proceed with dispatching the message, now with clear AIQL attached
-                // TODO: Route message to recipient
-                let _final_message = SealedSenderMessage {
+                let final_message = SealedSenderMessage {
                     aiql_intent: Some(intent),
                     recipient_device_id: message.recipient_device_id.clone(),
                     agent_unsealable_payload: message.agent_unsealable_payload.clone(),
@@ -101,6 +110,9 @@ impl MessagesMutation {
                         policy_id: p.policy_id.clone(),
                     }),
                 };
+
+                // Route message to recipient queue via internal bus
+                let _ = message_bus().send(final_message);
 
                 Ok(SendMessageResult::Success(MessageDispatchSuccess {
                     message_id,
@@ -121,7 +133,7 @@ impl MessagesMutation {
         match AiqlPipeline::evaluate_intent(&_message_id, &clarified_payload, &None).await {
             IntentStatus::Ambiguous(prompt) => Ok(SendMessageResult::NeedsClarification(prompt)),
             IntentStatus::Clear(aiql_intent) => {
-                let _final_message = SealedSenderMessage {
+                let final_message = SealedSenderMessage {
                     aiql_intent: Some(aiql_intent),
                     recipient_device_id: message.recipient_device_id.clone(),
                     agent_unsealable_payload: clarified_payload.clone(), // Store clarified payload as the agent-unsealable part for routing
@@ -132,6 +144,9 @@ impl MessagesMutation {
                         policy_id: p.policy_id.clone(),
                     }),
                 };
+
+                // Route message to recipient queue via internal bus
+                let _ = message_bus().send(final_message);
 
                 Ok(SendMessageResult::Success(MessageDispatchSuccess {
                     message_id: _message_id,
@@ -148,6 +163,11 @@ pub struct MessagesSubscription;
 #[Subscription]
 impl MessagesSubscription {
     async fn message_stream(&self, _ctx: &Context<'_>) -> impl Stream<Item = SealedSenderMessage> {
-        futures::stream::empty()
+        let mut rx = message_bus().subscribe();
+        async_stream::stream! {
+            while let Ok(msg) = rx.recv().await {
+                yield msg;
+            }
+        }
     }
 }
