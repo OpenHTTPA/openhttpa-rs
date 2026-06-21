@@ -83,7 +83,7 @@ OKM = HKDF-Expand(PRK, info=transcript_hash ‖ b"<slot>", len)
 
 # New (CORRECT — RFC 5869 §2.2 compliant)
 PRK = HKDF-Extract(salt=[0x00; 48], IKM=combined_secret)
-OKM = HKDF-Expand(PRK, info=b"openhttpa v2 " ‖ b"<slot>" ‖ transcript_hash, len)
+OKM = HKDF-Expand(PRK, info=b"openhttpa_v2" ‖ b"<slot>" ‖ 0x00 ‖ transcript_hash, len)
 ```
 
 The zero-byte salt of hash-output length (48 bytes for SHA-384) is the RFC-mandated

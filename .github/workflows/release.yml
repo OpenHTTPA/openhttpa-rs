@@ -96,8 +96,8 @@ jobs:
       - run: pip install maturin
       - uses: actions/cache@v4
         with:
-          path: target/release
-          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          path: target/release-hardened
+          key: ${{ runner.os }}-cargo-release-hardened-${{ hashFiles('**/Cargo.lock') }}
       - name: Build and Publish Python wheels
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
@@ -190,8 +190,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/cache@v4
         with:
-          path: target/release
-          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          path: target/release-hardened
+          key: ${{ runner.os }}-cargo-release-hardened-${{ hashFiles('**/Cargo.lock') }}
       - name: Build production binary and SBOM
         env:
           TAG: ${{ github.ref_name }}
@@ -200,10 +200,10 @@ jobs:
       - name: Generate build attestation
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: target/release/backend
+          subject-path: target/release-hardened/backend
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            target/release/backend
+            target/release-hardened/backend
             *.cdx.json

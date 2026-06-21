@@ -279,3 +279,30 @@ written to persistent storage. Operators **must** follow this procedure:
 
 These steps close the one-nonce window identified in finding H-03 without
 requiring write-ahead logging.
+
+---
+
+## Build Profile Selection (BUILD-01)
+
+`OpenHTTPA` provides multiple Cargo release profiles. Choosing the correct
+profile is critical for production security:
+
+| Profile            | CGU | LTO  | Panic | Use Case                               |
+| ------------------ | --- | ---- | ----- | -------------------------------------- |
+| `release`          | 16  | thin | abort | General release, non-crypto workloads  |
+| `release-hardened` | 1   | fat  | abort | **Production crypto nodes** (required) |
+| `release-zk-guest` | 1   | fat  | abort | ZK guest ELF images                    |
+
+> ⚠️ **Production crypto nodes MUST be built with `--profile release-hardened`.**
+>
+> The default `release` profile uses `codegen-units = 16`, which allows cross-CGU
+> information leakage through timing side-channels. The `release-hardened`
+> profile forces `codegen-units = 1` and full LTO, eliminating this attack
+> surface at the cost of longer compile times.
+>
+> ```bash
+> cargo build --workspace --profile release-hardened --features mock
+> ```
+>
+> The `release` profile is acceptable for non-crypto workloads (demo frontends,
+> CLI tools, build utilities) where timing side-channels are not a concern.

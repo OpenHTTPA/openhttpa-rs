@@ -406,6 +406,29 @@ impl AtHsExecutor {
         // the server's attestation covers this specific session (C-TEE-1).
         // T-10 Hardening: Prepend a domain-separated prefix to the report_data
         // to prevent cross-role quote re-use.
+        //
+        // HS-01 SECURITY NOTE — report_data transcript hash truncation
+        //
+        // The 64-byte `report_data` field is laid out as:
+        //   [0..19]  = domain prefix ("openhttpa hs server" / "openhttpa hs client")
+        //   [19..32] = zero padding (reserved)
+        //   [32..64] = first 32 bytes of SHA-384 transcript hash
+        //
+        // This truncates the 48-byte SHA-384 hash to 32 bytes, reducing the
+        // theoretical collision resistance of the quote-binding from 2^192
+        // (full SHA-384) to 2^128 (truncated 256-bit prefix).  This is an
+        // intentional design choice:
+        //
+        //   1. 2^128 collision resistance exceeds NIST SP 800-57 requirements
+        //      for 128-bit security strength (the target for AES-256-GCM).
+        //   2. The `report_data` field is fixed at 64 bytes by all major TEE
+        //      architectures (SGX, TDX, SEV-SNP).  Fitting both the domain
+        //      prefix (cross-role isolation) and the transcript binding into
+        //      64 bytes requires this trade-off.
+        //   3. A practical collision attack on the first 32 bytes of SHA-384
+        //      would require ~2^128 operations — far beyond current or
+        //      projected quantum capabilities (Grover's reduces to ~2^64
+        //      preimage, not collision).
         let server_quotes = if let Some(tee) = tee_provider {
             let mut report_data = [0u8; 64];
             let prefix = b"openhttpa hs server";

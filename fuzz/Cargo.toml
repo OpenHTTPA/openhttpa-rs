@@ -15,6 +15,7 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 openhttpa-headers = { path = "../crates/openhttpa-headers" }
 openhttpa-proto   = { path = "../crates/openhttpa-proto" }
+aws-lc-rs  = { version = "1", features = ["alloc"] }
 bytes      = "1"
 http       = "1"
 serde_json = "1"
@@ -37,3 +38,16 @@ name = "fuzz_quote_parse"
 path = "fuzz_targets/fuzz_quote_parse.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "fuzz_handshake_json"
+path = "fuzz_targets/fuzz_handshake_json.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_aead_decrypt"
+path = "fuzz_targets/fuzz_aead_decrypt.rs"
+test = false
+doc = false
+

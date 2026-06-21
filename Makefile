@@ -727,8 +727,7 @@ formal-tamarin-ui: ## Start Tamarin interactive web UI
 pdf: ## Convert Markdown to PDF (Usage: make pdf FILE=README.md)
 	@if [ -z "$(FILE)" ]; then echo "Error: Please specify FILE=... (e.g., make pdf FILE=API.md)"; exit 1; fi
 	@echo "Rendering $(FILE) to PDF..."
-	@PUPPETEER_EXECUTABLE_PATH="/Users/gordonk/.cache/puppeteer/chrome/mac_arm-146.0.7680.153/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" \
-	pnpm dlx md-to-pdf $(FILE) --pdf-options '{ "format": "A4", "margin": { "top": "20mm", "bottom": "20mm", "left": "20mm", "right": "20mm" } }'
+	@pnpm dlx md-to-pdf $(FILE) --pdf-options '{ "format": "A4", "margin": { "top": "20mm", "bottom": "20mm", "left": "20mm", "right": "20mm" } }'
 
 ## -- Help --
 

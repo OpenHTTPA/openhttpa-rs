@@ -58,8 +58,11 @@ GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 # 2. Compile Production Binary (Hardened)
 # LOW-04: release binary must NOT include the mock feature (MockTeeProvider).
 # Enforce hardware features for production builds.
+# CI-02: Use release-hardened profile (codegen-units=1, LTO=fat) instead of
+# default --release (codegen-units=16) to eliminate cross-CGU timing
+# side-channel exposure in production crypto binaries.
 echo "[STEP 1] Building hardware-hardened production release binaries..."
-cargo build --release --workspace --features tdx,sev_snp,aws_nitro,trustzone,nvidia_gpu
+cargo build --profile release-hardened --workspace --features tdx,sev_snp,aws_nitro,trustzone,nvidia_gpu
 
 # 3. Generate SBOM (CycloneDX)
 echo "[STEP 2] Generating Software Bill of Materials (SBOM) CycloneDX documents..."
@@ -104,15 +107,15 @@ if command -v gh >/dev/null 2>&1; then
     fi
     
     # Upload binary and SBOM
-    echo "[INFO] Uploading target/release/backend and SBOM files..."
+    echo "[INFO] Uploading target/release-hardened/backend and SBOM files..."
     gh release upload "${TAG_NAME}" \
-        "${WORKSPACE_ROOT}/target/release/backend" \
+        "${WORKSPACE_ROOT}/target/release-hardened/backend" \
         "${WORKSPACE_ROOT}"/*.cdx.json --clobber
     
     echo "[SUCCESS] Release assets uploaded successfully via GitHub CLI."
 else
     echo "[INFO] GitHub CLI ('gh') is not installed. Skipping direct upload step."
-    echo "[INFO] Release artifacts are prepared at: target/release/backend and *.cdx.json"
+    echo "[INFO] Release artifacts are prepared at: target/release-hardened/backend and *.cdx.json"
 fi
 
 echo "=== GitHub Release Pipeline Completed Successfully ==="

@@ -320,3 +320,61 @@ mod tests {
         assert!(matches!(result, Err(PqcError::Verify)));
     }
 }
+
+/// TEST-02: Property-based tests for ML-KEM and ML-DSA.
+///
+/// These tests verify the PQC primitives across randomized inputs,
+/// complementing the deterministic unit tests above.
+#[cfg(test)]
+mod proptest_pqc {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// ML-KEM round-trip: encapsulate(pk_alice) → decapsulate(sk_alice)
+        /// must always recover the same shared secret.
+        #[test]
+        fn mlkem_round_trip_random(
+            _seed in any::<u64>(),
+        ) {
+            let alice = MlKemPair::generate().unwrap();
+            let bob = MlKemPair::generate().unwrap();
+
+            let (ss_enc, ct) = bob.encapsulate(alice.public_encap_key()).unwrap();
+            let ss_dec = alice.decapsulate(&ct).unwrap();
+
+            // Shared secret must have non-trivial length
+            prop_assert!(ss_enc.len() >= 32, "ML-KEM shared secret must be >= 32 bytes");
+
+            prop_assert_eq!(ss_enc, ss_dec);
+        }
+
+        /// ML-DSA sign/verify round-trip must succeed for any message.
+        #[test]
+        fn mldsa_sign_verify_random(
+            message in proptest::collection::vec(any::<u8>(), 0..=2048),
+        ) {
+            let kp = MlDsaKeyPair::generate().unwrap();
+            let sig = kp.sign(&message).unwrap();
+            MlDsaKeyPair::verify(&kp.public_key, &message, &sig).unwrap();
+        }
+
+        /// ML-DSA: modifying any single byte of the message must cause
+        /// verification failure.
+        #[test]
+        fn mldsa_tampered_message_fails(
+            message in proptest::collection::vec(any::<u8>(), 1..=512),
+            flip_idx in any::<proptest::sample::Index>(),
+        ) {
+            let kp = MlDsaKeyPair::generate().unwrap();
+            let sig = kp.sign(&message).unwrap();
+
+            let mut tampered = message;
+            let idx = flip_idx.index(tampered.len());
+            tampered[idx] ^= 0xFF;
+
+            let result = MlDsaKeyPair::verify(&kp.public_key, &tampered, &sig);
+            prop_assert!(result.is_err(), "tampered message must fail verification");
+        }
+    }
+}

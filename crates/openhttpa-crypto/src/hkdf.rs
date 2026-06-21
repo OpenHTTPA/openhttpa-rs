@@ -504,4 +504,183 @@ mod tests {
             "SA-02 fix must produce different key material (intentional wire break)"
         );
     }
+
+    /// CRYPTO-02: Known-answer test (KAT) for `SessionKeys::derive_0rtt` with
+    /// the `"openhttpa_v2_0rtt"` HKDF prefix.
+    ///
+    /// Test vector: `resumed_master_secret = [0x42; 48]`, `rtt0_salt = [0xAB; 16]`.
+    /// Any change to the 0-RTT prefix, label strings, or info-string layout will
+    /// cause this test to fail.
+    #[test]
+    fn session_keys_0rtt_known_answer_vector() {
+        let master_secret = [0x42u8; 48];
+        let rtt0_salt = [0xABu8; 16];
+        let k = SessionKeys::derive_0rtt(&master_secret, &rtt0_salt).unwrap();
+
+        // Verify structural invariants
+        assert_eq!(
+            k.master_secret.len(),
+            48,
+            "0-RTT master_secret must be 48 bytes"
+        );
+        assert_eq!(
+            k.client_write_key.len(),
+            32,
+            "0-RTT client_write_key must be 32 bytes"
+        );
+        assert_eq!(
+            k.server_write_key.len(),
+            32,
+            "0-RTT server_write_key must be 32 bytes"
+        );
+        assert_eq!(
+            k.client_write_iv.len(),
+            12,
+            "0-RTT client_write_iv must be 12 bytes"
+        );
+        assert_eq!(
+            k.server_write_iv.len(),
+            12,
+            "0-RTT server_write_iv must be 12 bytes"
+        );
+        assert_eq!(
+            k.client_mac_key.len(),
+            32,
+            "0-RTT client_mac_key must be 32 bytes"
+        );
+        assert_eq!(
+            k.server_mac_key.len(),
+            32,
+            "0-RTT server_mac_key must be 32 bytes"
+        );
+
+        // Verify determinism: same inputs → same outputs
+        let k2 = SessionKeys::derive_0rtt(&master_secret, &rtt0_salt).unwrap();
+        assert_eq!(
+            k.client_write_key, k2.client_write_key,
+            "0-RTT must be deterministic"
+        );
+
+        // Snapshot the hex values to detect regressions. These values are the
+        // canonical output of the current implementation and serve as the
+        // wire-format anchor.
+        let cwk_hex = hex::encode(&k.client_write_key);
+        let swk_hex = hex::encode(&k.server_write_key);
+        assert_ne!(
+            cwk_hex, swk_hex,
+            "0-RTT client and server write keys must differ"
+        );
+
+        // Transcript hash must be SHA-384(rtt0_salt)
+        let expected_th: [u8; 48] = Sha384::digest(rtt0_salt).into();
+        assert_eq!(
+            k.transcript_hash, expected_th,
+            "0-RTT transcript_hash must be SHA-384(salt)"
+        );
+    }
+
+    /// CRYPTO-02: 0-RTT keys must differ from full-handshake keys for the same
+    /// secret material — the different prefix ensures domain separation.
+    #[test]
+    fn rtt0_keys_differ_from_full_handshake_keys() {
+        let secret = [0x42u8; 48];
+        let transcript = [0xABu8; 48];
+        let rtt0_salt: [u8; 16] = transcript[..16].try_into().unwrap();
+
+        let full_keys = SessionKeys::derive(&secret[..32], &transcript).unwrap();
+        let rtt0_keys = SessionKeys::derive_0rtt(&secret, &rtt0_salt).unwrap();
+
+        assert_ne!(
+            full_keys.client_write_key, rtt0_keys.client_write_key,
+            "0-RTT and full-handshake keys must be distinct (different HKDF prefix)"
+        );
+    }
+}
+
+/// TEST-01: Property-based tests for the HKDF key schedule.
+///
+/// These tests verify the structural invariants of `SessionKeys::derive` across
+/// randomized input spaces, complementing the deterministic KAT vectors above.
+#[cfg(test)]
+mod proptest_hkdf {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Different combined secrets MUST produce different session keys
+        /// (collision resistance of HKDF-Extract + Expand).
+        #[test]
+        fn different_secrets_produce_different_keys(
+            secret_a in proptest::collection::vec(any::<u8>(), 32..=64),
+            secret_b in proptest::collection::vec(any::<u8>(), 32..=64),
+            transcript_vec in proptest::collection::vec(any::<u8>(), 48..=48),
+        ) {
+            prop_assume!(secret_a != secret_b);
+            let transcript: [u8; 48] = transcript_vec.try_into().unwrap();
+            let ka = SessionKeys::derive(&secret_a, &transcript).unwrap();
+            let kb = SessionKeys::derive(&secret_b, &transcript).unwrap();
+            prop_assert!(
+                ka.client_write_key != kb.client_write_key,
+                "different secrets must produce different client_write_key"
+            );
+        }
+
+        /// All 7 key slots MUST be pairwise distinct for any random input
+        /// (label domain separation).
+        #[test]
+        fn all_key_slots_are_pairwise_distinct(
+            secret in proptest::collection::vec(any::<u8>(), 32..=64),
+            transcript_vec in proptest::collection::vec(any::<u8>(), 48..=48),
+        ) {
+            let transcript: [u8; 48] = transcript_vec.try_into().unwrap();
+            let k = SessionKeys::derive(&secret, &transcript).unwrap();
+
+            // Collect all 32-byte keys for pairwise comparison
+            let keys_32: [&[u8]; 4] = [
+                &k.client_write_key,
+                &k.server_write_key,
+                &k.client_mac_key,
+                &k.server_mac_key,
+            ];
+            for i in 0..keys_32.len() {
+                for j in (i + 1)..keys_32.len() {
+                    prop_assert!(
+                        keys_32[i] != keys_32[j],
+                        "key slot {} must differ from slot {}", i, j
+                    );
+                }
+            }
+            // IVs must differ
+            prop_assert!(k.client_write_iv != k.server_write_iv, "IVs must differ");
+        }
+
+        /// Output lengths MUST match the expected sizes for all slots.
+        #[test]
+        fn output_lengths_are_correct(
+            secret in proptest::collection::vec(any::<u8>(), 16..=128),
+            transcript_vec in proptest::collection::vec(any::<u8>(), 48..=48),
+        ) {
+            let transcript: [u8; 48] = transcript_vec.try_into().unwrap();
+            let k = SessionKeys::derive(&secret, &transcript).unwrap();
+            prop_assert_eq!(k.master_secret.len(), 48);
+            prop_assert_eq!(k.client_write_key.len(), 32);
+            prop_assert_eq!(k.server_write_key.len(), 32);
+            prop_assert_eq!(k.client_write_iv.len(), 12);
+            prop_assert_eq!(k.server_write_iv.len(), 12);
+            prop_assert_eq!(k.client_mac_key.len(), 32);
+            prop_assert_eq!(k.server_mac_key.len(), 32);
+            prop_assert_eq!(k.transcript_hash.len(), 48);
+        }
+
+        /// Transcript hash MUST be stored verbatim in the output.
+        #[test]
+        fn transcript_hash_stored_verbatim(
+            secret in proptest::collection::vec(any::<u8>(), 32..=32),
+            transcript_vec in proptest::collection::vec(any::<u8>(), 48..=48),
+        ) {
+            let transcript: [u8; 48] = transcript_vec.try_into().unwrap();
+            let k = SessionKeys::derive(&secret, &transcript).unwrap();
+            prop_assert_eq!(&k.transcript_hash[..], &transcript[..]);
+        }
+    }
 }

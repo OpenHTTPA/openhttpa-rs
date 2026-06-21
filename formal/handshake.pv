@@ -21,6 +21,23 @@
  * two-phase transition if a machine-checked proof of the rotation invariant
  * is required.
  *)
+(* PROVERIF-CS-01 (INFO): Cipher suite negotiation downgrade — out-of-scope
+ *
+ * This model uses `aes_256_gcm` as a fixed constant and does not allow the
+ * adversary to influence cipher suite selection during the handshake.  A real
+ * downgrade attack where the attacker modifies the client's proposed suites
+ * (e.g. removing strong suites to force a weaker one) is not modeled.
+ *
+ * The implementation mitigates this risk by:
+ *   - Binding the negotiated suite into the transcript hash (both parties must
+ *     agree on the same suite for the hash to match).
+ *   - Using server-preference ordering, which prevents a client-side attacker
+ *     from unilaterally selecting a weaker suite.
+ *
+ * A variant model that introduces attacker-influenced suite selection would
+ * strengthen the formal guarantee.  This is tracked as FV-01 in the formal
+ * review report.
+ *)
 type key.
 type exponent.
 type group_element.

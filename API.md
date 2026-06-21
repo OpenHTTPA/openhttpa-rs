@@ -140,7 +140,7 @@ handshake sessions.
 OKM = HKDF-Expand(
     Hash   = SHA-384,
     PRK    = PRK from step 1,
-    info   = b"openhttpa v2 " ‖ label ‖ transcript_hash,
+    info   = b"openhttpa_v2" ‖ label ‖ 0x00 ‖ transcript_hash,
     L      = <slot-specific length>
 )
 ```
@@ -149,12 +149,14 @@ The `info` string components:
 
 | Component       | Value                           | Length                            |
 | --------------- | ------------------------------- | --------------------------------- |
-| Version prefix  | `b"openhttpa v2 "`              | 10 bytes (ASCII, fixed)           |
+| Version prefix  | `b"openhttpa_v2"`               | 12 bytes (ASCII, fixed)           |
 | Key-slot label  | See table below                 | Variable (ASCII, unique per slot) |
+| Null separator  | `0x00`                          | 1 byte (prevents label ambiguity) |
 | Transcript hash | `SHA-384(handshake transcript)` | 48 bytes (fixed)                  |
 
-Because `transcript_hash` is always exactly 48 bytes, there is no length ambiguity at
-the `label ‖ transcript_hash` boundary.
+The null separator byte between the label and the transcript hash ensures that
+even labels that share a common prefix (e.g. hypothetical `"key"` vs `"key_iv"`)
+are parsed as distinct info strings by the HKDF-Expand step.
 
 #### Key Slots
 
