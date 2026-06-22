@@ -333,11 +333,15 @@ impl AtHsExecutor {
         verifier: Option<&dyn QuoteVerifier>,
         identity_key: Option<&openhttpa_crypto::pqc::MlDsaKeyPair>,
     ) -> Result<(CipherSuite, ProtocolVersion, ServerKeyShare, AtHsResult), HandshakeError> {
-        // Negotiate cipher suite (first client preference we support).
-        let suite = req
-            .client_suites
+        // PROTO-H01: Server-preference ordering for downgrade resistance.
+        // Iterate server's supported suites (configured in priority order)
+        // and pick the first one the client also supports. This ensures the
+        // server controls suite selection, preventing a malicious client from
+        // forcing a weaker suite that the server would otherwise deprioritize.
+        let suite = self
+            .supported_suites
             .iter()
-            .find(|cs| self.supported_suites.contains(cs))
+            .find(|cs| req.client_suites.contains(cs))
             .copied()
             .ok_or(HandshakeError::NoCipherSuiteOverlap)?;
 
@@ -426,9 +430,11 @@ impl AtHsExecutor {
         //      prefix (cross-role isolation) and the transcript binding into
         //      64 bytes requires this trade-off.
         //   3. A practical collision attack on the first 32 bytes of SHA-384
-        //      would require ~2^128 operations — far beyond current or
-        //      projected quantum capabilities (Grover's reduces to ~2^64
-        //      preimage, not collision).
+        //      would require ~2^128 operations classically.  Under quantum
+        //      adversaries, the BHT algorithm reduces collision search to
+        //      ~2^{n/3} = ~2^85 for n=256 — still far beyond projected
+        //      quantum capabilities.  (Note: Grover's algorithm accelerates
+        //      *preimage* search, not collision search.)
         let server_quotes = if let Some(tee) = tee_provider {
             let mut report_data = [0u8; 64];
             let prefix = b"openhttpa hs server";

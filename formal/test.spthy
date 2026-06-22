@@ -2,7 +2,41 @@
  * Copyright 2026 The OpenHTTPA Foundation (openhttpa.org)
  */
 
-theory Test begin
-rule A: [ Fr(~x) ] --> [ Out(~x) ]
-lemma L: exists-trace "Ex x #i. K(x) @ i"
+/*
+ * FV-H03: Tamarin Sanity Check Theory
+ *
+ * This theory provides a minimal executability witness to verify that the
+ * Tamarin installation and tool pipeline are functioning correctly.  It is
+ * NOT a security model — see handshake.spthy for the protocol analysis.
+ *
+ * The single lemma proves that Tamarin can construct a trace where a fresh
+ * value is output and known by the adversary (trivially true).  If this
+ * theory does not terminate or produces errors, the Tamarin installation
+ * is broken.
+ *
+ * Usage:
+ *   tamarin-prover --prove formal/test.spthy
+ */
+
+theory TamarinSanityCheck begin
+
+builtins: hashing, asymmetric-encryption
+
+// Sanity check: a fresh value output on the public channel is learnable.
+rule Output_Fresh:
+  [ Fr(~x) ] --> [ Out(~x) ]
+
+// Executability witness: there exists a trace where the adversary learns a value.
+lemma Sanity_Executability:
+  exists-trace
+  "Ex x #i. K(x) @ i"
+
+// Non-trivial test: hashing is functional in this Tamarin build.
+rule Hash_Output:
+  [ Fr(~y) ] --> [ Out(h(~y)) ]
+
+lemma Hash_Is_Functional:
+  exists-trace
+  "Ex x #i. K(h(x)) @ i"
+
 end

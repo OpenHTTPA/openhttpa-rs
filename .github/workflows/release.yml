@@ -31,9 +31,9 @@
 # 2. push tags: (Trigger) Automatically fires when a git tag like 'v0.1.2' is pushed.
 # ──────────────────────────────────────────────────────────────────────────────
 on:
-  # push:
-  #   tags:
-  #     - 'v*'
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 # ─── Permissions & Capabilities ──────────────────────────────────────────────

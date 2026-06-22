@@ -53,8 +53,8 @@ Traditional Transport Layer Security (TLS) terminates at the network edge (e.g.,
 ## Protocol Capabilities & Feature Specifications
 
 - **Cryptographic Protocol Adherence**: Strictly implements the Preflight, Attested Handshake (AtHS utilizing SIGMA-I), Attested Session Protocol (AtSP), and Ticket-based Resumption (TrR) state machines defined in the foundational specifications.
-- **Post-Quantum Cryptographic Readiness (FIPS 203/204)**: Integrates hybrid X25519/ML-KEM-768 Key Encapsulation Mechanisms (KEM) and ML-DSA-65 post-quantum digital signatures, complemented by SLH-DSA fallback vectors.
-- **FIPS 140-3 Compliant Cryptography**: Employs the `aws-lc-rs` cryptographic provider (AWS Libcrypto for Rust), leveraging FIPS-validated cryptographic boundaries when compiled with compliance flags.
+- **Post-Quantum Cryptographic Readiness (NIST-Standardized Algorithms)**: Integrates hybrid X25519/ML-KEM-768 Key Encapsulation Mechanisms (KEM) and ML-DSA-65 post-quantum digital signatures (FIPS 203/204), complemented by SLH-DSA fallback vectors.
+- **FIPS 140-3 Capable Cryptography**: Employs the `aws-lc-rs` cryptographic provider (AWS Libcrypto for Rust). _Note: While the cryptographic algorithms are NIST-approved, formal CMVP certification for the module boundary is currently pending._
 - **Agnostic Hardware Root of Trust**: Provides seamless, vendor-agnostic abstractions over prominent Trusted Execution Environments, including Intel SGX, Intel TDX, AMD SEV-SNP, AWS Nitro Enclaves, and ARM TrustZone.
 - **Composite Attestation Modalities**: Facilitates simultaneous, unified session attestation spanning heterogeneous compute architectures (e.g., verifying Intel TDX CPU integrity alongside NVIDIA Hopper GPU secure execution states).
 - **Transport Layer Independence**: Designed for agnostic multiplexing over HTTP/2 (`hyper`/`h2`), HTTP/3 (`quinn`/`h3`), and Remote Procedure Calls via gRPC (`tonic`).
@@ -431,12 +431,13 @@ The demo shows multi-party attested computation: a browser talks to an Axum
 backend that performs an `OpenHTTPA` handshake and routes requests through a
 confidential LLM.
 
-````bash
+```bash
 # Build images and start services (first run takes ~2 min)
 docker compose -f demo/multiparty-webapp/docker-compose.yml up --build
 
 # Open in browser
 open http://127.0.0.1:3001
+```
 
 ### Running the Native Proxy Demo (Caddy)
 
@@ -448,18 +449,16 @@ make demo-native-up
 
 # Open the test page
 open http://127.0.0.1:8082
-````
+```
 
 For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
-
-````
 
 To run the backend locally without Docker:
 
 ```bash
 cargo run -p multiparty-webapp-backend
 # Listens on http://127.0.0.1:8080
-````
+```
 
 ## Operational Security Posture & Deployment Caveats
 

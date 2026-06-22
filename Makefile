@@ -16,7 +16,10 @@ export COMPOSE_PROJECT_NAME ?= openhttpa-$(shell echo $(RUNNER_ID) | head -c 8)
 export CARGO_NET_RETRY := 10
 export RUSTUP_MAX_RETRIES := 10
 export CARGO_TERM_COLOR := always
-export OPENHTTPA_ALLOW_MOCK_HARDWARE := 1
+# DEPLOY-H03: Mock hardware is NOT exported globally — only dev/test targets
+# set it explicitly. Production targets (verify-all, build-release, publish-*)
+# MUST NOT enable mock hardware. Set it manually for local dev:
+#   OPENHTTPA_ALLOW_MOCK_HARDWARE=1 make build test
 export CI ?= true
 export TMPDIR ?= /tmp
 

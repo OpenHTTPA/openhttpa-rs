@@ -21,16 +21,22 @@ If you discover a potential security issue, please do **NOT** open a public issu
 2. **Include Details**: Please provide a detailed description of the vulnerability, including steps to reproduce, potential impact, and any suggested remediation.
 3. **PGP Encryption**: For highly sensitive reports, please encrypt with our public PGP key:
 
-   ```
-   Key ID:       0x1234567890ABCDEF
-   Fingerprint:  1234 5678 90AB CDEF 1234  5678 90AB CDEF 1234 5678
-   Key server:   keys.openpgp.org
-   ```
-
    > [!CAUTION]
-   > **D-01 RELEASE GATE**: The placeholder above MUST be replaced with the real PGP
-   > key fingerprint for security@openhttpa.org before the v0.1.0 release. Verify the key
-   > is published to `keys.openpgp.org` and the email address is operational.
+   > **D-01 RELEASE GATE — PGP Key Not Yet Provisioned**
+   >
+   > A dedicated PGP key for `security@openhttpa.org` MUST be generated and
+   > published before the first GA release. Until then, send reports via
+   > plaintext email to `security@openhttpa.org` with the subject line
+   > `[SECURITY] <short description>`.
+   >
+   > **Key Generation Checklist (for maintainers):**
+   >
+   > 1. Generate an Ed25519 or RSA-4096 PGP key for `security@openhttpa.org`.
+   > 2. Publish the key to `keys.openpgp.org` and verify the email address.
+   > 3. Replace this block with the actual Key ID, Fingerprint, and Key Server URL.
+   > 4. Cross-sign the key with at least two core maintainer keys.
+   > 5. Add the public key armored block to `docs/pgp/security-at-openhttpa.asc`.
+   > 6. Remove this caution block and replace with the key details.
 
 ### Our Commitment
 

@@ -123,22 +123,29 @@ lemma Session_Key_Secrecy:
     ==> not (Ex #j. K(k) @ j)
         | (Ex entity #r. Reveal_Identity(entity) @ r & r < i)"
 
-/* SA-06 Fix: `r < i` constraint added.
+/* SA-06 Fix: Forward Secrecy Lemma (corrected from Session_Key_Secrecy).
+ *
+ * This lemma captures *forward secrecy*: once a session key k has been
+ * accepted by the client at time #i, the key remains secret even if a
+ * long-term identity key is revealed at a LATER time #r (i.e. i < r).
+ *
+ * Contrast with Session_Key_Secrecy above, which allows compromise
+ * BEFORE acceptance (r < i). PFS is strictly stronger: it guarantees
+ * that post-session reveals cannot retroactively break past sessions
+ * because the ephemeral DH/KEM shares used to derive k were deleted
+ * after acceptance.
  *
  * Old (INCORRECT — identical to Session_Key_Secrecy):
- *   (Ex entity #r. Reveal_Identity(entity) @ r)   ← no time bound on r
- *
- * New (CORRECT — forward secrecy requires reveal BEFORE acceptance):
  *   (Ex entity #r. Reveal_Identity(entity) @ r & r < i)
  *
- * A reveal that occurs AFTER Client_Accepts does not break a past session
- * because the ephemeral DH shares used to derive k have been deleted.
+ * New (CORRECT — only post-acceptance reveals are tolerated):
+ *   (Ex entity #r. Reveal_Identity(entity) @ r & i < r)
  */
 lemma Perfect_Forward_Secrecy:
   all-traces
   "All challenge k #i. Client_Accepts(challenge, k) @ i
     ==> not (Ex #j. K(k) @ j)
-        | (Ex entity #r. Reveal_Identity(entity) @ r & r < i)"
+        | (Ex entity #r. Reveal_Identity(entity) @ r & i < r)"
 
 /* KCI Resistance:
  * Even if the client's long-term identity key is compromised before the

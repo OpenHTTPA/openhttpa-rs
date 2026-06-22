@@ -14,7 +14,7 @@
 
 ## 1. Introduction
 
-This report evaluates the `OpenHTTPA` cryptographic implementation against the requirements specified in FIPS 140-3, "Security Requirements for Cryptographic Modules". `OpenHTTPA` is designed to meet or exceed Level 3 requirements when deployed within a validated Trusted Execution Environment (TEE).
+This report evaluates the `OpenHTTPA` cryptographic implementation against the requirements specified in FIPS 140-3, "Security Requirements for Cryptographic Modules". `OpenHTTPA` is designed to meet or exceed Level 3 requirements when deployed within a validated Trusted Execution Environment (TEE). _Note: `OpenHTTPA` utilizes NIST-standardized algorithms (e.g., FIPS 203, FIPS 204), but formal CMVP certification of the underlying cryptographic modules (like aws-lc-rs and liboqs) is currently pending._
 
 ## 2. Cryptographic Module Specification
 

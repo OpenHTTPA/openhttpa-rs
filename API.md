@@ -174,7 +174,7 @@ are parsed as distinct info strings by the HKDF-Expand step.
 
 The info string enforces three independent domain-separation properties:
 
-1. **Protocol-version separation** — `b"openhttpa v2 "` ensures that keys derived under
+1. **Protocol-version separation** — `b"openhttpa_v2"` ensures that keys derived under
    `OpenHTTPA` v2 cannot be confused with keys from any other protocol version, even if the
    same combined secret is used.
 

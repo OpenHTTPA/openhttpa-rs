@@ -17,7 +17,6 @@ members = [
     "crates/openhttpa-a2a",
     "crates/openhttpa-zk",
     "crates/openhttpa-ingress",
-    "crates/openhttpa-broker",
     "crates/openhttpa-aiql",
     "crates/openhttpa-identity-chain",
     "crates/openhttpa-agent-server",
@@ -148,7 +147,7 @@ ciborium         = "0.2"
 coset            = "0.4"
 aes-gcm          = "0.10"
 getrandom        = "0.4"
-rdrand           = "=0.8.3"
+rdrand           = "0.8"
 bloomfilter      = "3.0"
 postcard         = { version = "1.1", features = ["alloc"] }
 subtle           = "2.6"
