@@ -14,7 +14,7 @@ keywords.workspace = true
 
 [dependencies]
 openhttpa-proto = { workspace = true }
-sfv          = "0.14"
+sfv          = "0.15"
 http         = { workspace = true }
 bytes        = { workspace = true }
 serde        = { workspace = true }

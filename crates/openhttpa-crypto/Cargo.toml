@@ -27,7 +27,7 @@ serde-big-array = "0.5"
 bytes        = { workspace = true }
 tracing      = { workspace = true }
 serde_json   = { workspace = true }
-fd-lock      = "3"
+fd-lock      = "4"
 
 [dev-dependencies]
 proptest   = { workspace = true }

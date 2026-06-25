@@ -25,10 +25,10 @@ tracing-subscriber = { workspace = true }
 axum.workspace = true
 openhttpa-attestation.workspace = true
 openhttpa-crypto.workspace = true
-tower-http = "0.6.11"
+tower-http = "0.7.0"
 serde_json.workspace = true
 getrandom = { workspace = true }
-config = "0.15.23"
+config = "0.15.24"
 
 [dev-dependencies]
 axum.workspace = true
