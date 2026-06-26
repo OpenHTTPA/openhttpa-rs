@@ -319,7 +319,7 @@ pub fn verify_mock_quote(quote: &AttestQuote, report_data: &[u8; 64]) -> Result<
     // Note: Mock quotes in this version are raw SHA-384 hashes of report_data
     let expected = Sha384::digest(report_data);
     if quote.raw.as_ref() != expected.as_slice() {
-        return Err("mock quote hash mismatch".to_owned());
+        println!("mock expected: {:?}, got: {:?}", expected.as_slice(), quote.raw.as_ref()); return Err("mock quote hash mismatch".to_owned());
     }
     Ok(())
 }

@@ -142,7 +142,7 @@ mod tests {
                         quotes: vec![openhttpa_proto::AttestQuote {
                             collateral_uris: vec![],
                             quote_type: openhttpa_proto::QuoteType::Mock,
-                format: Default::default(),
+                format: openhttpa_proto::QuoteFormat::default(),
                             raw: bytes::Bytes::from_static(b"mock-quote"),
                             qudd: bytes::Bytes::from_static(&[0u8; 64]),
                         }],
