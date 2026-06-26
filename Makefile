@@ -98,7 +98,7 @@ verify-demo-run:
 verify-demo: ## Verify E2E demo stack functionality
 	@echo "Starting E2E stack for project: $(COMPOSE_PROJECT_NAME) for verify-demo"
 	@set -e; \
-	trap '$(MAKE) demo-down && docker images "openhttpa-*" -q | xargs -r docker rmi -f 2>/dev/null || true' EXIT; \
+	trap '$(MAKE) demo-down' EXIT; \
 	$(MAKE) demo-up; \
 	$(MAKE) verify-demo-run
 	@echo "--- DEMO VERIFICATION COMPLETED ---"
@@ -107,7 +107,7 @@ verify-demo: ## Verify E2E demo stack functionality
 verify-all: verify-core check-bindings verify-examples ci ## Exhaustive formal validation and verification suite
 	@echo "--- STARTING SHARED DEMO STACK FOR VERIFY-ALL ---"
 	@set -e; \
-	trap '$(MAKE) demo-down && docker images "openhttpa-*" -q | xargs -r docker rmi -f 2>/dev/null || true' EXIT; \
+	trap '$(MAKE) demo-down' EXIT; \
 	$(MAKE) demo-up; \
 	$(MAKE) test-bindings-run; \
 	$(MAKE) verify-demo-run; \
@@ -246,7 +246,7 @@ test-web: ## Run Playwright E2E tests (individual)
 e2e: ## Run full E2E suite (starts demo stack + tests)
 	@echo "Starting E2E stack for project: $(COMPOSE_PROJECT_NAME)"
 	@set -e; \
-	trap '$(MAKE) demo-down && docker images "openhttpa-*" -q | xargs -r docker rmi -f 2>/dev/null || true' EXIT; \
+	trap '$(MAKE) demo-down' EXIT; \
 	$(MAKE) demo-up; \
 	$(MAKE) verify-demo-run; \
 	$(MAKE) test-bindings-run
@@ -605,7 +605,7 @@ test-bindings: test-all-bindings ## Alias for test-all-bindings
 .PHONY: test-all-bindings
 test-all-bindings: ## Run all language binding integration tests
 	@set -e; \
-	trap '$(MAKE) demo-down && docker images "openhttpa-*" -q | xargs -r docker rmi -f 2>/dev/null || true' EXIT; \
+	trap '$(MAKE) demo-down' EXIT; \
 	$(MAKE) demo-up; \
 	$(MAKE) test-bindings-run
 
