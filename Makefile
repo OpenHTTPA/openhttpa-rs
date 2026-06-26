@@ -357,6 +357,15 @@ deep-clean: clean ## Remove ALL artifacts (node_modules, wasm, etc.)
 	find . -name ".turbo" -type d -exec rm -rf {} +
 	@$(MAKE) -C docs/ietf clean-image || true
 
+.PHONY: clean-docker
+clean-docker: ## Clean completely all docker containers, images, and caches related to openhttpa
+	@echo "Cleaning up all OpenHTTPA Docker resources..."
+	@docker ps -a -q --filter="name=openhttpa" | xargs -r docker rm -f
+	@docker images "openhttpa-*" -q | xargs -r docker rmi -f
+	@docker images "openhttpa_*" -q | xargs -r docker rmi -f
+	@docker builder prune -f
+	@echo "Docker cleanup complete."
+
 .PHONY: doctor
 doctor: ## Check system dependencies and environment readiness
 	@echo "=== OpenHTTPA System Doctor ==="
