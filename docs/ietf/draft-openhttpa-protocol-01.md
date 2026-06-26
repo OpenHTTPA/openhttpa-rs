@@ -9,7 +9,6 @@ area: Security
 workgroup: HTTPBIS, TEE, SECDISPATCH
 keyword: [http, attestation, tee, post-quantum, pqc, sigma-i, eat]
 
-
 normative:
   RFC2119:
   RFC8174:
@@ -82,7 +81,7 @@ protection. However, TLS termination often occurs at the network edge (e.g., Loa
 CDNs, or WAFs), leaving data exposed within internal cloud networks and vulnerable to
 privileged insiders or compromised host software.
 
-Trusted Execution Environments (TEEs), such as Intel SGX/TDX, AMD SEV-SNP, and Arm TrustZone,
+Trusted Execution Environments (TEEs), such as Intel SGX/TDX {{INTEL-TDX}}, AMD SEV-SNP {{AMD-SEV}}, and Arm TrustZone,
 provide hardware-level isolation. While TEEs can generate cryptographic "quotes" to prove
 their identity and integrity, there is no standardized Application Layer (L7) protocol to
 seamlessly bind these hardware proofs to HTTP sessions.
@@ -121,6 +120,7 @@ This document is submitted for cross-working-group review:
     of multiple hardware providers (e.g., CPU + Accelerator) in a single unified session.
 5.  **Formal Verifiability**: The protocol state machine and cryptographic binding MUST be
     amenable to machine-checked formal verification (e.g., ProVerif) to guarantee injective authentication and perfect forward secrecy.
+
 # Conventions and Terminology
 
 The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT",
@@ -244,9 +244,9 @@ A List of Inner Lists. Each inner list contains a TEE type token and an SFV Byte
 
 #### Entity Attestation Token (EAT) Considerations
 
-While {{RFC9334}} defines the Entity Attestation Token (EAT) format for conveying attestation claims, `OpenHTTPA` explicitly prioritizes sub-millisecond setup performance. Encapsulating hardware evidence within CWT/JWT structures introduces serialization overhead and larger transmission payloads, which violates the strict `< 5ms overhead` SLA defined for latency-critical Agentic Swarms.
+While `OpenHTTPA` explicitly prioritizes sub-millisecond setup performance utilizing **raw hardware quotes** (e.g., native Intel TDX {{INTEL-TDX}} or AMD SEV-SNP {{AMD-SEV}} binary formats) for latency-critical Agentic Swarms, it is imperative to support broader Internet interoperability.
 
-Therefore, `OpenHTTPA` mandates the transmission of **raw hardware quotes** (e.g., native Intel TDX or AMD SEV-SNP binary formats) encoded directly as byte sequences in the SFV structure. Future extensions MAY define an optional EAT fallback negotiation for environments where standardization across disparate verifiers is prioritized over absolute latency.
+Therefore, implementations MUST support an Entity Attestation Token (EAT) {{RFC9334}} fallback. The client and server can negotiate the EAT format via the `format=eat` parameter. When EAT is utilized, hardware evidence is encapsulated within CWT/JWT structures, allowing disparate verifiers to evaluate claims using standardized engines (e.g., Veraison).
 
 ## JSON Key Shares
 
@@ -562,7 +562,7 @@ Similar to TLS 1.3 early data (Section 8 of {{RFC8446}}), 0-RTT requests do not 
 
 ### 0-RTT Replay Protection
 
-0-RTT resumption MUST ONLY be permitted for safe, idempotent HTTP methods (e.g., `GET`, `HEAD`, `OPTIONS`). If a client attempts to use 0-RTT with an unsafe method (e.g., `POST`, `PUT`, `DELETE`), the server MUST reject the request and return a `425 Too Early` status code. 
+0-RTT resumption MUST ONLY be permitted for safe, idempotent HTTP methods (e.g., `GET`, `HEAD`, `OPTIONS`). If a client attempts to use 0-RTT with an unsafe method (e.g., `POST`, `PUT`, `DELETE`), the server MUST reject the request and return a `425 Too Early` status code.
 
 Furthermore, because 0-RTT payloads are susceptible to network-level replays before the server can inject a fresh nonce, the server MUST maintain a sliding-window strike register (replay cache) of all nonces observed across all recently active resumed sessions within the ticket expiry window.
 
@@ -588,7 +588,7 @@ evidence before being transmitted to an on-chain verifier.
 ## Protocol Binding
 
 When an Oracle fetch is performed, the TEE MUST bind the resulting data to the current
-AtHS session transcript. This is achieved by including a truncated version of the `transcript_hash` in the 64-byte hardware report data (e.g., the `REPORT_DATA` field in Intel TDX or `REPORT_DATA` in Intel SGX).
+AtHS session transcript. This is achieved by computing a SHA-512 digest over the full `transcript_hash` combined with a domain prefix, and placing it in the 64-byte hardware report data (e.g., the `REPORT_DATA` field in Intel TDX or `REPORT_DATA` in Intel SGX).
 
 The 64-byte `ReportData` structure is defined as follows:
 
@@ -770,9 +770,9 @@ Protocol (HTTP) Field Name Registry":
 | `Attest-Zk-Proof`                | SFV      | This document |
 | `Attest-Ai-Provenance-Proof`     | SFV      | This document |
 
-## TLS Exporter Labels Registry
+## OpenHTTPA HKDF Labels Registry
 
-This document requests the registration of the following labels in the IANA "TLS Exporter Labels" registry (RFC 5705) for use with HKDF expansion in OpenHTTPA.
+This document establishes a new IANA registry titled "OpenHTTPA HKDF Labels" to prevent namespace collisions with TLS. The following labels are registered for use with HKDF expansion in OpenHTTPA.
 
 | Label               | DTLS-OK | Reference     |
 | ------------------- | ------- | ------------- |

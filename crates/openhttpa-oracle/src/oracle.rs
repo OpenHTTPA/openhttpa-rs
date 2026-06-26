@@ -182,16 +182,17 @@ impl OracleNode {
         // 2. Fetch data from Web2
         let response = self.http_client.get(url).send().await?.bytes().await?;
 
-        // 3. Format report_data (domain prefix "openhttpa hs server" + full transcript_hash)
-        //
-        // REL-03 fix: The previous code truncated the 48-byte transcript_hash
-        // to its first 32 bytes (`report_data[32..].copy_from_slice(&transcript_hash[..32])`),
-        // silently dropping the last 16 bytes.  We now store the full 48 bytes
-        // by placing the 16-byte prefix in [0..16] and the full hash in [16..64].
+        // 3. Format report_data by computing SHA-512 over (domain prefix + transcript_hash + response)
+        // This ensures the 64-byte REPORT_DATA register securely binds the oracle payload
+        // to the session without cryptographic truncation vulnerabilities.
+        use sha2::{Digest, Sha512};
+        let prefix = b"openhttpa oracle v1";
+        let mut hasher = Sha512::new();
+        hasher.update(prefix);
+        hasher.update(transcript_hash);
+        hasher.update(&response);
         let mut report_data = [0u8; 64];
-        let prefix = b"openhttpa oracle";
-        report_data[..prefix.len()].copy_from_slice(prefix); // 16 bytes
-        report_data[16..64].copy_from_slice(&transcript_hash); // full 48 bytes
+        report_data.copy_from_slice(&hasher.finalize());
 
         // 3. Generate TEE Quote
         let quote_req = QuoteRequest { report_data };

@@ -232,55 +232,59 @@ fn main() {
     // The report_data must bind the TEE's identity to the specific context.
     match input.mode {
         ZkMode::Handshake => {
-            // Handshake binding: report_data[32..] == transcript_hash
-            let is_valid = input.report_data[32..] == input.transcript_hash;
-            assert!(is_valid, "Transcript hash mismatch in report_data");
-            assert!(
-                input.report_data.starts_with(b"openhttpa hs server"),
-                "Domain prefix mismatch"
+            let mut hasher = sha2::Sha512::new();
+            hasher.update(b"openhttpa hs server");
+            hasher.update(input.transcript_hash);
+            let expected_binding = hasher.finalize();
+            assert_eq!(
+                input.report_data[..],
+                expected_binding[..],
+                "Handshake binding mismatch in report_data"
             );
         }
         ZkMode::VerifiedAi => {
-            // AI Provenance binding: report_data must bind to hash(model_id || input_hash || output_hash)
             let vai = input
                 .vai_data
                 .as_ref()
                 .expect("VerifiedAi mode requires vai_data");
 
-            let mut vai_hasher = sha2::Sha256::new();
+            let mut vai_hasher = sha2::Sha512::new();
             vai_hasher.update(b"openhttpa vai v1");
             vai_hasher.update(vai.model_id);
             vai_hasher.update(vai.input_hash);
             vai_hasher.update(vai.output_hash);
             let expected_binding = vai_hasher.finalize();
 
-            // report_data[..32] == binding hash
-            assert!(
-                input.report_data[..32] == expected_binding[..],
+            assert_eq!(
+                input.report_data[..],
+                expected_binding[..],
                 "AI provenance binding mismatch in report_data"
             );
         }
         ZkMode::Oracle => {
-            // Oracle binding: report_data must bind to hash("openhttpa oracle" || transcript_hash || oracle_payload)
             let oracle_data = input
                 .oracle_data
                 .as_ref()
                 .expect("Oracle mode requires oracle_data");
-            let mut hasher = sha2::Sha256::new();
+            let mut hasher = sha2::Sha512::new();
             hasher.update(b"openhttpa oracle v1");
             hasher.update(input.transcript_hash);
             hasher.update(oracle_data);
             let expected_binding = hasher.finalize();
-            assert!(
-                input.report_data[..32] == expected_binding[..],
+            assert_eq!(
+                input.report_data[..],
+                expected_binding[..],
                 "Oracle binding mismatch in report_data"
             );
         }
         ZkMode::DcapCompression => {
-            // ZAA binding: report_data[32..] == transcript_hash
-            // Similar to handshake but for compression purposes.
-            assert!(
-                input.report_data[32..] == input.transcript_hash,
+            let mut hasher = sha2::Sha512::new();
+            hasher.update(b"openhttpa hs server");
+            hasher.update(input.transcript_hash);
+            let expected_binding = hasher.finalize();
+            assert_eq!(
+                input.report_data[..],
+                expected_binding[..],
                 "Transcript hash mismatch in compressed quote"
             );
         }

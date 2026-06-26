@@ -29,6 +29,7 @@ tower-http = "0.7.0"
 serde_json.workspace = true
 getrandom = { workspace = true }
 config = "0.15.24"
+sha2.workspace = true
 
 [dev-dependencies]
 axum.workspace = true

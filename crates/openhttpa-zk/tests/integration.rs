@@ -11,10 +11,11 @@ mod tests {
     fn test_zk_roundtrip() {
         let transcript_hash = [0x42u8; 48];
         let mut report_data = [0u8; 64];
-        let prefix = b"openhttpa hs server";
-        let plen = prefix.len().min(32);
-        report_data[..plen].copy_from_slice(&prefix[..plen]);
-        report_data[32..].copy_from_slice(&transcript_hash[..32]);
+        use sha2::Digest;
+        let mut hasher = sha2::Sha512::new();
+        hasher.update(b"openhttpa hs server");
+        hasher.update(transcript_hash);
+        report_data.copy_from_slice(&hasher.finalize());
 
         let input = ZkInput {
             mode: openhttpa_zk::ZkMode::Handshake,
@@ -43,7 +44,7 @@ mod tests {
 
         // Compute the expected binding hash that should be in the report_data
         use sha2::Digest;
-        let mut vai_hasher = sha2::Sha256::new();
+        let mut vai_hasher = sha2::Sha512::new();
         vai_hasher.update(b"openhttpa vai v1");
         vai_hasher.update(model_id);
         vai_hasher.update(input_hash);
@@ -51,7 +52,7 @@ mod tests {
         let binding = vai_hasher.finalize();
 
         let mut report_data = [0u8; 64];
-        report_data[..32].copy_from_slice(&binding);
+        report_data.copy_from_slice(&binding);
 
         let input = openhttpa_zk::ZkInput {
             mode: openhttpa_zk::ZkMode::VerifiedAi,
@@ -82,7 +83,12 @@ mod tests {
     #[test]
     fn test_zk_dcap_compression() {
         let transcript_hash = [0x99u8; 48];
-        let report_data = [0xAAu8; 64];
+        let mut report_data = [0u8; 64];
+        use sha2::Digest;
+        let mut hasher = sha2::Sha512::new();
+        hasher.update(b"openhttpa hs server");
+        hasher.update(transcript_hash);
+        report_data.copy_from_slice(&hasher.finalize());
 
         // Mock DCAP quote (must be > 100 bytes for our skeleton verifier)
         let quote_bytes = vec![0u8; 1024];

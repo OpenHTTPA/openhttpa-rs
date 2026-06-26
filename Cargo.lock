@@ -6526,6 +6526,7 @@ dependencies = [
  "serde",
  "serde-big-array",
  "serde_json",
+ "sha2 0.11.0",
  "thiserror 2.0.18",
  "tokio",
  "tower-http 0.7.0",

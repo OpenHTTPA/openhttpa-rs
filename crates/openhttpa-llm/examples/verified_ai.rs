@@ -37,16 +37,17 @@ async fn main() {
         output_hasher.update(content.as_bytes());
         let output_hash: [u8; 32] = output_hasher.finalize().into();
 
-        // 3. Generate ZK Proof of Provenance (Mock Mode)
-        let mut vai_hasher = Sha256::new();
+        // Generate TEE Quote (Mocked)
+        // The report_data must cryptographically bind the output to the query.
+        let mut vai_hasher = sha2::Sha512::new();
         vai_hasher.update(b"openhttpa vai v1");
         vai_hasher.update(model_id);
         vai_hasher.update(input_hash);
         vai_hasher.update(output_hash);
-        let binding = vai_hasher.finalize();
+        let expected_binding = vai_hasher.finalize();
 
         let mut report_data = [0u8; 64];
-        report_data[..32].copy_from_slice(&binding);
+        report_data.copy_from_slice(&expected_binding);
 
         let zk_input = openhttpa_zk::ZkInput {
             mode: openhttpa_zk::ZkMode::VerifiedAi,

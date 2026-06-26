@@ -454,6 +454,7 @@ impl AtHsExecutor {
             if let (Some(ref cfg), Some(quote)) = (&self.zk_config, server_quotes.first()) {
                 if cfg.enabled {
                     let input = openhttpa_zk::ZkInput {
+                        mode: openhttpa_zk::ZkMode::Handshake,
                         transcript_hash: transcript_bytes,
                         quote_bytes: quote.raw.to_vec(),
                         report_data: {
@@ -466,6 +467,8 @@ impl AtHsExecutor {
                             rd
                         },
                         oracle_data: None,
+                        vai_data: None,
+                        dcap_collateral: None,
                     };
                     match openhttpa_zk::prover::ZkProver::prove(&input) {
                         Ok(receipt) => Some(
