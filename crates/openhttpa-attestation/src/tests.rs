@@ -96,7 +96,7 @@ async fn test_tpm_verification_with_collateral() {
     let rd = [0x77u8; 64];
     let quote = AttestQuote {
         quote_type: QuoteType::Tpm,
-                format: openhttpa_proto::QuoteFormat::default(),
+        format: openhttpa_proto::QuoteFormat::default(),
         raw: Bytes::from_static(b"mock-tpm-quote"),
         qudd: Bytes::copy_from_slice(&rd),
         collateral_uris: vec!["https://127.0.0.1/aik.cert".to_owned()],

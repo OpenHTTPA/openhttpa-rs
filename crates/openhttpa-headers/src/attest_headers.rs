@@ -62,7 +62,7 @@ use thiserror::Error;
 
 use openhttpa_proto::{
     AtbCreation, AtbId, AtbTermination, AttestQuote, AttestSecret, CipherSuite, ProtocolVersion,
-    ProvenanceChain, QuoteType, QuoteFormat, SessionTicket, TrustedCargo,
+    ProvenanceChain, QuoteFormat, QuoteType, SessionTicket, TrustedCargo,
 };
 
 // ─── Header name constants ────────────────────────────────────────────────────
@@ -665,7 +665,7 @@ impl AtHsRequestHeaders {
                     let type_item =
                         Item::new(BareItem::Token(Token::from_string(type_str).unwrap()));
                     let mut bytes_item = Item::new(BareItem::ByteSequence(q.raw.to_vec()));
-                    
+
                     if q.format != QuoteFormat::Raw {
                         let format_str = q.format.to_string();
                         bytes_item.params.insert(

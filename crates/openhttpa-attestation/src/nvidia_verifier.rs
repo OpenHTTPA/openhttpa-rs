@@ -78,7 +78,7 @@ mod tests {
         let report_data = [0xAAu8; 64];
         let quote = AttestQuote {
             quote_type: QuoteType::NvidiaGpu,
-                format: openhttpa_proto::QuoteFormat::default(),
+            format: openhttpa_proto::QuoteFormat::default(),
             raw: b"NVIDIA-HOPPER-ATTESTATION-REPORT-SIM-001".to_vec().into(),
             qudd: report_data.to_vec().into(),
             collateral_uris: vec![],
@@ -96,7 +96,7 @@ mod tests {
         let report_data = [0xAAu8; 64];
         let quote = AttestQuote {
             quote_type: QuoteType::NvidiaGpu,
-                format: openhttpa_proto::QuoteFormat::default(),
+            format: openhttpa_proto::QuoteFormat::default(),
             raw: b"NVIDIA-HOPPER-ATTESTATION-REPORT-SIM-001".to_vec().into(),
             qudd: vec![0u8; 64].into(), // Different QUDD
             collateral_uris: vec![],
@@ -112,7 +112,7 @@ mod tests {
         let report_data = [0xAAu8; 64];
         let quote = AttestQuote {
             quote_type: QuoteType::Mock,
-                format: openhttpa_proto::QuoteFormat::default(), // Wrong type
+            format: openhttpa_proto::QuoteFormat::default(), // Wrong type
             raw: b"NVIDIA-HOPPER-ATTESTATION-REPORT-SIM-001".to_vec().into(),
             qudd: report_data.to_vec().into(),
             collateral_uris: vec![],

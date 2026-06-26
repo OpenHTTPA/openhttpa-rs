@@ -262,7 +262,7 @@ mod tests {
         let verifier = NvidiaRemoteVerifier::new("https://example.com");
         let quote = AttestQuote {
             quote_type: QuoteType::Sgx,
-                format: openhttpa_proto::QuoteFormat::default(), // Wrong type
+            format: openhttpa_proto::QuoteFormat::default(), // Wrong type
             raw: Bytes::from_static(b"mock-quote"),
             qudd: Bytes::from_static(&[0u8; 64]),
             collateral_uris: vec![],

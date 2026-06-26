@@ -222,9 +222,7 @@ impl SessionKeys {
         let master_secret = expander
             .expand(&make_info(b"master secret"), 48)?
             .into_inner();
-        let resumption_master_secret = expander
-            .expand(&make_info(b"res master"), 48)?
-            .into_inner();
+        let resumption_master_secret = expander.expand(&make_info(b"res master"), 48)?.into_inner();
         let client_write_key = expander
             .expand(&make_info(b"client write key"), 32)?
             .into_inner();
@@ -296,9 +294,7 @@ impl SessionKeys {
         let master_secret = expander
             .expand(&make_info(b"master secret"), 48)?
             .into_inner();
-        let resumption_master_secret = expander
-            .expand(&make_info(b"res master"), 48)?
-            .into_inner();
+        let resumption_master_secret = expander.expand(&make_info(b"res master"), 48)?.into_inner();
         let client_write_key = expander
             .expand(&make_info(b"client write key"), 32)?
             .into_inner();

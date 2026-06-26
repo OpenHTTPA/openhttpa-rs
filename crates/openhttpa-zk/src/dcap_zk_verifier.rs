@@ -85,7 +85,7 @@ mod tests {
         };
         let quote = AttestQuote {
             quote_type: QuoteType::Sgx,
-                format: Default::default(),
+            format: Default::default(),
             raw: Bytes::new(),
             qudd: Bytes::new(),
             collateral_uris: vec![],
@@ -103,7 +103,7 @@ mod tests {
         };
         let quote = AttestQuote {
             quote_type: QuoteType::Sgx,
-                format: Default::default(),
+            format: Default::default(),
             raw: Bytes::new(),
             qudd: Bytes::new(),
             collateral_uris: vec![],
@@ -121,7 +121,7 @@ mod tests {
         };
         let quote = AttestQuote {
             quote_type: QuoteType::ZkCompressed,
-                format: Default::default(),
+            format: Default::default(),
             raw: Bytes::from(vec![1, 2, 3]), // Invalid bincode
             qudd: Bytes::new(),
             collateral_uris: vec![],

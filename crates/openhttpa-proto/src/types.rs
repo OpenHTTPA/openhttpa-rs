@@ -295,8 +295,6 @@ impl std::str::FromStr for QuoteFormat {
     }
 }
 
-
-
 // ─── AtB (Attest Base) policy and termination ────────────────────────────────
 
 /// How the client requests an Attest Base to be created or acquired.

@@ -262,7 +262,7 @@ mod tests {
         let verifier = ItaVerifier::new("test-key", "http://127.0.0.1:1");
         let quote = AttestQuote {
             quote_type: QuoteType::Sgx,
-                format: openhttpa_proto::QuoteFormat::default(),
+            format: openhttpa_proto::QuoteFormat::default(),
             raw: Bytes::from_static(b"mock-quote"),
             qudd: Bytes::from_static(&[0u8; 64]),
             collateral_uris: vec![],

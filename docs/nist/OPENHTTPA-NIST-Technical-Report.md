@@ -123,7 +123,7 @@ To support the integration of off-chain data into blockchain ecosystems (Bitcoin
 
 ### 10.1 Transcript-Bound Attestation
 
-The extension enforces strict transcript binding by injecting a truncated version of the session's `transcript_hash` (SHA-384) into the TEE's hardware-signed `REPORT_DATA` field. Because physical TEE report registers (e.g., SGX or TDX `REPORT_DATA`) are limited to 64 bytes, the 384-bit (48-byte) transcript hash is truncated to its first 32 bytes (256 bits) and placed alongside the 32-byte domain prefix (`"openhttpa hs server"`). Truncating the SHA-384 digest to 256 bits maintains 256 bits of preimage resistance and 128 bits of collision resistance, which remains cryptographically secure for session binding. This ensures that an Oracle quote cannot be replayed or re-used in a different session, effectively mitigating "quote poaching" attacks.
+The extension enforces strict transcript binding by injecting a mathematically sound digest into the TEE's hardware-signed `REPORT_DATA` field. Because physical TEE report registers (e.g., SGX or TDX `REPORT_DATA`) are fixed to exactly 64 bytes, `OpenHTTPA` avoids all truncation vulnerabilities by computing a full `SHA-512` digest over the protocol context. For Oracle fetches, the `REPORT_DATA` is generated as `SHA-512("openhttpa oracle v1" || transcript_hash || oracle_response)`. This strictly binds the fetched payload to the secure session identity, guaranteeing 256-bit collision resistance and immunity to length-extension attacks. This mathematically ensures that an Oracle quote cannot be replayed, altered, or re-used in a different session, effectively mitigating "quote poaching" and data spoofing attacks.
 
 ### 10.2 ZK-Integrated Data Verification
 

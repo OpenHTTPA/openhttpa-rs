@@ -38,7 +38,8 @@ The following table maps the `OpenHTTPA` primitives to NIST-approved standards:
 | Function                  | Algorithm           | NIST Standard         |
 | ------------------------- | ------------------- | --------------------- |
 | Symmetric Encryption      | AES-256-GCM         | FIPS 197 / SP 800-38D |
-| Hashing                   | SHA-384             | FIPS 180-4            |
+| Hashing (Transcript)      | SHA-384             | FIPS 180-4            |
+| Hashing (Domain Binding)  | SHA-512             | FIPS 180-4            |
 | Key Derivation            | HKDF (HMAC-SHA-384) | RFC 5869 / SP 800-56C |
 | Key Agreement (PQ)        | ML-KEM-768          | FIPS 203              |
 | Key Agreement (Classical) | X25519              | RFC 7748 / SP 800-186 |
