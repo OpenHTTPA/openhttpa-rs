@@ -586,6 +586,7 @@ mod tests {
             server_write_iv: rand::random::<[u8; 12]>().to_vec(),
             client_mac_key: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
             server_mac_key: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            resumption_master_secret: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
             transcript_hash: std::array::from_fn::<u8, 48, _>(|_| rand::random()),
         };
         registry

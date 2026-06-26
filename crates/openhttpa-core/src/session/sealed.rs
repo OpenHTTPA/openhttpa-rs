@@ -36,6 +36,7 @@ impl std::fmt::Debug for SealedSessionKeys {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SealedSessionKeys")
             .field("master_secret", &"[REDACTED]")
+            .field("resumption_master_secret", &"[REDACTED]")
             .field("client_write_key", &"[REDACTED]")
             .field("server_write_key", &"[REDACTED]")
             .field("client_write_iv", &"[REDACTED]")

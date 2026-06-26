@@ -316,6 +316,7 @@ mod tests {
     fn snp_quote(raw: &'static [u8]) -> AttestQuote {
         AttestQuote {
             quote_type: QuoteType::SevSnp,
+                format: openhttpa_proto::QuoteFormat::default(),
             raw: Bytes::from_static(raw),
             qudd: Bytes::new(),
             collateral_uris: vec![],
@@ -327,6 +328,7 @@ mod tests {
         let verifier = SevSnpVerifier::new();
         let quote = AttestQuote {
             quote_type: QuoteType::Tdx,
+                format: openhttpa_proto::QuoteFormat::default(),
             raw: Bytes::from_static(b"fake"),
             qudd: Bytes::new(),
             collateral_uris: vec![],

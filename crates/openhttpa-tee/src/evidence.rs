@@ -89,36 +89,42 @@ impl AttestationEvidence {
         match self {
             Self::Tdx(e) => AttestQuote {
                 quote_type: QuoteType::Tdx,
+                format: openhttpa_proto::QuoteFormat::default(),
                 raw: e.quote.clone(),
                 qudd,
                 collateral_uris: e.pck_cert_uri.clone().into_iter().collect(),
             },
             Self::SevSnp(e) => AttestQuote {
                 quote_type: QuoteType::SevSnp,
+                format: openhttpa_proto::QuoteFormat::default(),
                 raw: e.report.clone(),
                 qudd,
                 collateral_uris: e.vcek_cert_uri.clone().into_iter().collect(),
             },
             Self::Tpm(e) => AttestQuote {
                 quote_type: QuoteType::Tpm,
+                format: openhttpa_proto::QuoteFormat::default(),
                 raw: e.quote.clone(),
                 qudd,
                 collateral_uris: e.aik_cert_uri.clone().into_iter().collect(),
             },
             Self::NvidiaGpu(e) => AttestQuote {
                 quote_type: QuoteType::NvidiaGpu,
+                format: openhttpa_proto::QuoteFormat::default(),
                 raw: e.rim_report.clone(),
                 qudd,
                 collateral_uris: e.gpu_cert_uri.clone().into_iter().collect(),
             },
             Self::AwsNitro(e) => AttestQuote {
                 quote_type: QuoteType::AwsNitro,
+                format: openhttpa_proto::QuoteFormat::default(),
                 raw: e.document.clone(),
                 qudd,
                 collateral_uris: vec![], // PKI certs are generally embedded in the CBOR doc
             },
             Self::Mock(raw) => AttestQuote {
                 quote_type: QuoteType::Mock,
+                format: openhttpa_proto::QuoteFormat::default(),
                 raw: raw.clone(),
                 qudd,
                 collateral_uris: vec![],

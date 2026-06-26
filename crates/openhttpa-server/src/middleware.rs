@@ -425,11 +425,18 @@ where
         Box::pin(async move {
             let ticket_hdr = req.headers().get(&*HDR_ATTEST_TICKET_RESUMPTION);
 
-            if let Some(hdr_val) = ticket_hdr
-                && let Ok(ticket_b64) = hdr_val.to_str()
-                && let Ok(ticket_raw) = hex::decode(ticket_b64)
-                && let Ok(mut durable_state) = engine.unseal_session(&ticket_raw)
-            {
+            if let Some(hdr_val) = ticket_hdr {
+                if !req.method().is_safe() {
+                    tracing::warn!("Rejecting 0-RTT resumption for unsafe method {}", req.method());
+                    let mut resp = Response::new(Body::empty());
+                    *resp.status_mut() = http::StatusCode::TOO_EARLY;
+                    return Ok(resp);
+                }
+
+                if let Ok(ticket_b64) = hdr_val.to_str()
+                    && let Ok(ticket_raw) = hex::decode(ticket_b64)
+                    && let Ok(mut durable_state) = engine.unseal_session(&ticket_raw)
+                {
                 // SEC-02: Check distributed replay guard using the ticket's internal nonce.
                 // We use the AtbId as the key for the replay guard window.
                 let nonce = durable_state.client_counter; // In 0-RTT, the nonce is bound to the state
@@ -463,6 +470,7 @@ where
                     } else {
                         tracing::info!(base_id = %session.state().id, "0-RTT session resumed");
                     }
+                }
                 }
             }
 

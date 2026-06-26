@@ -25,8 +25,8 @@
 //! IKM is the same across sessions.
 //!
 //! The HKDF label prefix `"openhttpa_v2"` and the per-slot labels used in
-//! [`SessionKeys::derive`] are pending registration in the IANA "TLS Exporter
-//! Labels" registry (RFC 5705 §6) as specified in `draft-openhttpa-protocol-00`.
+//! [`SessionKeys::derive`] are pending registration in the IANA "`OpenHTTPA`
+//! HKDF Labels" registry as specified in `draft-openhttpa-protocol-01`.
 //! Until IANA registration is complete, the `"openhttpa_v2"` prefix serves as a
 //! vendor prefix to avoid collisions with other implementations.
 //!
@@ -124,6 +124,8 @@ use serde_big_array::BigArray;
 pub struct SessionKeys {
     /// Master secret, used to derive further keys.
     pub master_secret: Vec<u8>,
+    /// Decoupled secret for 0-RTT forward secrecy.
+    pub resumption_master_secret: Vec<u8>,
     /// Write key for client-to-server traffic.
     pub client_write_key: Vec<u8>,
     /// Write key for server-to-client traffic.
@@ -220,6 +222,9 @@ impl SessionKeys {
         let master_secret = expander
             .expand(&make_info(b"master secret"), 48)?
             .into_inner();
+        let resumption_master_secret = expander
+            .expand(&make_info(b"res master"), 48)?
+            .into_inner();
         let client_write_key = expander
             .expand(&make_info(b"client write key"), 32)?
             .into_inner();
@@ -244,6 +249,7 @@ impl SessionKeys {
 
         Ok(Self {
             master_secret,
+            resumption_master_secret,
             client_write_key,
             server_write_key,
             client_write_iv,
@@ -287,9 +293,11 @@ impl SessionKeys {
             v
         };
 
-        // 0-RTT uses the same slots but with a different prefix and salt for domain separation.
         let master_secret = expander
             .expand(&make_info(b"master secret"), 48)?
+            .into_inner();
+        let resumption_master_secret = expander
+            .expand(&make_info(b"res master"), 48)?
             .into_inner();
         let client_write_key = expander
             .expand(&make_info(b"client write key"), 32)?
@@ -319,6 +327,7 @@ impl SessionKeys {
 
         Ok(Self {
             master_secret,
+            resumption_master_secret,
             client_write_key,
             server_write_key,
             client_write_iv,

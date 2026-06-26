@@ -16,7 +16,7 @@ DOCKER_CMD := docker run --rm --user $$(id -u):$$(id -g) \
               -e KRAMDOWN_DONT_FETCH_REFS=1 \
               -v $$(pwd):/workspace \
               $(DOCKER_IMAGE)
-DRAFT      := draft-openhttpa-protocol-00
+DRAFT      := draft-openhttpa-protocol-01
 
 # /tmp is always writable by any user inside the container; avoids
 # "Unable to find a suitable cache directory" warnings from xml2rfc.

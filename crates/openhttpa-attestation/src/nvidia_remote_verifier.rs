@@ -261,7 +261,8 @@ mod tests {
     async fn test_nvidia_remote_verify_fails_on_wrong_quote_type() {
         let verifier = NvidiaRemoteVerifier::new("https://example.com");
         let quote = AttestQuote {
-            quote_type: QuoteType::Sgx, // Wrong type
+            quote_type: QuoteType::Sgx,
+                format: openhttpa_proto::QuoteFormat::default(), // Wrong type
             raw: Bytes::from_static(b"mock-quote"),
             qudd: Bytes::from_static(&[0u8; 64]),
             collateral_uris: vec![],

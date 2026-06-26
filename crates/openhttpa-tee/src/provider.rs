@@ -596,6 +596,7 @@ impl TeeProvider for ZkCompressedTeeProvider {
 
         Ok(AttestQuote {
             quote_type: QuoteType::ZkCompressed,
+                format: Default::default(),
             raw: bytes::Bytes::from(receipt_bytes),
             qudd: bytes::Bytes::from(request.report_data.to_vec()),
             collateral_uris: raw_quote.collateral_uris,

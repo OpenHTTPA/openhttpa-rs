@@ -62,7 +62,7 @@ use thiserror::Error;
 
 use openhttpa_proto::{
     AtbCreation, AtbId, AtbTermination, AttestQuote, AttestSecret, CipherSuite, ProtocolVersion,
-    ProvenanceChain, QuoteType, SessionTicket, TrustedCargo,
+    ProvenanceChain, QuoteType, QuoteFormat, SessionTicket, TrustedCargo,
 };
 
 // ─── Header name constants ────────────────────────────────────────────────────
@@ -484,6 +484,16 @@ fn decode_quotes_sfv(map: &HeaderMap, name: &HeaderName) -> Result<Vec<AttestQuo
                 .parse::<QuoteType>()
                 .unwrap_or_else(|_| QuoteType::Unknown(type_str.to_owned()));
 
+            let format_str = il.items[1]
+                .params
+                .get("format")
+                .and_then(|p| p.as_token())
+                .map_or("raw", |t| t.as_str());
+
+            let format = format_str
+                .parse::<QuoteFormat>()
+                .unwrap_or_else(|_| QuoteFormat::Unknown(format_str.to_owned()));
+
             let mut collateral_uris = vec![];
             if il.items.len() > 2 {
                 for i in 2..il.items.len() {
@@ -495,6 +505,7 @@ fn decode_quotes_sfv(map: &HeaderMap, name: &HeaderName) -> Result<Vec<AttestQuo
 
             quotes.push(AttestQuote {
                 quote_type,
+                format,
                 raw: bytes.into(),
                 qudd: bytes::Bytes::new(),
                 collateral_uris,
@@ -653,7 +664,15 @@ impl AtHsRequestHeaders {
                     let type_str = q.quote_type.to_string();
                     let type_item =
                         Item::new(BareItem::Token(Token::from_string(type_str).unwrap()));
-                    let bytes_item = Item::new(BareItem::ByteSequence(q.raw.to_vec()));
+                    let mut bytes_item = Item::new(BareItem::ByteSequence(q.raw.to_vec()));
+                    
+                    if q.format != QuoteFormat::Raw {
+                        let format_str = q.format.to_string();
+                        bytes_item.params.insert(
+                            sfv::Key::try_from("format".to_owned()).unwrap(),
+                            BareItem::Token(Token::from_string(format_str).unwrap()),
+                        );
+                    }
 
                     let mut il_items = vec![type_item, bytes_item];
                     for uri in &q.collateral_uris {
@@ -864,7 +883,15 @@ impl AtHsResponseHeaders {
                     let type_str = q.quote_type.to_string();
                     let type_item =
                         Item::new(BareItem::Token(Token::from_string(type_str).unwrap()));
-                    let bytes_item = Item::new(BareItem::ByteSequence(q.raw.to_vec()));
+                    let mut bytes_item = Item::new(BareItem::ByteSequence(q.raw.to_vec()));
+
+                    if q.format != QuoteFormat::Raw {
+                        let format_str = q.format.to_string();
+                        bytes_item.params.insert(
+                            sfv::Key::try_from("format".to_owned()).unwrap(),
+                            BareItem::Token(Token::from_string(format_str).unwrap()),
+                        );
+                    }
 
                     let mut il_items = vec![type_item, bytes_item];
                     for uri in &q.collateral_uris {

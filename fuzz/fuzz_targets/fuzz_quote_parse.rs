@@ -39,6 +39,7 @@ fuzz_target!(|data: &[u8]| {
     let mid = rest.len() / 2;
     let quote = AttestQuote {
         quote_type,
+        format: openhttpa_proto::QuoteFormat::default(),
         raw: Bytes::copy_from_slice(&rest[..mid]),
         qudd: Bytes::copy_from_slice(&rest[mid..]),
         collateral_uris: vec![],

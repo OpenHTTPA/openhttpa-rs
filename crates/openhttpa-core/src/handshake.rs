@@ -411,38 +411,20 @@ impl AtHsExecutor {
         // T-10 Hardening: Prepend a domain-separated prefix to the report_data
         // to prevent cross-role quote re-use.
         //
-        // HS-01 SECURITY NOTE — report_data transcript hash truncation
+        // HS-01 SECURITY NOTE — report_data transcript hash
         //
-        // The 64-byte `report_data` field is laid out as:
-        //   [0..19]  = domain prefix ("openhttpa hs server" / "openhttpa hs client")
-        //   [19..32] = zero padding (reserved)
-        //   [32..64] = first 32 bytes of SHA-384 transcript hash
+        // The 64-byte `report_data` field is computed as:
+        //   SHA-512(prefix || transcript_hash)
         //
-        // This truncates the 48-byte SHA-384 hash to 32 bytes, reducing the
-        // theoretical collision resistance of the quote-binding from 2^192
-        // (full SHA-384) to 2^128 (truncated 256-bit prefix).  This is an
-        // intentional design choice:
-        //
-        //   1. 2^128 collision resistance exceeds NIST SP 800-57 requirements
-        //      for 128-bit security strength (the target for AES-256-GCM).
-        //   2. The `report_data` field is fixed at 64 bytes by all major TEE
-        //      architectures (SGX, TDX, SEV-SNP).  Fitting both the domain
-        //      prefix (cross-role isolation) and the transcript binding into
-        //      64 bytes requires this trade-off.
-        //   3. A practical collision attack on the first 32 bytes of SHA-384
-        //      would require ~2^128 operations classically.  Under quantum
-        //      adversaries, the BHT algorithm reduces collision search to
-        //      ~2^{n/3} = ~2^85 for n=256 — still far beyond projected
-        //      quantum capabilities.  (Note: Grover's algorithm accelerates
-        //      *preimage* search, not collision search.)
+        // This yields exactly 64 bytes, avoiding truncation and ensuring full
+        // 256-bit collision resistance against quantum adversaries.
         let server_quotes = if let Some(tee) = tee_provider {
             let mut report_data = [0u8; 64];
             let prefix = b"openhttpa hs server";
-            let plen = prefix.len().min(32);
-            report_data[..plen].copy_from_slice(&prefix[..plen]);
-            let hash_bytes = &transcript_bytes[..transcript_bytes.len().min(48)];
-            report_data[32..32 + hash_bytes.len().min(32)]
-                .copy_from_slice(&hash_bytes[..hash_bytes.len().min(32)]);
+            let mut hasher = sha2::Sha512::new();
+            sha2::Digest::update(&mut hasher, prefix);
+            sha2::Digest::update(&mut hasher, transcript_bytes);
+            report_data.copy_from_slice(&hasher.finalize());
             let req = QuoteRequest { report_data };
 
             match tee.generate_quotes(&req) {
@@ -477,11 +459,10 @@ impl AtHsExecutor {
                         report_data: {
                             let mut rd = [0u8; 64];
                             let prefix = b"openhttpa hs server";
-                            let plen = prefix.len().min(32);
-                            rd[..plen].copy_from_slice(&prefix[..plen]);
-                            let hash_bytes = &transcript_bytes[..transcript_bytes.len().min(48)];
-                            rd[32..32 + hash_bytes.len().min(32)]
-                                .copy_from_slice(&hash_bytes[..hash_bytes.len().min(32)]);
+                            let mut hasher = sha2::Sha512::new();
+                            sha2::Digest::update(&mut hasher, prefix);
+                            sha2::Digest::update(&mut hasher, transcript_bytes);
+                            rd.copy_from_slice(&hasher.finalize());
                             rd
                         },
                         oracle_data: None,
@@ -601,10 +582,10 @@ impl AtHsExecutor {
             let mut report_data = [0u8; 64];
             // T-10 Hardening: Prepend "openhttpa hs client" prefix.
             let prefix = b"openhttpa hs client";
-            let plen = prefix.len().min(32);
-            report_data[..plen].copy_from_slice(&prefix[..plen]);
-            report_data[32..32 + client_binding.len().min(32)]
-                .copy_from_slice(&client_binding[..client_binding.len().min(32)]);
+            let mut hasher = sha2::Sha512::new();
+            sha2::Digest::update(&mut hasher, prefix);
+            sha2::Digest::update(&mut hasher, client_binding);
+            report_data.copy_from_slice(&hasher.finalize());
 
             let res = v
                 .verify(quote, &report_data)
@@ -827,10 +808,10 @@ mod tests {
         let client_binding = hasher.finalize();
         let mut report_data = [0u8; 64];
         let prefix = b"openhttpa hs client";
-        let plen = prefix.len().min(32);
-        report_data[..plen].copy_from_slice(&prefix[..plen]);
-        report_data[32..32 + client_binding.len().min(32)]
-            .copy_from_slice(&client_binding[..client_binding.len().min(32)]);
+        let mut hasher = sha2::Sha512::new();
+        sha2::Digest::update(&mut hasher, prefix);
+        sha2::Digest::update(&mut hasher, client_binding);
+        report_data.copy_from_slice(&hasher.finalize());
 
         let tee = MockTeeProvider::default();
         let quote = tee.generate_quote(&QuoteRequest { report_data }).unwrap();
@@ -893,10 +874,10 @@ mod tests {
         let client_binding = hasher.finalize();
         let mut report_data = [0u8; 64];
         let prefix = b"openhttpa hs client";
-        let plen = prefix.len().min(32);
-        report_data[..plen].copy_from_slice(&prefix[..plen]);
-        report_data[32..32 + client_binding.len().min(32)]
-            .copy_from_slice(&client_binding[..client_binding.len().min(32)]);
+        let mut hasher = sha2::Sha512::new();
+        sha2::Digest::update(&mut hasher, prefix);
+        sha2::Digest::update(&mut hasher, client_binding);
+        report_data.copy_from_slice(&hasher.finalize());
 
         let tee = MockTeeProvider::default();
         let quote = tee.generate_quote(&QuoteRequest { report_data }).unwrap();

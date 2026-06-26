@@ -397,10 +397,10 @@ impl OpenHttpaClient {
         let mut report_data = [0u8; 64];
         // T-10 Hardening: Prepend "openhttpa hs client" prefix.
         let prefix = b"openhttpa hs client";
-        let plen = prefix.len().min(32);
-        report_data[..plen].copy_from_slice(&prefix[..plen]);
-        let len = client_binding.len().min(48);
-        report_data[32..32 + len.min(32)].copy_from_slice(&client_binding[..len.min(32)]);
+        let mut hasher = sha2::Sha512::new();
+        sha2::Digest::update(&mut hasher, prefix);
+        sha2::Digest::update(&mut hasher, &client_binding);
+        report_data.copy_from_slice(&hasher.finalize());
 
         match self
             .tee_provider
@@ -479,10 +479,10 @@ impl OpenHttpaClient {
                 let mut report_data = [0u8; 64];
                 // T-10 Hardening: Prepend "openhttpa hs server" prefix.
                 let prefix = b"openhttpa hs server";
-                let plen = prefix.len().min(32);
-                report_data[..plen].copy_from_slice(&prefix[..plen]);
-                let len = transcript_hash.len().min(48);
-                report_data[32..32 + len.min(32)].copy_from_slice(&transcript_hash[..len.min(32)]);
+                let mut hasher = sha2::Sha512::new();
+                sha2::Digest::update(&mut hasher, prefix);
+                sha2::Digest::update(&mut hasher, transcript_hash);
+                report_data.copy_from_slice(&hasher.finalize());
 
                 let res = self
                     .verifier
@@ -875,10 +875,9 @@ impl OpenHttpaClient {
             .map_err(|_| ClientError::Handshake("RNG failure".to_owned()))?;
 
         // 3. Derive 0-RTT session keys
-        let transcript_hash = [0u8; 48]; // Mock transcript hash
-        let session_keys = openhttpa_core::handshake::SessionKeys::derive(
+        let session_keys = openhttpa_core::handshake::SessionKeys::derive_0rtt(
             &mock_resumption_secret,
-            &transcript_hash,
+            &rtt0_salt,
         )
         .map_err(|e| ClientError::Handshake(format!("key derivation failed: {e}")))?;
 

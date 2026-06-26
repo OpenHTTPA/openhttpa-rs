@@ -329,12 +329,14 @@ mod tests {
         let quotes = vec![
             AttestQuote {
                 quote_type: QuoteType::Mock,
+                format: openhttpa_proto::QuoteFormat::default(),
                 raw: bytes::Bytes::from_static(b"ok1"),
                 qudd: bytes::Bytes::new(),
                 collateral_uris: vec![],
             },
             AttestQuote {
                 quote_type: QuoteType::Mock,
+                format: openhttpa_proto::QuoteFormat::default(),
                 raw: bytes::Bytes::from_static(b"ok2"),
                 qudd: bytes::Bytes::new(),
                 collateral_uris: vec![],
@@ -359,6 +361,7 @@ mod tests {
         // Test individual failure
         let failed_quotes = vec![AttestQuote {
             quote_type: QuoteType::Mock,
+                format: openhttpa_proto::QuoteFormat::default(),
             raw: bytes::Bytes::from_static(b"fail"),
             qudd: bytes::Bytes::new(),
             collateral_uris: vec![],

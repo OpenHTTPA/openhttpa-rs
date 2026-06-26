@@ -581,6 +581,7 @@ async fn simulate_swarm(State(_state): State<AppState>) -> impl IntoResponse {
                         expires_secs: 3600,
                         quotes: vec![AttestQuote {
                             quote_type: QuoteType::Mock,
+                            format: Default::default(),
                             raw: bytes::Bytes::from_static(b"mock-quote"),
                             qudd: bytes::Bytes::from_static(&[0u8; 64]),
                             collateral_uris: vec![],
@@ -675,6 +676,7 @@ async fn simulate_swarm(State(_state): State<AppState>) -> impl IntoResponse {
     for agent in &mut provenance {
         agent.last_quote = Some(openhttpa_proto::AttestQuote {
             quote_type: openhttpa_proto::QuoteType::Mock,
+            format: Default::default(),
             raw: bytes::Bytes::from_static(b"MOCK_TEE_QUOTE_PROVENANCE_SIMULATION"),
             qudd: bytes::Bytes::from_static(b"MOCK_QUDD_PROVENANCE_SIMULATION"),
             collateral_uris: vec![],
@@ -1230,6 +1232,7 @@ mod tests {
             server_write_iv: s_write_iv.to_vec(),
             client_mac_key: c_mac_key.to_vec(),
             server_mac_key: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            resumption_master_secret: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
             transcript_hash: std::array::from_fn::<u8, 48, _>(|_| rand::random()),
         };
         let session = AttestSession::new(
@@ -1331,6 +1334,7 @@ mod tests {
             server_write_iv: s_write_iv.to_vec(),
             client_mac_key: c_mac_key.to_vec(),
             server_mac_key: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            resumption_master_secret: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
             transcript_hash: std::array::from_fn::<u8, 48, _>(|_| rand::random()),
         };
         let session = AttestSession::new(
@@ -1489,6 +1493,7 @@ mod tests {
             server_write_iv: s_write_iv.to_vec(),
             client_mac_key: c_mac_key.to_vec(),
             server_mac_key: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            resumption_master_secret: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
             transcript_hash: std::array::from_fn::<u8, 48, _>(|_| rand::random()),
         };
         state
@@ -1585,6 +1590,7 @@ mod tests {
             server_write_iv: s_write_iv.to_vec(),
             client_mac_key: c_mac_key.to_vec(),
             server_mac_key: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
+            resumption_master_secret: std::array::from_fn::<u8, 48, _>(|_| rand::random()).to_vec(),
             transcript_hash: std::array::from_fn::<u8, 48, _>(|_| rand::random()),
         };
         state

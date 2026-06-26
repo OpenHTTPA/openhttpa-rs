@@ -478,7 +478,7 @@ impl AttestSession {
             version: g.version,
             phase: g.phase,
             keys: g.keys.clone(),
-            resumption_secret: g.keys.unseal().master_secret.clone(),
+            resumption_secret: g.keys.unseal().resumption_master_secret.clone(),
             expires_at,
             client_counter: g.client_counter,
             server_counter: g.server_counter,

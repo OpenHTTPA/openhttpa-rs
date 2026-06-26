@@ -260,6 +260,43 @@ impl std::str::FromStr for QuoteType {
     }
 }
 
+/// The format of the attestation quote.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum QuoteFormat {
+    /// Raw binary quote from the TEE.
+    #[default]
+    Raw,
+    /// Entity Attestation Token (EAT) profile.
+    Eat,
+    /// An unrecognised format.
+    Unknown(String),
+}
+
+impl std::fmt::Display for QuoteFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Raw => "raw",
+            Self::Eat => "eat",
+            Self::Unknown(s) => s.as_str(),
+        };
+        f.write_str(s)
+    }
+}
+
+impl std::str::FromStr for QuoteFormat {
+    type Err = std::convert::Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "raw" => Self::Raw,
+            "eat" => Self::Eat,
+            _ => Self::Unknown(s.to_owned()),
+        })
+    }
+}
+
+
+
 // ─── AtB (Attest Base) policy and termination ────────────────────────────────
 
 /// How the client requests an Attest Base to be created or acquired.
@@ -368,6 +405,9 @@ impl std::str::FromStr for AtbId {
 pub struct AttestQuote {
     /// The TEE technology that generated this quote.
     pub quote_type: QuoteType,
+    /// The format of the quote (e.g., "raw", "eat").
+    #[serde(default)]
+    pub format: QuoteFormat,
     /// Raw quote bytes as returned by the quoting service.
     pub raw: Bytes,
     /// The QUDD embedded in the quote. For `OpenHTTPA` this is `SHA-384(all AHLs
@@ -737,6 +777,7 @@ mod tests {
     fn attest_quote_base64() {
         let quote = AttestQuote {
             quote_type: QuoteType::Mock,
+            format: QuoteFormat::Raw,
             raw: Bytes::from_static(b"hello"),
             qudd: Bytes::new(),
             collateral_uris: vec![],
@@ -748,6 +789,7 @@ mod tests {
     fn attest_quote_serde_with_collateral_uris() {
         let quote = AttestQuote {
             quote_type: QuoteType::Tdx,
+            format: QuoteFormat::Raw,
             raw: Bytes::from_static(b"raw"),
             qudd: Bytes::from_static(b"qudd"),
             collateral_uris: vec!["https://collateral.intel.com/crl.pem".to_owned()],
