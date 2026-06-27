@@ -1,0 +1,17 @@
+[package]
+name = "openhttpa-java"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme = "README.md"
+description = "OpenHTTPA JNI bindings"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+jni = "0.21.1"
+openhttpa-llm = { workspace = true }
+openhttpa-client = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }

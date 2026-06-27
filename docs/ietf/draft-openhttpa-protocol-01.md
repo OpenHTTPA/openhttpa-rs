@@ -55,11 +55,13 @@ author:
   - ins: G. King
     name: Gordon King
     organization: OpenHTTPA Foundation
-    email: info@openhttpa.org
+    email: gordon@openhttpa.org
+    country: United States
   - ins: H. Wang
     name: Hans Wang
     organization: OpenHTTPA Foundation
-    email: lukeckntu@hotmail.com
+    email: hans@openhttpa.org
+    country: United States
 ---
 
 --- abstract
@@ -70,7 +72,7 @@ and a Trusted Execution Environment (TEE) over standard HTTP/2, HTTP/3, and gRPC
 Unlike traditional TLS which terminates at the network edge, `OpenHTTPA` ensures that the
 cryptographic session terminates inside the hardware-isolated enclave.
 The protocol is based on the SIGMA-I model and incorporates post-quantum hybrid key exchange (ML-KEM), post-quantum digital signatures (ML-DSA), transcript-bound hardware attestation, and semantic binding of HTTP requests to the hardware-verified session state.
-This document supersedes the earlier work published as {{I-D.sandowicz-httpbis-httpa2}}.
+This document supersedes the earlier work published as draft-openhttpa-protocol-00.
 
 --- middle
 
@@ -473,7 +475,7 @@ identity assurance.
 ## Hybrid KEM Combiner
 
 To achieve IND-CCA2 security, `OpenHTTPA` implements a hybrid combiner following
-{{I-D.ietf-tls-hybrid-design}} §3.2.
+{{I-D.ietf-tls-hybrid-design}} Section 3.2.
 
 ### Combiner Input (IKM)
 
@@ -496,7 +498,7 @@ The `label` MUST be `b"openhttpa hybrid kem v1"`.
 
 ## Session Key Schedule
 
-The key schedule follows {{RFC5869}} and is aligned with {{RFC8446}} §7.1.
+The key schedule follows {{RFC5869}} and is aligned with {{RFC8446}} Section 7.1.
 
 ### HKDF-Extract
 

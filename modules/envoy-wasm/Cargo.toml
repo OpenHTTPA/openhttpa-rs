@@ -1,0 +1,17 @@
+[package]
+name = "envoy-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "OpenHTTPA WebAssembly filter for Envoy"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+proxy-wasm = "0.2.2"
+openhttpa-core = { workspace = true }
+openhttpa-proto = { workspace = true }
+openhttpa-server = { workspace = true }
+log = "0.4"
