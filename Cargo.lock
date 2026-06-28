@@ -6163,6 +6163,8 @@ dependencies = [
  "futures",
  "hex",
  "jsonwebtoken",
+ "openhttpa-config",
+ "openhttpa-core",
  "openhttpa-crypto",
  "openhttpa-proto",
  "openhttpa-tee",
@@ -6172,6 +6174,7 @@ dependencies = [
  "serde_json",
  "sev",
  "sha2 0.11.0",
+ "temp-env",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -6261,6 +6264,10 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.23",
 ]
+
+[[package]]
+name = "openhttpa-config"
+version = "0.1.1"
 
 [[package]]
 name = "openhttpa-core"
@@ -6629,6 +6636,7 @@ version = "0.1.1"
 dependencies = [
  "base64ct",
  "bytes",
+ "openhttpa-config",
  "serde",
  "serde_json",
  "temp-env",
@@ -6720,6 +6728,8 @@ dependencies = [
  "hex",
  "hkdf 0.13.0",
  "once_cell",
+ "openhttpa-config",
+ "openhttpa-core",
  "openhttpa-proto",
  "openhttpa-zk",
  "optee-teec",
@@ -6731,6 +6741,7 @@ dependencies = [
  "sgx_ucrypto",
  "sha2 0.11.0",
  "tdx_attest",
+ "temp-env",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -9804,6 +9815,7 @@ version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96374855068f47402c3121c6eed88d29cb1de8f3ab27090e273e420bdabcf050"
 dependencies = [
+ "futures",
  "parking_lot",
 ]
 

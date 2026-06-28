@@ -13,23 +13,22 @@ use openhttpa_tee::{QuoteRequest, mock::MockTeeProvider, provider::TeeProvider};
 
 /// Test helper to create a mock composite quote bundle.
 fn create_mock_bundle(rd: &[u8; 64]) -> Vec<AttestQuote> {
-    // SAFETY: single-threaded test context.
-    unsafe { std::env::set_var("OPENHTTPA_ALLOW_MOCK_HARDWARE", "1") };
+    temp_env::with_var(openhttpa_config::ENV_ALLOW_MOCK_HARDWARE, Some("1"), || {
+        let provider = MockTeeProvider::with_override(QuoteType::Tdx);
 
-    let provider = MockTeeProvider::with_override(QuoteType::Tdx);
+        // 1. Host TEE Quote (TDX)
+        let q1 = provider
+            .generate_quote(&QuoteRequest { report_data: *rd })
+            .unwrap();
 
-    // 1. Host TEE Quote (TDX)
-    let q1 = provider
-        .generate_quote(&QuoteRequest { report_data: *rd })
-        .unwrap();
+        // 2. GPU Quote
+        let provider = MockTeeProvider::with_override(QuoteType::NvidiaGpu);
+        let q2 = provider
+            .generate_quote(&QuoteRequest { report_data: *rd })
+            .unwrap();
 
-    // 2. GPU Quote
-    let provider = MockTeeProvider::with_override(QuoteType::NvidiaGpu);
-    let q2 = provider
-        .generate_quote(&QuoteRequest { report_data: *rd })
-        .unwrap();
-
-    vec![q1, q2]
+        vec![q1, q2]
+    })
 }
 
 #[tokio::test]

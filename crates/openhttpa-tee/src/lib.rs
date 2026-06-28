@@ -49,9 +49,5 @@ pub mod trustzone;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
-pub(crate) static ENV_MUTEX: std::sync::LazyLock<std::sync::Mutex<()>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
-
 pub use evidence::{AttestationEvidence, EvidenceBundle};
 pub use provider::{QuoteRequest, TeeAdapter, TeeConfig, TeeProvider, detect_best_provider};

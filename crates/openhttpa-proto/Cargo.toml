@@ -20,6 +20,7 @@ sev_snp  = []
 trustzone = []
 
 [dependencies]
+openhttpa-config = { workspace = true }
 serde     = { workspace = true }
 thiserror = { workspace = true }
 zeroize   = { workspace = true }
@@ -29,4 +30,4 @@ base64ct  = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
-temp-env = "0.3.6"
+temp-env = { workspace = true }

@@ -42,8 +42,8 @@ impl ProtocolVersion {
 impl std::fmt::Display for ProtocolVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::V1 => f.write_str(crate::constants::PROTOCOL_VERSION_V1),
-            Self::V2 => f.write_str(crate::constants::PROTOCOL_VERSION_V2),
+            Self::V1 => f.write_str(openhttpa_config::PROTOCOL_VERSION_V1),
+            Self::V2 => f.write_str(openhttpa_config::PROTOCOL_VERSION_V2),
         }
     }
 }
@@ -52,8 +52,8 @@ impl std::str::FromStr for ProtocolVersion {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            crate::constants::PROTOCOL_VERSION_V1 => Ok(Self::V1),
-            crate::constants::PROTOCOL_VERSION_V2 => Ok(Self::V2),
+            openhttpa_config::PROTOCOL_VERSION_V1 => Ok(Self::V1),
+            openhttpa_config::PROTOCOL_VERSION_V2 => Ok(Self::V2),
             _ => Err(()),
         }
     }
@@ -103,11 +103,11 @@ impl CipherSuite {
         &[
             Self::X25519MlKem768Aes256GcmSha384,
             Self::P384MlKem1024Aes256GcmSha384,
-            Self::X25519Aes256GcmSha384,
-            Self::X25519ChaCha20Poly1305Sha256,
-            // S-04: P256Aes256GcmSha256 intentionally omitted — P-256 is 128-bit
-            // classical security; the mismatch with AES-256-GCM makes it
-            // a weaker choice. Retained in the enum for wire compatibility only.
+            // S-04: Classical-only cipher suites (X25519Aes256GcmSha384, X25519ChaCha20Poly1305Sha256)
+            // are intentionally omitted to enforce strict PQC (Post-Quantum Cryptography) compliance
+            // for all software session negotiations.
+            // Classical cryptography (e.g. ECDSA P-256) is ONLY retained for verifying hardware
+            // TEE quotes (like Intel SGX DCAP) where the hardware cannot be upgraded.
         ]
     }
 
@@ -151,15 +151,15 @@ impl std::fmt::Display for CipherSuite {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
             Self::X25519MlKem768Aes256GcmSha384 => {
-                crate::constants::CIPHER_SUITE_X25519_ML_KEM768_AES256GCM_SHA384
+                openhttpa_config::CIPHER_SUITE_X25519_ML_KEM768_AES256GCM_SHA384
             }
             Self::P384MlKem1024Aes256GcmSha384 => {
-                crate::constants::CIPHER_SUITE_P384_ML_KEM1024_AES256GCM_SHA384
+                openhttpa_config::CIPHER_SUITE_P384_ML_KEM1024_AES256GCM_SHA384
             }
-            Self::X25519Aes256GcmSha384 => crate::constants::CIPHER_SUITE_X25519_AES256GCM_SHA384,
-            Self::P256Aes256GcmSha256 => crate::constants::CIPHER_SUITE_P256_AES256GCM_SHA256,
+            Self::X25519Aes256GcmSha384 => openhttpa_config::CIPHER_SUITE_X25519_AES256GCM_SHA384,
+            Self::P256Aes256GcmSha256 => openhttpa_config::CIPHER_SUITE_P256_AES256GCM_SHA256,
             Self::X25519ChaCha20Poly1305Sha256 => {
-                crate::constants::CIPHER_SUITE_X25519_CHACHA20POLY1305_SHA256
+                openhttpa_config::CIPHER_SUITE_X25519_CHACHA20POLY1305_SHA256
             }
         };
         f.write_str(s)
@@ -171,16 +171,16 @@ impl std::str::FromStr for CipherSuite {
     #[allow(deprecated)] // P256Aes256GcmSha256 retained for wire-format compatibility (S-04)
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            crate::constants::CIPHER_SUITE_X25519_ML_KEM768_AES256GCM_SHA384 => {
+            openhttpa_config::CIPHER_SUITE_X25519_ML_KEM768_AES256GCM_SHA384 => {
                 Ok(Self::X25519MlKem768Aes256GcmSha384)
             }
-            crate::constants::CIPHER_SUITE_P384_ML_KEM1024_AES256GCM_SHA384 => {
+            openhttpa_config::CIPHER_SUITE_P384_ML_KEM1024_AES256GCM_SHA384 => {
                 Ok(Self::P384MlKem1024Aes256GcmSha384)
             }
-            crate::constants::CIPHER_SUITE_X25519_AES256GCM_SHA384 => {
+            openhttpa_config::CIPHER_SUITE_X25519_AES256GCM_SHA384 => {
                 Ok(Self::X25519Aes256GcmSha384)
             }
-            crate::constants::CIPHER_SUITE_P256_AES256GCM_SHA256 => {
+            openhttpa_config::CIPHER_SUITE_P256_AES256GCM_SHA256 => {
                 // INFO-01: Wire-level deny for deprecated cipher suite after configurable cutoff.
                 if std::env::var("OPENHTTPA_ALLOW_DEPRECATED_CIPHERS").unwrap_or_default() == "1" {
                     Ok(Self::P256Aes256GcmSha256)
@@ -188,7 +188,7 @@ impl std::str::FromStr for CipherSuite {
                     Err(())
                 }
             }
-            crate::constants::CIPHER_SUITE_X25519_CHACHA20POLY1305_SHA256 => {
+            openhttpa_config::CIPHER_SUITE_X25519_CHACHA20POLY1305_SHA256 => {
                 Ok(Self::X25519ChaCha20Poly1305Sha256)
             }
             _ => Err(()),
@@ -199,6 +199,21 @@ impl std::str::FromStr for CipherSuite {
 // ─── TEE quote type ──────────────────────────────────────────────────────────
 
 /// Identifies the TEE technology that generated an [`AttestQuote`].
+///
+/// # Hardware Cryptography Constraints (PQC)
+/// While the `OpenHTTPA` protocol strictly enforces Post-Quantum Cryptography (PQC)
+/// via ML-KEM/ML-DSA for software-level session negotiations and transport,
+/// hardware-generated TEE quotes remain constrained by their respective hardware architectures.
+///
+/// For example, Intel SGX DCAP and Intel TDX utilize hardware-fused keys and microcode
+/// that exclusively support classical cryptography (such as ECDSA over P-256 or P-384).
+/// These signatures cannot be upgraded to PQC algorithms (like ML-DSA) without replacing
+/// the underlying physical processors.
+///
+/// Therefore, classical cryptographic primitives are **strictly retained and permitted
+/// ONLY** for the purpose of parsing and verifying hardware TEE quotes. They must never
+/// be used for standard session negotiation (`CipherSuite`) unless explicitly required
+/// by legacy clients overriding the PQC policies.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum QuoteType {
@@ -227,15 +242,15 @@ pub enum QuoteType {
 impl std::fmt::Display for QuoteType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            Self::Sgx => crate::constants::QUOTE_TYPE_SGX,
-            Self::Tdx => crate::constants::QUOTE_TYPE_TDX,
-            Self::SevSnp => crate::constants::QUOTE_TYPE_SEV_SNP,
-            Self::TrustZone => crate::constants::QUOTE_TYPE_TRUSTZONE,
-            Self::Tpm => crate::constants::QUOTE_TYPE_TPM,
-            Self::NvidiaGpu => crate::constants::QUOTE_TYPE_NVIDIA_GPU,
-            Self::AwsNitro => crate::constants::QUOTE_TYPE_AWS_NITRO,
-            Self::ZkCompressed => crate::constants::QUOTE_TYPE_ZK_COMPRESSED,
-            Self::Mock => crate::constants::QUOTE_TYPE_MOCK,
+            Self::Sgx => openhttpa_config::QUOTE_TYPE_SGX,
+            Self::Tdx => openhttpa_config::QUOTE_TYPE_TDX,
+            Self::SevSnp => openhttpa_config::QUOTE_TYPE_SEV_SNP,
+            Self::TrustZone => openhttpa_config::QUOTE_TYPE_TRUSTZONE,
+            Self::Tpm => openhttpa_config::QUOTE_TYPE_TPM,
+            Self::NvidiaGpu => openhttpa_config::QUOTE_TYPE_NVIDIA_GPU,
+            Self::AwsNitro => openhttpa_config::QUOTE_TYPE_AWS_NITRO,
+            Self::ZkCompressed => openhttpa_config::QUOTE_TYPE_ZK_COMPRESSED,
+            Self::Mock => openhttpa_config::QUOTE_TYPE_MOCK,
             Self::Unknown(s) => s,
         };
         f.write_str(s)
@@ -246,15 +261,15 @@ impl std::str::FromStr for QuoteType {
     type Err = std::convert::Infallible;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
-            crate::constants::QUOTE_TYPE_SGX => Self::Sgx,
-            crate::constants::QUOTE_TYPE_TDX => Self::Tdx,
-            crate::constants::QUOTE_TYPE_SEV_SNP => Self::SevSnp,
-            crate::constants::QUOTE_TYPE_TRUSTZONE => Self::TrustZone,
-            crate::constants::QUOTE_TYPE_TPM => Self::Tpm,
-            crate::constants::QUOTE_TYPE_NVIDIA_GPU => Self::NvidiaGpu,
-            crate::constants::QUOTE_TYPE_AWS_NITRO => Self::AwsNitro,
-            crate::constants::QUOTE_TYPE_ZK_COMPRESSED => Self::ZkCompressed,
-            crate::constants::QUOTE_TYPE_MOCK => Self::Mock,
+            openhttpa_config::QUOTE_TYPE_SGX => Self::Sgx,
+            openhttpa_config::QUOTE_TYPE_TDX => Self::Tdx,
+            openhttpa_config::QUOTE_TYPE_SEV_SNP => Self::SevSnp,
+            openhttpa_config::QUOTE_TYPE_TRUSTZONE => Self::TrustZone,
+            openhttpa_config::QUOTE_TYPE_TPM => Self::Tpm,
+            openhttpa_config::QUOTE_TYPE_NVIDIA_GPU => Self::NvidiaGpu,
+            openhttpa_config::QUOTE_TYPE_AWS_NITRO => Self::AwsNitro,
+            openhttpa_config::QUOTE_TYPE_ZK_COMPRESSED => Self::ZkCompressed,
+            openhttpa_config::QUOTE_TYPE_MOCK => Self::Mock,
             _ => Self::Unknown(s.to_owned()),
         })
     }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
-//! Protocol string constants.
+//! Global configuration and constants for the OpenHTTPA workspace.
 
 // Protocol versions
 pub const PROTOCOL_VERSION_V1: &str = "httpa/1";
@@ -25,3 +25,19 @@ pub const QUOTE_TYPE_NVIDIA_GPU: &str = "nvidia_gpu";
 pub const QUOTE_TYPE_AWS_NITRO: &str = "aws_nitro";
 pub const QUOTE_TYPE_ZK_COMPRESSED: &str = "zk_compressed";
 pub const QUOTE_TYPE_MOCK: &str = "mock";
+
+// Environment variables
+/// Environment variable to override the default TEE provider.
+pub const ENV_TEE_PROVIDER: &str = "OPENHTTPA_TEE_PROVIDER";
+
+/// Environment variable to specify the mock TEE type (e.g., "mock", "tdx", "tpm").
+pub const ENV_MOCK_TEE_TYPE: &str = "OPENHTTPA_MOCK_TEE_TYPE";
+
+/// Environment variable to induce mock failures for testing (e.g., "driver").
+pub const ENV_MOCK_FAILURE: &str = "OPENHTTPA_MOCK_FAILURE";
+
+/// Environment variable to allow mock hardware (1 or true).
+pub const ENV_ALLOW_MOCK_HARDWARE: &str = "OPENHTTPA_ALLOW_MOCK_HARDWARE";
+
+/// Environment variable to allow deprecated ciphers.
+pub const ENV_ALLOW_DEPRECATED_CIPHERS: &str = "OPENHTTPA_ALLOW_DEPRECATED_CIPHERS";

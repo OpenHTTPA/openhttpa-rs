@@ -332,11 +332,10 @@ pub fn verify_mock_quote(quote: &AttestQuote, report_data: &[u8; 64]) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ENV_MUTEX;
+    use openhttpa_config::{ENV_MOCK_FAILURE, ENV_MOCK_TEE_TYPE};
 
     #[test]
     fn mock_quote_generated_and_verified() {
-        let _guard = ENV_MUTEX.lock().unwrap();
         let provider = MockTeeProvider::default();
         assert!(<MockTeeProvider as TeeProvider>::is_available(&provider));
         let req = QuoteRequest {
@@ -348,44 +347,33 @@ mod tests {
 
     #[test]
     fn mock_simulate_failure() {
-        let _guard = ENV_MUTEX
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let provider = MockTeeProvider::default();
-        // SAFETY: single-threaded test context, ENV_MUTEX held.
-        unsafe { std::env::set_var("OPENHTTPA_MOCK_FAILURE", "driver") };
-        let req = QuoteRequest {
-            report_data: [0x01u8; 64],
-        };
-        let res = provider.generate_quote(&req);
-        assert!(matches!(res, Err(TeeProviderError::Driver(_))));
-        // SAFETY: single-threaded test context, ENV_MUTEX held.
-        unsafe { std::env::remove_var("OPENHTTPA_MOCK_FAILURE") };
+        temp_env::with_var(ENV_MOCK_FAILURE, Some("driver"), || {
+            let provider = MockTeeProvider::default();
+            let req = QuoteRequest {
+                report_data: [0x01u8; 64],
+            };
+            let res = provider.generate_quote(&req);
+            assert!(matches!(res, Err(TeeProviderError::Driver(_))));
+        });
     }
 
     #[test]
     fn mock_identity_switching() {
-        let _guard = ENV_MUTEX
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let provider = MockTeeProvider::default();
 
-        // SAFETY: single-threaded test context, ENV_MUTEX held.
-        unsafe { std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "tdx") };
-        assert_eq!(
-            <MockTeeProvider as TeeAdapter>::quote_type(&provider),
-            QuoteType::Tdx
-        );
+        temp_env::with_var(ENV_MOCK_TEE_TYPE, Some("tdx"), || {
+            assert_eq!(
+                <MockTeeProvider as TeeAdapter>::quote_type(&provider),
+                QuoteType::Tdx
+            );
+        });
 
-        // SAFETY: single-threaded test context, ENV_MUTEX held.
-        unsafe { std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "tpm") };
-        assert_eq!(
-            <MockTeeProvider as TeeAdapter>::quote_type(&provider),
-            QuoteType::Tpm
-        );
-
-        // SAFETY: single-threaded test context, ENV_MUTEX held.
-        unsafe { std::env::remove_var("OPENHTTPA_MOCK_TEE_TYPE") };
+        temp_env::with_var(ENV_MOCK_TEE_TYPE, Some("tpm"), || {
+            assert_eq!(
+                <MockTeeProvider as TeeAdapter>::quote_type(&provider),
+                QuoteType::Tpm
+            );
+        });
     }
 
     /// SA-07: `is_real_hardware_type` must correctly classify all known types.
@@ -412,21 +400,16 @@ mod tests {
     /// Note: This test would trigger a `panic!` in a non-test (production) build.
     #[test]
     fn mock_real_type_allowed_in_test_returns_correct_type() {
-        let _guard = ENV_MUTEX
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         // In test builds, a real TEE type via env var is accepted (CI use-case).
-        // SAFETY: single-threaded test context, ENV_MUTEX held.
-        unsafe { std::env::set_var("OPENHTTPA_MOCK_TEE_TYPE", "tdx") };
-        let provider = MockTeeProvider::default();
-        // The call must NOT panic in test context, and must return the real type.
-        let qt = <MockTeeProvider as TeeAdapter>::quote_type(&provider);
-        assert_eq!(
-            qt,
-            QuoteType::Tdx,
-            "mock must return the configured type in test builds"
-        );
-        // SAFETY: single-threaded test context, ENV_MUTEX held.
-        unsafe { std::env::remove_var("OPENHTTPA_MOCK_TEE_TYPE") };
+        temp_env::with_var(ENV_MOCK_TEE_TYPE, Some("tdx"), || {
+            let provider = MockTeeProvider::default();
+            // The call must NOT panic in test context, and must return the real type.
+            let qt = <MockTeeProvider as TeeAdapter>::quote_type(&provider);
+            assert_eq!(
+                qt,
+                QuoteType::Tdx,
+                "mock must return the configured type in test builds"
+            );
+        });
     }
 }

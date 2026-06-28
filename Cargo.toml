@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/openhttpa-config",
     "crates/openhttpa-proto",
     "crates/openhttpa-crypto",
     "crates/openhttpa-headers",
@@ -48,6 +49,7 @@ members = [
 # bindings/wasm must be built with `wasm-pack --target web`; exclude it from
 # the default build so a native target triple is never used for the cdylib.
 default-members = [
+    "crates/openhttpa-config",
     "crates/openhttpa-proto",
     "crates/openhttpa-crypto",
     "crates/openhttpa-headers",
@@ -174,8 +176,10 @@ pyo3             = { version = "0.29.0", default-features = false }
 # ── testing ────────────────────────────────────────────────────────────────────
 proptest         = "1.11"
 fs2              = "0.4"
+temp-env         = { version = "0.3.6", features = ["async_closure"] }
 
 # ── internal crates ────────────────────────────────────────────────────────────
+openhttpa-config     = { path = "crates/openhttpa-config", version = "0.1.1" }
 openhttpa-proto      = { path = "crates/openhttpa-proto", version = "0.1.1" }
 openhttpa-crypto     = { path = "crates/openhttpa-crypto", version = "0.1.1" }
 openhttpa-headers    = { path = "crates/openhttpa-headers", version = "0.1.1" }
