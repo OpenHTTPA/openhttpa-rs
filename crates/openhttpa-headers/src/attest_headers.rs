@@ -346,6 +346,8 @@ fn decode_bytes_sfv(map: &HeaderMap, name: &HeaderName) -> Result<Vec<u8>, Heade
         })
 }
 
+const UNKNOWN_TOKEN: &str = "unknown";
+
 /// Encode a slice of `Display`-able values as an RFC 8941 `List` of `Token`
 /// items.  Each value's `Display` string must satisfy the SFV token grammar
 /// (start with `[A-Za-z*]`; subsequent chars from `[A-Za-z0-9:.!#$%&'*+-^_|~]`).
@@ -359,7 +361,9 @@ fn encode_token_list(values: &[impl std::fmt::Display]) -> HeaderValue {
             let bare = Token::from_string(s.clone()).map_or_else(
                 |(_, _)| {
                     sfv::String::from_string(s).map_or_else(
-                        |(_, _)| BareItem::Token(Token::from_string("unknown".to_owned()).unwrap()),
+                        |(_, _)| {
+                            BareItem::Token(Token::from_string(UNKNOWN_TOKEN.to_owned()).unwrap())
+                        },
                         BareItem::String,
                     )
                 },
@@ -436,7 +440,7 @@ fn encode_token_sfv(s: &str) -> HeaderValue {
     let bare = Token::from_string(s.to_owned()).map_or_else(
         |(_, original)| {
             sfv::String::from_string(original).map_or_else(
-                |(_, _)| BareItem::Token(Token::from_string("unknown".to_owned()).unwrap()),
+                |(_, _)| BareItem::Token(Token::from_string(UNKNOWN_TOKEN.to_owned()).unwrap()),
                 BareItem::String,
             )
         },
@@ -474,7 +478,7 @@ fn decode_quotes_sfv(map: &HeaderMap, name: &HeaderName) -> Result<Vec<AttestQuo
             let type_str = il.items[0]
                 .bare_item
                 .as_token()
-                .map_or("unknown", |t| t.as_str());
+                .map_or(UNKNOWN_TOKEN, |t| t.as_str());
             let bytes = il.items[1]
                 .bare_item
                 .as_byte_sequence()

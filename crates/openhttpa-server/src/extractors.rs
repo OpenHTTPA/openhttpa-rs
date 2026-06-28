@@ -504,6 +504,7 @@ where
 }
 
 // Reuse StreamFrameReader logic (should probably be moved to openhttpa-core)
+#[derive(Debug)]
 struct StreamFrame {
     counter: u64,
     ciphertext: Vec<u8>,
@@ -525,12 +526,20 @@ where
         }
     }
 
+    const ERR_INCOMPLETE_FRAME: &'static str = "Incomplete frame";
+
     async fn next_frame(&mut self) -> Result<Option<StreamFrame>, String> {
         use futures::StreamExt;
+        const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024; // 16 MB limit
 
         loop {
             if self.buffer.len() >= 4 {
                 let len = u32::from_be_bytes(self.buffer[..4].try_into().unwrap()) as usize;
+                if len > MAX_FRAME_SIZE {
+                    return Err(format!(
+                        "Frame size {len} exceeds maximum allowed ({MAX_FRAME_SIZE} bytes)"
+                    ));
+                }
                 if self.buffer.len() >= 4 + 8 + len {
                     let _ = self.buffer.split_to(4);
                     let counter =
@@ -550,7 +559,7 @@ where
                     if self.buffer.is_empty() {
                         return Ok(None);
                     }
-                    return Err("Incomplete frame".to_owned());
+                    return Err(Self::ERR_INCOMPLETE_FRAME.to_owned());
                 }
             }
         }
@@ -886,5 +895,24 @@ mod tests {
             .await;
 
         assert_eq!(res.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[tokio::test]
+    async fn test_stream_frame_reader_max_size() {
+        use futures::stream;
+        let mut huge_frame = Vec::new();
+        huge_frame.extend_from_slice(&(u32::MAX).to_be_bytes()); // 4GB length!
+        huge_frame.extend_from_slice(&[0u8; 16]); // some arbitrary data
+
+        let chunk = bytes::Bytes::from(huge_frame);
+        // Mock stream yielding our malicious chunk
+        let mock_stream = stream::iter(vec![Ok::<_, axum::Error>(chunk)]);
+
+        let mut reader = StreamFrameReader::new(mock_stream);
+        let res = reader.next_frame().await;
+
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert!(err.contains("exceeds maximum allowed"));
     }
 }

@@ -166,22 +166,32 @@ impl SessionState {
 }
 
 /// A fully serialisable snapshot of a session, including secrets and replay state.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 pub struct DurableSessionState {
+    #[zeroize(skip)]
     pub id: AtbId,
+    #[zeroize(skip)]
     pub cipher_suite: CipherSuite,
+    #[zeroize(skip)]
     pub version: ProtocolVersion,
+    #[zeroize(skip)]
     pub phase: ProtocolPhase,
     pub keys: SealedSessionKeys,
     /// SA-05: Resumption secret (master secret) for deriving fresh 0-RTT keys.
     pub resumption_secret: Vec<u8>,
     /// Absolute expiration time.
+    #[zeroize(skip)]
     pub expires_at: std::time::SystemTime,
+    #[zeroize(skip)]
     pub client_counter: u64,
+    #[zeroize(skip)]
     pub server_counter: u64,
+    #[zeroize(skip)]
     pub replay_highest: u64,
+    #[zeroize(skip)]
     pub replay_window: Vec<u64>,
     /// Verified attestation result (EAT).
+    #[zeroize(skip)]
     pub attestation_result: Option<VerificationResult>,
 }
 
@@ -493,7 +503,7 @@ impl AttestSession {
     /// # Panics
     /// Panics if the session mutex is poisoned.
     #[must_use]
-    pub fn from_durable(state: DurableSessionState) -> Self {
+    pub fn from_durable(state: &DurableSessionState) -> Self {
         let now_sys = std::time::SystemTime::now();
         let now_inst = Instant::now();
         let expires_at = if state.expires_at > now_sys {
@@ -514,11 +524,11 @@ impl AttestSession {
 
         Self {
             inner: Arc::new(Mutex::new(SessionInner {
-                id: state.id,
+                id: state.id.clone(),
                 cipher_suite: state.cipher_suite,
                 version: state.version,
                 phase: state.phase,
-                keys: state.keys,
+                keys: state.keys.clone(),
                 expires_at,
                 replay_guard,
                 // SA-04: Restored sessions use SlidingWindow (the default) for
@@ -528,7 +538,7 @@ impl AttestSession {
                 replay_strategy: ReplayStrategy::default(),
                 client_counter: state.client_counter,
                 server_counter: state.server_counter,
-                attestation_result: state.attestation_result,
+                attestation_result: state.attestation_result.clone(),
             })),
         }
     }
@@ -804,5 +814,22 @@ mod tests {
             sess.state().client_posture(),
             openhttpa_proto::ClientSecurityPosture::MutualTee(openhttpa_proto::TeeClass::IntelTdx)
         );
+    }
+
+    #[test]
+    fn test_durable_session_restore() {
+        let sess = AttestSession::new(
+            AtbId::new(),
+            CipherSuite::X25519MlKem768Aes256GcmSha384,
+            ProtocolVersion::V2,
+            dummy_keys(),
+            Instant::now() + std::time::Duration::from_secs(3600),
+            ReplayStrategy::default(),
+            None,
+        );
+        let orig_id = sess.id();
+        let durable = sess.export_durable();
+        let restored = AttestSession::from_durable(&durable);
+        assert_eq!(orig_id, restored.id());
     }
 }

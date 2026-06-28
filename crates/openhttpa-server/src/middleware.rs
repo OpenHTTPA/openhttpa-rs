@@ -467,7 +467,7 @@ where
 
                         // Nonce was already committed atomically above by check_and_accept.
 
-                        let session = AttestSession::from_durable(durable_state);
+                        let session = AttestSession::from_durable(&durable_state);
                         if let Err(e) = registry.insert(session.clone()) {
                             tracing::error!(error = %e, "Failed to insert resumed session");
                         } else {

@@ -33,6 +33,11 @@ use tracing::{debug, instrument};
 
 pub const SIG_ALG_ML_DSA_65: SigAlg = SigAlg::MlDsa65;
 
+/// Domain separation prefix for server TEE quotes.
+pub const HS_SERVER_PREFIX: &[u8] = b"openhttpa hs server";
+/// Domain separation prefix for client TEE quotes.
+pub const HS_CLIENT_PREFIX: &[u8] = b"openhttpa hs client";
+
 /// The post-quantum digital signature algorithm negotiated during `AtHS`.
 ///
 /// Using an enum (rather than `Option<String>`) means that any unrecognised
@@ -420,9 +425,8 @@ impl AtHsExecutor {
         // 256-bit collision resistance against quantum adversaries.
         let server_quotes = if let Some(tee) = tee_provider {
             let mut report_data = [0u8; 64];
-            let prefix = b"openhttpa hs server";
             let mut hasher = sha2::Sha512::new();
-            sha2::Digest::update(&mut hasher, prefix);
+            sha2::Digest::update(&mut hasher, HS_SERVER_PREFIX);
             sha2::Digest::update(&mut hasher, transcript_bytes);
             report_data.copy_from_slice(&hasher.finalize());
             let req = QuoteRequest { report_data };
@@ -459,9 +463,8 @@ impl AtHsExecutor {
                         quote_bytes: quote.raw.to_vec(),
                         report_data: {
                             let mut rd = [0u8; 64];
-                            let prefix = b"openhttpa hs server";
                             let mut hasher = sha2::Sha512::new();
-                            sha2::Digest::update(&mut hasher, prefix);
+                            sha2::Digest::update(&mut hasher, HS_SERVER_PREFIX);
                             sha2::Digest::update(&mut hasher, transcript_bytes);
                             rd.copy_from_slice(&hasher.finalize());
                             rd
@@ -583,10 +586,9 @@ impl AtHsExecutor {
 
             let client_binding = hasher.finalize();
             let mut report_data = [0u8; 64];
-            // T-10 Hardening: Prepend "openhttpa hs client" prefix.
-            let prefix = b"openhttpa hs client";
+            // T-10 Hardening: Prepend domain separation prefix.
             let mut hasher = sha2::Sha512::new();
-            sha2::Digest::update(&mut hasher, prefix);
+            sha2::Digest::update(&mut hasher, HS_CLIENT_PREFIX);
             sha2::Digest::update(&mut hasher, client_binding);
             report_data.copy_from_slice(&hasher.finalize());
 
