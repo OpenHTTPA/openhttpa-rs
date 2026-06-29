@@ -30,4 +30,4 @@ async-trait = "0.1.89"
 openhttpa-spiffe = { path = "../../crates/openhttpa-spiffe" }
 openhttpa-telemetry = { path = "../../crates/openhttpa-telemetry" }
 hpke.workspace = true
-rand = "0.9"
+rand = "0.10"
