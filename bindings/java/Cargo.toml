@@ -11,7 +11,7 @@ description = "OpenHTTPA JNI bindings"
 crate-type = ["cdylib"]
 
 [dependencies]
-jni = "0.21.1"
+jni = "0.22.4"
 openhttpa-llm = { workspace = true }
 openhttpa-client = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
