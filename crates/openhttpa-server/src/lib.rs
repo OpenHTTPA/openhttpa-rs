@@ -15,7 +15,8 @@
 //! * `router` — convenience function that wires the above onto an Axum router (see examples).
 
 #![deny(warnings)]
-#![deny(clippy::all, clippy::pedantic, clippy::nursery)]
+#![deny(clippy::all, clippy::pedantic, clippy::nursery, clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 #![forbid(unsafe_code)]
 
 pub mod atb_registry;

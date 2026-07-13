@@ -103,8 +103,16 @@ verify-demo: ## Verify E2E demo stack functionality
 	$(MAKE) verify-demo-run
 	@echo "--- DEMO VERIFICATION COMPLETED ---"
 
+.PHONY: test-pgp
+test-pgp: ## Generate an ephemeral test PGP key for automated tests
+	@bash scripts/generate_test_pgp.sh
+
+.PHONY: verify-pgp
+verify-pgp: ## Comprehensively test test-pgp generation
+	@bash scripts/verify_test_pgp.sh
+
 .PHONY: verify-all
-verify-all: verify-core check-bindings verify-examples ci ## Exhaustive formal validation and verification suite
+verify-all: verify-core check-bindings verify-examples ci verify-pgp ## Exhaustive formal validation and verification suite
 	@echo "--- STARTING SHARED DEMO STACK FOR VERIFY-ALL ---"
 	@set -e; \
 	trap '$(MAKE) demo-down' EXIT; \
@@ -116,7 +124,7 @@ verify-all: verify-core check-bindings verify-examples ci ## Exhaustive formal v
 	@echo "The OpenHTTPA project stack is verified for production readiness."
 
 .PHONY: ci-parallel
-ci-parallel: fmt audit clippy test test-rust-examples check-bindings test-contracts
+ci-parallel: fmt audit clippy test test-rust-examples check-bindings test-contracts verify-pgp
 
 ## -- Development --
 

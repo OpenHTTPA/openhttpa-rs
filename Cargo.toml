@@ -197,7 +197,7 @@ openhttpa-a2a         = { path = "crates/openhttpa-a2a", version = "0.1.1" }
 openhttpa-zk         = { path = "crates/openhttpa-zk", version = "0.1.1" }
 openhttpa-oracle     = { path = "crates/openhttpa-oracle", version = "0.1.1" }
 openhttpa-ingress    = { path = "crates/openhttpa-ingress", version = "0.1.1" }
-openhttpa-broker     = { path = "crates/openhttpa-broker", version = "0.1.1" }
+
 openhttpa-aiql       = { path = "crates/openhttpa-aiql", version = "0.1.1" }
 openhttpa-identity-chain = { path = "crates/openhttpa-identity-chain", version = "0.1.1" }
 openhttpa-agent-server = { path = "crates/openhttpa-agent-server", version = "0.1.1" }

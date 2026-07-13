@@ -18,6 +18,7 @@
 
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
+#![forbid(unsafe_code)]
 
 pub mod aead;
 pub mod hkdf;

@@ -115,6 +115,7 @@ impl<const W: usize> FileReplayGuard<W> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use tempfile::tempdir;
 

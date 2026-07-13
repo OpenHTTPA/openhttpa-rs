@@ -97,6 +97,24 @@ impl EcdsaKeyPair {
             .verify(message, signature)
             .map_err(|_| SignatureError::Verify)
     }
+
+    /// Verify an ECDSA-P384 signature.
+    ///
+    /// # Errors
+    /// Returns [`Err`] if the signature is invalid or the key is malformed.
+    pub fn verify_p384(
+        public_key_bytes: &[u8],
+        message: &[u8],
+        signature: &[u8],
+    ) -> Result<(), SignatureError> {
+        let peer_pub = signature::UnparsedPublicKey::new(
+            &signature::ECDSA_P384_SHA384_FIXED,
+            public_key_bytes,
+        );
+        peer_pub
+            .verify(message, signature)
+            .map_err(|_| SignatureError::Verify)
+    }
 }
 
 #[cfg(test)]
@@ -117,5 +135,21 @@ mod tests {
         let msg = b"original";
         let sig = kp.sign(msg).unwrap();
         assert!(EcdsaKeyPair::verify_p256(&kp.public_key_der, b"tampered", &sig).is_err());
+    }
+
+    #[test]
+    fn ecdsa_p384_sign_verify() {
+        let kp = EcdsaKeyPair::generate_p384().unwrap();
+        let msg = b"attest header lines p384";
+        let sig = kp.sign(msg).unwrap();
+        EcdsaKeyPair::verify_p384(&kp.public_key_der, msg, &sig).unwrap();
+    }
+
+    #[test]
+    fn ecdsa_p384_tamper_fails() {
+        let kp = EcdsaKeyPair::generate_p384().unwrap();
+        let msg = b"original p384";
+        let sig = kp.sign(msg).unwrap();
+        assert!(EcdsaKeyPair::verify_p384(&kp.public_key_der, b"tampered", &sig).is_err());
     }
 }

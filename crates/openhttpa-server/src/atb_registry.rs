@@ -200,6 +200,7 @@ impl AtbRegistry {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use openhttpa_core::session::{AttestSession, ReplayStrategy};
     use openhttpa_crypto::hkdf::SessionKeys;

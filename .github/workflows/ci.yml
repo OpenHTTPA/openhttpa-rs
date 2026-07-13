@@ -22,22 +22,42 @@ env:
   RISC0_SKIP_BUILD_KERNELS: '1'
 
 jobs:
-  verify:
-    name: Formal Verification & CI
+  lint:
+    name: Lint & Format
     runs-on: self-hosted
-    timeout-minutes: 180
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+      - name: Run format and clippy
+        run: make ci
+      - name: Verify PGP Key Generation
+        run: make verify-pgp
 
+  test-core:
+    name: Test Core Workspace
+    runs-on: self-hosted
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
       - name: Proactive Disk Hygiene
-        run: |
-          docker system prune -f --volumes || true
-          rm -rf /tmp/openhttpa-build-* || true
+        run: rm -rf /tmp/openhttpa-build-* || true
+      - name: Run core tests
+        run: make verify-core
 
-      - name: Run Full Verification Suite
-        run: make verify-all
+  test-bindings:
+    name: Test Bindings & Examples
+    runs-on: self-hosted
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check bindings and examples
+        run: make check-bindings verify-examples
 
-      - name: Run Formal Security Proofs
+  formal-verify:
+    name: Formal Security Proofs
+    runs-on: self-hosted
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run ProVerif/Tamarin Proofs
         run: make formal-verify

@@ -37,6 +37,14 @@ If you discover a potential security issue, please do **NOT** open a public issu
    > 4. Cross-sign the key with at least two core maintainer keys.
    > 5. Add the public key armored block to `docs/pgp/security-at-openhttpa.asc`.
    > 6. Remove this caution block and replace with the key details.
+   >
+   > **Note for Testing/CI Environments**: You can automate the generation of an ephemeral, test-only PGP key by running:
+   >
+   > ```bash
+   > make test-pgp
+   > ```
+   >
+   > This will generate a 1-day Ed25519 key and place it in `docs/pgp/security-at-openhttpa.asc`.
 
 ### Our Commitment
 

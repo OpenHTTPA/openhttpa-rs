@@ -75,7 +75,7 @@ impl OpenHttpaSession {
             for (i, b) in count_bytes.iter().enumerate() {
                 nonce_bytes[4 + i] ^= b;
             }
-            let aead_nonce = AeadNonce::from_slice(&nonce_bytes).unwrap();
+            let aead_nonce = AeadNonce::from_slice(&nonce_bytes).expect("nonce is 12 bytes");
 
             let mut data = plaintext;
             let key = openhttpa_crypto::aead::AeadKey::new(
@@ -93,7 +93,7 @@ impl OpenHttpaSession {
                 Json(serde_json::json!({ "ciphertext": hex::encode(data) })).into_response();
             res.headers_mut().insert(
                 &*HDR_ATTEST_BASE_ID,
-                http::HeaderValue::from_str(&id_str).unwrap(),
+                http::HeaderValue::from_str(&id_str).expect("AtbId is a valid header value"),
             );
             Ok::<Response, Response>(res)
         });
@@ -135,7 +135,7 @@ impl OpenHttpaSession {
                 for (i, b) in count_bytes.iter().enumerate() {
                     nonce_bytes[4 + i] ^= b;
                 }
-                let aead_nonce = AeadNonce::from_slice(&nonce_bytes).unwrap();
+                let aead_nonce = AeadNonce::from_slice(&nonce_bytes).expect("nonce is 12 bytes");
 
                 let mut chunk_aad = aad.clone();
                 chunk_aad.extend_from_slice(&cumulative_hash);
@@ -178,7 +178,7 @@ impl OpenHttpaSession {
         Response::builder()
             .header(http::header::CONTENT_TYPE, "application/x-openhttpa-stream")
             .body(axum::body::Body::from_stream(encrypted_stream))
-            .unwrap()
+            .expect("valid response builder")
     }
 }
 
@@ -362,7 +362,7 @@ where
                 for (i, b) in count_bytes.iter().enumerate() {
                     nonce_bytes[4 + i] ^= b;
                 }
-                let aead_nonce = AeadNonce::from_slice(&nonce_bytes).unwrap();
+                let aead_nonce = AeadNonce::from_slice(&nonce_bytes).expect("nonce is 12 bytes");
 
                 let bound_key = BoundAeadKey::new(
                     AeadAlgorithm::Aes256Gcm,
@@ -457,7 +457,8 @@ where
                     for (i, b) in count_bytes.iter().enumerate() {
                         nonce_bytes[4 + i] ^= b;
                     }
-                    let aead_nonce = AeadNonce::from_slice(&nonce_bytes).unwrap();
+                    let aead_nonce =
+                        AeadNonce::from_slice(&nonce_bytes).expect("nonce is 12 bytes");
 
                     let mut chunk_aad = aad.clone();
                     chunk_aad.extend_from_slice(&prev_hash);
@@ -534,7 +535,8 @@ where
 
         loop {
             if self.buffer.len() >= 4 {
-                let len = u32::from_be_bytes(self.buffer[..4].try_into().unwrap()) as usize;
+                let len = u32::from_be_bytes(self.buffer[..4].try_into().expect("slice is 4 bytes"))
+                    as usize;
                 if len > MAX_FRAME_SIZE {
                     return Err(format!(
                         "Frame size {len} exceeds maximum allowed ({MAX_FRAME_SIZE} bytes)"
@@ -542,8 +544,11 @@ where
                 }
                 if self.buffer.len() >= 4 + 8 + len {
                     let _ = self.buffer.split_to(4);
-                    let counter =
-                        u64::from_be_bytes(self.buffer.split_to(8)[..8].try_into().unwrap());
+                    let counter = u64::from_be_bytes(
+                        self.buffer.split_to(8)[..8]
+                            .try_into()
+                            .expect("slice is 8 bytes"),
+                    );
                     let ciphertext = self.buffer.split_to(len).to_vec();
                     return Ok(Some(StreamFrame {
                         counter,
@@ -576,6 +581,7 @@ pub enum LlmError {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use ax_test::TestClient;
     use axum::{Router, routing::post};

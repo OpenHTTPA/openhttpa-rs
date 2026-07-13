@@ -248,6 +248,7 @@ impl OpenHttpaServerBuilder {
                 "/attest",
                 axum::routing::options(crate::handlers::preflight_handler).fallback(aths_handler),
             )
+            .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
             .with_state(builder_state);
 
         if let Some(rl) = self.rate_limit {
@@ -341,6 +342,7 @@ impl OpenHttpaServerBuilder {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

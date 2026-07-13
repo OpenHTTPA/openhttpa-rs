@@ -108,7 +108,7 @@ pub struct AttestSession {
 
 impl std::fmt::Debug for AttestSession {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let g = self.inner.lock().unwrap();
+        let g = self.inner.lock().expect("lock poisoned");
         f.debug_struct("AttestSession")
             .field("phase", &g.phase)
             .field("id", &g.id)
@@ -236,7 +236,7 @@ impl AttestSession {
     /// Panics if the session mutex is poisoned.
     #[must_use]
     pub fn id(&self) -> AtbId {
-        let g = self.inner.lock().unwrap();
+        let g = self.inner.lock().expect("lock poisoned");
         g.id.clone()
     }
 
@@ -247,7 +247,7 @@ impl AttestSession {
     /// Panics if the session mutex is poisoned.
     #[must_use]
     pub fn state(&self) -> SessionState {
-        let g = self.inner.lock().unwrap();
+        let g = self.inner.lock().expect("lock poisoned");
         let id = g.id.clone();
         let cipher_suite = g.cipher_suite;
         let version = g.version;
@@ -271,7 +271,7 @@ impl AttestSession {
     /// Panics if the session mutex is poisoned.
     #[must_use]
     pub fn client_posture(&self) -> ClientSecurityPosture {
-        let g = self.inner.lock().unwrap();
+        let g = self.inner.lock().expect("lock poisoned");
         g.attestation_result
             .as_ref()
             .map_or(ClientSecurityPosture::OneDirectional, |res| {
@@ -290,7 +290,7 @@ impl AttestSession {
     /// Panics if the session mutex is poisoned.
     #[must_use]
     pub fn is_alive(&self) -> bool {
-        let g = self.inner.lock().unwrap();
+        let g = self.inner.lock().expect("lock poisoned");
         Instant::now() < g.expires_at
     }
 
@@ -304,7 +304,7 @@ impl AttestSession {
     ///
     /// Returns [`Err`](`SessionError::Transition`) if the transition is not valid.
     pub fn advance_phase(&self, next: ProtocolPhase) -> Result<(), SessionError> {
-        let mut g = self.inner.lock().unwrap();
+        let mut g = self.inner.lock().expect("lock poisoned");
         let new_phase = transition(g.phase, next)?;
         g.phase = new_phase;
         drop(g);
@@ -327,7 +327,7 @@ impl AttestSession {
     where
         F: FnOnce(&SessionKeys) -> R,
     {
-        let g = self.inner.lock().unwrap();
+        let g = self.inner.lock().expect("lock poisoned");
         if Instant::now() >= g.expires_at {
             return Err(SessionError::Expired);
         }
@@ -358,7 +358,7 @@ impl AttestSession {
     where
         F: FnOnce(&SessionKeys, u64) -> Result<T, E>,
     {
-        let mut g = self.inner.lock().unwrap();
+        let mut g = self.inner.lock().expect("lock poisoned");
         if Instant::now() >= g.expires_at {
             return Err(SessionError::Expired);
         }
@@ -447,7 +447,7 @@ impl AttestSession {
     where
         F: FnOnce(&SessionKeys, u64) -> R,
     {
-        let mut g = self.inner.lock().unwrap();
+        let mut g = self.inner.lock().expect("lock poisoned");
         if Instant::now() >= g.expires_at {
             return Err(SessionError::Expired);
         }
@@ -470,7 +470,7 @@ impl AttestSession {
     /// Panics if the session mutex is poisoned.
     #[must_use]
     pub fn export_durable(&self) -> DurableSessionState {
-        let g = self.inner.lock().unwrap();
+        let g = self.inner.lock().expect("lock poisoned");
         let (replay_highest, window_arr) = g.replay_guard.export_state();
 
         // Convert Instant to SystemTime
@@ -554,6 +554,7 @@ impl Clone for AttestSession {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use openhttpa_crypto::hkdf::SessionKeys;
 

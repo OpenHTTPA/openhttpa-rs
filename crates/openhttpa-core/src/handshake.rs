@@ -640,6 +640,7 @@ impl AtHsExecutor {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use openhttpa_attestation::{EatClaims, SimplePolicy, VerificationResult};
 

@@ -251,7 +251,7 @@ where
             RateLimitFutureProj::Rejected => Poll::Ready(Ok(Response::builder()
                 .status(StatusCode::TOO_MANY_REQUESTS)
                 .body(Body::from("rate limit exceeded"))
-                .unwrap())),
+                .expect("valid response builder"))),
         }
     }
 }
@@ -260,6 +260,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use std::net::Ipv4Addr;
 

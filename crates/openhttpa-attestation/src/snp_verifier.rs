@@ -216,9 +216,24 @@ impl SevSnpVerifier {
             )));
         }
 
-        // SAFETY: We verified the buffer is large enough above.
-        let report: &AttestationReport =
-            unsafe { &*(report_bytes.as_ptr().cast::<AttestationReport>()) };
+        // C-03: Alignment-safe report parsing.
+        // `report_bytes` is `&[u8]` (1-byte aligned) but `AttestationReport`
+        // may require higher alignment.  Copy into a properly aligned buffer
+        // to avoid undefined behavior from misaligned pointer dereference.
+        let report: AttestationReport = {
+            let mut buf = std::mem::MaybeUninit::<AttestationReport>::zeroed();
+            // SAFETY: `buf` is a MaybeUninit of the correct size; we copy
+            // exactly `size_of::<AttestationReport>()` bytes (validated above)
+            // from the source buffer into the MaybeUninit, then assume_init.
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    report_bytes.as_ptr(),
+                    buf.as_mut_ptr().cast::<u8>(),
+                    std::mem::size_of::<AttestationReport>(),
+                );
+                buf.assume_init()
+            }
+        };
 
         // ── Step 2: Report data (nonce) binding ───────────────────────────
         // The SNP report embeds the caller-supplied `report_data` (64 bytes)
@@ -233,10 +248,14 @@ impl SevSnpVerifier {
         }
 
         // ── Step 3: Debug status check ─────────────────────────────────────
-        // SNP policy bit 0 of `guest_policy` indicates if debug/no-SMT is set.
-        // For simplicity we check the signing key type field.
-        let is_debug = report.signing_key == 1; // 1 = VCEK, 0 = VLEK; simplification for now.
-        // A more robust check would parse the AuthorKey / guest_policy fields.
+        // H-02: Parse the actual debug flag from `guest_policy`.
+        // Per AMD SEV-SNP Firmware ABI Specification §7.3, bit 19 of
+        // `guest_policy` is the DEBUG flag. When set, the guest is running
+        // in debug mode and its memory is accessible to the hypervisor.
+        // Previous code incorrectly checked `signing_key` (VCEK vs VLEK),
+        // which is unrelated to debug status.
+        const SNP_GUEST_POLICY_DEBUG_BIT: u64 = 1 << 19;
+        let is_debug = (report.policy & SNP_GUEST_POLICY_DEBUG_BIT) != 0;
         if is_debug && !self.allow_debug {
             return Err(VerificationError::PolicyViolation(
                 "SNP report: debug-mode reports are not accepted in production".to_owned(),

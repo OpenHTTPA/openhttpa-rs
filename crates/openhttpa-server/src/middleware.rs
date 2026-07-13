@@ -113,7 +113,7 @@ where
                     let resp = Response::builder()
                         .status(StatusCode::FORBIDDEN)
                         .body(Body::empty())
-                        .unwrap();
+                        .expect("valid response builder");
                     return Ok(resp);
                 }
 
@@ -127,7 +127,7 @@ where
                 let resp = Response::builder()
                     .status(StatusCode::UNAUTHORIZED)
                     .body(Body::empty())
-                    .unwrap();
+                    .expect("valid response builder");
                 Ok(resp)
             }
         })
@@ -189,7 +189,9 @@ impl LocalReplayGuard {
     #[must_use]
     pub fn new(items: usize, fp_rate: f64) -> Self {
         Self {
-            bloom: Mutex::new(Bloom::new_for_fp_rate(items, fp_rate).unwrap()),
+            bloom: Mutex::new(
+                Bloom::new_for_fp_rate(items, fp_rate).expect("Bloom filter params valid"),
+            ),
             prev_bloom: Mutex::new(None),
             capacity: items,
             count: std::sync::atomic::AtomicUsize::new(0),
@@ -251,7 +253,8 @@ impl LocalReplayGuard {
     /// # Panics
     /// Panics if either internal `Mutex` is poisoned.
     pub fn rotate(&self) {
-        let new_filter = Bloom::new_for_fp_rate(self.capacity, 1e-3).unwrap();
+        let new_filter =
+            Bloom::new_for_fp_rate(self.capacity, 1e-3).expect("Bloom filter params valid");
         let mut bloom = self.bloom.lock().expect("bloom mutex poisoned");
         let old = std::mem::replace(&mut *bloom, new_filter);
         drop(bloom);
@@ -484,6 +487,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use openhttpa_core::replay_guard::ReplayError;
 

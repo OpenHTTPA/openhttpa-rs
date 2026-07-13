@@ -604,6 +604,7 @@ fn extract_counter_from_nonce(nonce: &[u8], iv: &[u8; 12]) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     /// Build a pair of `BoundAeadKey`s that mirror what the server and client

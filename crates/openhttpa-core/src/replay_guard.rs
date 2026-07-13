@@ -205,7 +205,7 @@ impl<const W: usize> ReplayGuard<W> {
     /// Panics if the internal mutex is poisoned and the lock cannot be acquired.
     #[must_use]
     pub fn export_state(&self) -> (u64, [u64; W]) {
-        let g = self.inner.lock().unwrap();
+        let g = self.inner.lock().expect("lock poisoned");
         (g.highest, g.window)
     }
 
@@ -214,7 +214,7 @@ impl<const W: usize> ReplayGuard<W> {
     /// # Panics
     /// Panics if the internal mutex is poisoned and the lock cannot be acquired.
     pub fn import_state(&self, highest: u64, window: [u64; W]) {
-        let mut g = self.inner.lock().unwrap();
+        let mut g = self.inner.lock().expect("lock poisoned");
         g.highest = highest;
         g.window = window;
     }
@@ -228,6 +228,7 @@ impl<const W: usize> Default for ReplayGuard<W> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]
