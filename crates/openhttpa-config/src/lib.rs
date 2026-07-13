@@ -4,6 +4,8 @@
 //! Global configuration and constants for the OpenHTTPA workspace.
 
 // Protocol versions
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 pub const PROTOCOL_VERSION_V1: &str = "httpa/1";
 pub const PROTOCOL_VERSION_V2: &str = "openhttpa";
 

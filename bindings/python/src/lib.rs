@@ -24,6 +24,8 @@
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 #![forbid(unsafe_code)]
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
@@ -282,7 +284,7 @@ impl PyMcpClient {
             .rt
             .block_on(self.inner.call(method, params_val))
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-        Ok(serde_json::to_string(&res).unwrap())
+        Ok(serde_json::to_string(&res).expect("JSON serialization failed"))
     }
 }
 

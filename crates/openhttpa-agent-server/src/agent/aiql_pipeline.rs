@@ -45,7 +45,7 @@ impl AiqlPipeline {
             });
         }
 
-        let engine = EnclaveInferenceEngine::new().unwrap();
+        let engine = EnclaveInferenceEngine::new().expect("Failed to create engine");
         let llm_result = engine
             .run_inference(agent_unsealable_payload)
             .unwrap_or_default();

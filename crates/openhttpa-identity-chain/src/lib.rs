@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2026 The OpenHTTPA Foundation
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use alloy::providers::ProviderBuilder;
 use alloy::transports::http::reqwest::Url;

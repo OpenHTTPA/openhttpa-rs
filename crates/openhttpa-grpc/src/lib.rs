@@ -14,7 +14,8 @@
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 #![forbid(unsafe_code)]
 #![allow(clippy::module_name_repetitions)]
-
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 /// prost-generated message types from `proto/openhttpa.proto`.
 /// This is the single source of truth for all wire types (DES-01).
 pub mod proto {

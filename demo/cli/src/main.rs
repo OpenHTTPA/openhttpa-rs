@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use axum::{
     Router,
@@ -178,7 +180,7 @@ async fn run_client(url: String, message: String, mutual: bool) -> anyhow::Resul
             use openhttpa_crypto::aead::{AeadAlgorithm, AeadKey, AeadNonce};
 
             let aad = format!("openhttpa:{}", base_id);
-            let plaintext = serde_json::to_vec(&req).unwrap();
+            let plaintext = serde_json::to_vec(&req).expect("Failed to serialize request");
 
             let mut data = plaintext.clone();
 
@@ -189,12 +191,13 @@ async fn run_client(url: String, message: String, mutual: bool) -> anyhow::Resul
             for (i, b) in count_bytes.iter().enumerate() {
                 nonce_bytes[4 + i] ^= b;
             }
-            let aead_nonce = AeadNonce::from_slice(&nonce_bytes).unwrap();
+            let aead_nonce = AeadNonce::from_slice(&nonce_bytes).expect("Invalid nonce length");
 
-            let sealer = AeadKey::new(AeadAlgorithm::Aes256Gcm, &keys.client_write_key).unwrap();
+            let sealer = AeadKey::new(AeadAlgorithm::Aes256Gcm, &keys.client_write_key)
+                .expect("Invalid key length");
             sealer
                 .seal_in_place(&aead_nonce, aad.as_bytes(), &mut data)
-                .unwrap();
+                .expect("Failed to seal payload");
 
             (
                 hex::encode(data),
@@ -205,11 +208,18 @@ async fn run_client(url: String, message: String, mutual: bool) -> anyhow::Resul
                         use hmac::{Hmac, KeyInit, Mac};
                         use sha2::Sha384;
                         type HmacSha384 = Hmac<Sha384>;
-                        let mut hmac = HmacSha384::new_from_slice(&keys.client_mac_key).unwrap();
+                        let mut hmac = HmacSha384::new_from_slice(&keys.client_mac_key)
+                            .expect("Invalid MAC key");
                         hmac.update(&nonce_val.to_be_bytes());
 
                         let mut header_map = http::HeaderMap::new();
-                        header_map.insert("Attest-Base-ID", base_id.to_string().parse().unwrap());
+                        header_map.insert(
+                            "Attest-Base-ID",
+                            base_id
+                                .to_string()
+                                .parse()
+                                .expect("Failed to parse base ID"),
+                        );
 
                         openhttpa_headers::update_ahl(
                             "POST",
@@ -221,7 +231,7 @@ async fn run_client(url: String, message: String, mutual: bool) -> anyhow::Resul
                                 hmac.update(chunk);
                             },
                         )
-                        .unwrap();
+                        .expect("Failed to update headers");
 
                         hmac.finalize().into_bytes().to_vec()
                     },
@@ -267,9 +277,10 @@ async fn run_client(url: String, message: String, mutual: bool) -> anyhow::Resul
             for (i, b) in count_bytes.iter().enumerate() {
                 nonce_bytes[4 + i] ^= b;
             }
-            let aead_nonce = AeadNonce::from_slice(&nonce_bytes).unwrap();
+            let aead_nonce = AeadNonce::from_slice(&nonce_bytes).expect("Invalid nonce length");
 
-            let opener = AeadKey::new(AeadAlgorithm::Aes256Gcm, &keys.server_write_key).unwrap();
+            let opener = AeadKey::new(AeadAlgorithm::Aes256Gcm, &keys.server_write_key)
+                .expect("Invalid key length");
 
             let plaintext = opener
                 .open_in_place(&aead_nonce, aad.as_bytes(), &mut resp_ciphertext)

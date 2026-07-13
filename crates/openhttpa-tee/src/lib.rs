@@ -11,6 +11,8 @@
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 // TEE modules contain necessary unsafe FFI; they are individually audited.
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 #![cfg_attr(
     all(
         not(test),

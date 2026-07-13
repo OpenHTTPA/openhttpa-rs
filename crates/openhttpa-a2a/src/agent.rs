@@ -21,7 +21,11 @@ impl A2AAgent {
     /// Panics if the default server URI fails to parse.
     pub fn new(agent_id: &str) -> Result<Self, String> {
         let client = OpenHttpaClient::builder()
-            .server_uri("http://127.0.0.1:8080".parse().unwrap())
+            .server_uri(
+                "http://127.0.0.1:8080"
+                    .parse()
+                    .expect("Static string is a valid URI"),
+            )
             .tee_provider(std::sync::Arc::new(
                 openhttpa_tee::mock::MockTeeProvider::default(),
             ))
@@ -52,7 +56,7 @@ impl A2AAgent {
             "agent_id": self.agent_id,
             "action": "handshake"
         }))
-        .unwrap();
+        .expect("Serialization of simple json! macro should never fail");
 
         let session = self
             .client

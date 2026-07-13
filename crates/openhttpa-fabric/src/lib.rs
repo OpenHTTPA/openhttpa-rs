@@ -4,6 +4,8 @@
 //! Secure Distributed Memory Fabric over OpenHTTPA
 //!
 //! Provides a hardware-attested, decentralized CRDT store for AI agents.
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 pub mod mcp_tools;
 pub mod metrics;

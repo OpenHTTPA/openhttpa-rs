@@ -22,6 +22,8 @@
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 #![cfg_attr(not(test), forbid(unsafe_code))]
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 pub mod collateral_fetcher;
 pub mod composite;

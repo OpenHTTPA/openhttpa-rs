@@ -65,7 +65,7 @@ pub struct DecodedTicket {
 ///
 /// # Panics
 /// Never panics in practice; the slice length is verified to be ≥ 9 before
-/// the `try_into().unwrap()` calls.
+/// the `try_into().expect("statically known to be valid")` calls.
 ///
 /// # Errors
 /// Returns [`Err`] if the trailer is missing, contains invalid UTF-8, fails
@@ -90,7 +90,7 @@ pub fn decode_attest_ticket(map: &HeaderMap) -> Result<DecodedTicket, TrailerErr
             reason: "payload too short".to_owned(),
         });
     }
-    let nonce = u64::from_be_bytes(bytes[..8].try_into().unwrap());
+    let nonce = u64::from_be_bytes(bytes[..8].try_into().expect("statically known to be valid"));
     let mode = bytes[8];
     if mode == 1 {
         if bytes.len() < 9 + 16 {
@@ -99,7 +99,9 @@ pub fn decode_attest_ticket(map: &HeaderMap) -> Result<DecodedTicket, TrailerErr
                 reason: "0-RTT salt missing".to_owned(),
             });
         }
-        let salt = bytes[9..25].try_into().unwrap();
+        let salt = bytes[9..25]
+            .try_into()
+            .expect("statically known to be valid");
         let mac = bytes[25..].to_vec();
         Ok(DecodedTicket {
             nonce,
@@ -132,7 +134,7 @@ pub fn encode_attest_binder(request_nonce: u64, mac: &[u8]) -> HeaderValue {
 ///
 /// # Panics
 /// Never panics in practice; the slice length is verified to be ≥ 8 before
-/// the `try_into().unwrap()` call.
+/// the `try_into().expect("statically known to be valid")` call.
 ///
 /// # Errors
 /// Returns [`Err`] if the trailer is missing, contains invalid UTF-8, fails
@@ -157,7 +159,7 @@ pub fn decode_attest_binder(map: &HeaderMap) -> Result<(u64, Vec<u8>), TrailerEr
             reason: "payload too short".to_owned(),
         });
     }
-    let nonce = u64::from_be_bytes(bytes[..8].try_into().unwrap());
+    let nonce = u64::from_be_bytes(bytes[..8].try_into().expect("statically known to be valid"));
     Ok((nonce, bytes[8..].to_vec()))
 }
 
@@ -166,11 +168,14 @@ mod tests {
     use super::*;
     #[test]
     fn ticket_round_trip() {
-        let mac = std::array::from_fn::<u8, 48, _>(|i| u8::try_from(i % 255).unwrap()).to_vec();
+        let mac = std::array::from_fn::<u8, 48, _>(|i| {
+            u8::try_from(i % 255).expect("statically known to be valid")
+        })
+        .to_vec();
         let hv = encode_attest_ticket(42, &mac, None);
         let mut map = HeaderMap::new();
         map.insert(HDR_ATTEST_TICKET.clone(), hv);
-        let decoded = decode_attest_ticket(&map).unwrap();
+        let decoded = decode_attest_ticket(&map).expect("statically known to be valid");
         assert_eq!(decoded.nonce, 42);
         assert_eq!(decoded.mac, mac);
         assert_eq!(decoded.salt, None);
@@ -178,12 +183,17 @@ mod tests {
 
     #[test]
     fn ticket_0rtt_round_trip() {
-        let mac = std::array::from_fn::<u8, 48, _>(|i| u8::try_from(i % 255).unwrap()).to_vec();
-        let salt = std::array::from_fn::<u8, 16, _>(|i| u8::try_from(i % 255).unwrap());
+        let mac = std::array::from_fn::<u8, 48, _>(|i| {
+            u8::try_from(i % 255).expect("statically known to be valid")
+        })
+        .to_vec();
+        let salt = std::array::from_fn::<u8, 16, _>(|i| {
+            u8::try_from(i % 255).expect("statically known to be valid")
+        });
         let hv = encode_attest_ticket(123, &mac, Some(salt));
         let mut map = HeaderMap::new();
         map.insert(HDR_ATTEST_TICKET.clone(), hv);
-        let decoded = decode_attest_ticket(&map).unwrap();
+        let decoded = decode_attest_ticket(&map).expect("statically known to be valid");
         assert_eq!(decoded.nonce, 123);
         assert_eq!(decoded.mac, mac);
         assert_eq!(decoded.salt, Some(salt));
@@ -191,11 +201,15 @@ mod tests {
 
     #[test]
     fn binder_round_trip() {
-        let mac = std::array::from_fn::<u8, 48, _>(|i| u8::try_from(i % 255).unwrap()).to_vec();
+        let mac = std::array::from_fn::<u8, 48, _>(|i| {
+            u8::try_from(i % 255).expect("statically known to be valid")
+        })
+        .to_vec();
         let hv = encode_attest_binder(7, &mac);
         let mut map = HeaderMap::new();
         map.insert(HDR_ATTEST_BINDER.clone(), hv);
-        let (nonce, decoded_mac) = decode_attest_binder(&map).unwrap();
+        let (nonce, decoded_mac) =
+            decode_attest_binder(&map).expect("statically known to be valid");
         assert_eq!(nonce, 7);
         assert_eq!(decoded_mac, mac);
     }

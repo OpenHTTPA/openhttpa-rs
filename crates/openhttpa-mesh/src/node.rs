@@ -267,7 +267,7 @@ impl AgentNode {
         extra_headers.insert(&*openhttpa_headers::HDR_ATTEST_PROVENANCE, prov_header);
 
         let client = OpenHttpaClient::builder()
-            .server_uri(session.peer_metadata.endpoint.parse().unwrap())
+            .server_uri(session.peer_metadata.endpoint.parse().expect("Valid URI"))
             .tee_provider(self.tee_provider.clone())
             .verifier(self.verifier.clone())
             .transport(self.transport.clone())

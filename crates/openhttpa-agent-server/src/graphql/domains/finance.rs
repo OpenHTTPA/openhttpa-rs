@@ -19,7 +19,7 @@ pub struct FinanceQuery;
 #[Object]
 impl FinanceQuery {
     async fn get_balance(&self, _ctx: &Context<'_>, account_id: String) -> Result<f64> {
-        let db = mock_db().lock().unwrap();
+        let db = mock_db().lock().expect("Lock poisoned");
         Ok(db.get(&account_id).copied().unwrap_or(0.0))
     }
 }

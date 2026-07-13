@@ -43,6 +43,8 @@
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 #![forbid(unsafe_code)]
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 pub mod attest_headers;
 pub mod method;

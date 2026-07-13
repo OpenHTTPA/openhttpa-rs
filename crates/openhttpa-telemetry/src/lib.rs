@@ -6,6 +6,8 @@
 //! Provides a `tracing_subscriber::Layer` that encrypts log events and spans
 //! using HPKE before emitting them. This allows operators to collect debug
 //! and APM data from TEEs without exposing plaintext PII or secrets.
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use hpke::{Deserializable, Serializable};
 use hpke::{OpModeS, aead::AesGcm256, kdf::HkdfSha256, kem::X25519HkdfSha256, setup_sender};
@@ -78,7 +80,8 @@ where
 
         // In a real implementation, we would write `out` to a socket, OpenTelemetry exporter,
         // or a local file rather than printing to stdout.
-        let json_out = serde_json::to_string(&out).unwrap();
+        let json_out =
+            serde_json::to_string(&out).expect("Serialization of simple struct should never fail");
         println!("CONFIDENTIAL_TELEMETRY: {}", json_out);
     }
 }

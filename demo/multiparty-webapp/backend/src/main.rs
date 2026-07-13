@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use async_trait::async_trait;
 use axum::extract::ws::WebSocketUpgrade;
@@ -112,7 +114,9 @@ impl Default for DemoState {
         };
         let tee_type = composite_tee.quote_type();
 
-        let identity_key = Arc::new(openhttpa_crypto::pqc::MlDsaKeyPair::generate().unwrap());
+        let identity_key = Arc::new(
+            openhttpa_crypto::pqc::MlDsaKeyPair::generate().expect("Failed to generate ML-DSA key"),
+        );
 
         let challenge_key: ChallengeKey = demo_challenge_key("OPENHTTPA_CHALLENGE_KEY").into();
 
@@ -288,7 +292,7 @@ async fn submit(
     session: OpenHttpaSession,
     EncryptedJson(req): EncryptedJson<SubmitRequest>,
 ) -> impl IntoResponse {
-    let mut parties = state.parties.write().unwrap();
+    let mut parties = state.parties.write().expect("Lock poisoned");
     let party_id = req.party_id.clone();
     parties.insert(req.party_id, req.value);
     info!("Received submission from {}: {}", party_id, req.value);
@@ -300,7 +304,7 @@ async fn submit(
 }
 
 async fn result(State(state): State<AppState>, session: OpenHttpaSession) -> impl IntoResponse {
-    let parties = state.parties.read().unwrap();
+    let parties = state.parties.read().expect("Lock poisoned");
     let sum: i64 = parties.values().sum();
     info!("Current MPC sum: {}", sum);
     session.seal(&serde_json::json!({
@@ -328,12 +332,12 @@ async fn status(State(state): State<AppState>) -> impl IntoResponse {
         "tee_type": state.tee_type.to_string(),
         "is_mock": state.tee_type == openhttpa_proto::QuoteType::Mock,
         "registry_size": state.registry.len(),
-        "party_count": state.parties.read().unwrap().len(),
+        "party_count": state.parties.read().expect("Lock poisoned").len(),
     }))
 }
 
 async fn reset(State(state): State<AppState>, _req: axum::extract::Request) -> impl IntoResponse {
-    let mut parties = state.parties.write().unwrap();
+    let mut parties = state.parties.write().expect("Lock poisoned");
     parties.clear();
     info!("MPC state reset");
     StatusCode::OK
@@ -575,7 +579,7 @@ async fn simulate_swarm(State(_state): State<AppState>) -> impl IntoResponse {
                             mlkem_public: server_pub.mlkem_public,
                             signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65),
                         })
-                        .unwrap(),
+                        .expect("JSON serialization failed"),
                         base_id: openhttpa_proto::AtbId::new(),
                         version: ProtocolVersion::V2,
                         expires_secs: 3600,
@@ -639,7 +643,10 @@ async fn simulate_swarm(State(_state): State<AppState>) -> impl IntoResponse {
             transport.clone(),
             Arc::new(openhttpa_mesh::RegoPolicyEngine::permissive()),
         );
-        registry.register(node.metadata().clone()).await.unwrap();
+        registry
+            .register(node.metadata().clone())
+            .await
+            .expect("Registry registration failed");
         agents.push(node);
         logs.push(format!("Registered {} in the mesh (TEE verified)", name));
     }
@@ -875,7 +882,7 @@ async fn mcp_handle(
     session: OpenHttpaSession,
     EncryptedJson(rpc_req): EncryptedJson<serde_json::Value>,
 ) -> impl IntoResponse {
-    let req_bytes = serde_json::to_vec(&rpc_req).unwrap();
+    let req_bytes = serde_json::to_vec(&rpc_req).expect("Failed to serialize RPC request");
     let res = state.mcp_server.handle_request(&req_bytes).await;
 
     // Convert Vec<u8> result to JSON value if possible
@@ -1168,8 +1175,12 @@ async fn main() {
         .expect("PORT must be a number");
     let addr = format!("0.0.0.0:{port}");
     info!("`OpenHTTPA` demo backend listening on {addr} (SDK-hardened)");
-    let listener = TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = TcpListener::bind(&addr)
+        .await
+        .expect("Failed to bind TCP listener");
+    axum::serve(listener, app)
+        .await
+        .expect("Axum server failed");
 }
 
 #[cfg(test)]
@@ -1259,7 +1270,7 @@ mod tests {
             BoundAeadKey::new(AeadAlgorithm::Aes256Gcm, &client_key_bytes, client_iv_bytes)
                 .unwrap();
 
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id_str.as_bytes());
         let mut data = plaintext.as_bytes().to_vec();
         sealer.seal(&aad, &mut data).unwrap();
@@ -1362,7 +1373,7 @@ mod tests {
             BoundAeadKey::new(AeadAlgorithm::Aes256Gcm, &client_key_bytes, client_iv_bytes)
                 .unwrap();
 
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id_str.as_bytes());
         let mut data = plaintext.as_bytes().to_vec();
         sealer.seal(&aad, &mut data).unwrap(); // Nonce 1
@@ -1522,7 +1533,7 @@ mod tests {
         // Seal the RPC request
         use openhttpa_crypto::aead::{AeadAlgorithm, BoundAeadKey};
         let sealer = BoundAeadKey::new(AeadAlgorithm::Aes256Gcm, &c_write_key, c_write_iv).unwrap();
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id.to_string().as_bytes());
         let mut data = serde_json::to_vec(&rpc_req).unwrap();
         sealer.seal(&aad, &mut data).unwrap();
@@ -1613,7 +1624,7 @@ mod tests {
         // Seal the request
         use openhttpa_crypto::aead::{AeadAlgorithm, BoundAeadKey};
         let sealer = BoundAeadKey::new(AeadAlgorithm::Aes256Gcm, &c_write_key, c_write_iv).unwrap();
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id.to_string().as_bytes());
         let mut data = serde_json::to_vec(&oracle_req).unwrap();
         sealer.seal(&aad, &mut data).unwrap();

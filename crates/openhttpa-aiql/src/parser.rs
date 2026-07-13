@@ -59,7 +59,9 @@ fn parse_condition(input: &mut &str) -> winnow::Result<Condition> {
     let mut or_conds: Vec<Condition> =
         separated(1.., parse_and_condition, (space0, literal("OR"), space0)).parse_next(input)?;
     if or_conds.len() == 1 {
-        Ok(or_conds.pop().unwrap())
+        Ok(or_conds
+            .pop()
+            .expect("or_conds must have at least one element"))
     } else {
         Ok(Condition::Or(or_conds))
     }
@@ -73,7 +75,9 @@ fn parse_and_condition(input: &mut &str) -> winnow::Result<Condition> {
     )
     .parse_next(input)?;
     if and_conds.len() == 1 {
-        Ok(and_conds.pop().unwrap())
+        Ok(and_conds
+            .pop()
+            .expect("and_conds must have at least one element"))
     } else {
         Ok(Condition::And(and_conds))
     }

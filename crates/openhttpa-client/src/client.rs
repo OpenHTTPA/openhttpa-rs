@@ -331,7 +331,7 @@ impl OpenHttpaClient {
             self.server_uri.to_string().trim_end_matches('/')
         )
         .parse()
-        .unwrap();
+        .expect("Valid URL");
 
         let req = TransportRequest {
             method: http::Method::OPTIONS,
@@ -446,10 +446,11 @@ impl OpenHttpaClient {
             self.server_uri.to_string().trim_end_matches('/')
         )
         .parse()
-        .unwrap();
+        .expect("Valid URL");
 
         let req = openhttpa_transport::connection::TransportRequest {
-            method: http::Method::from_bytes(b"ATTEST").unwrap(),
+            method: http::Method::from_bytes(b"ATTEST")
+                .expect("ATTEST is a valid HTTP method name"),
             uri,
             headers: req_headers.encode(),
             body: openhttpa_transport::connection::empty_body(),
@@ -559,7 +560,7 @@ impl OpenHttpaClient {
         let final_path = full_uri.path();
 
         // 1. Initial AAD and Headers
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id.to_string().as_bytes());
 
         // We use a dummy seal to get the headers and initial MAC
@@ -784,7 +785,7 @@ impl OpenHttpaClient {
         let final_path = full_uri.path();
 
         // 1. Seal body with session keys.
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id.to_string().as_bytes());
 
         let (headers, encrypted_body, _) = Self::seal_request_body(
@@ -992,12 +993,16 @@ impl OpenHttpaClient {
                 for (i, b) in count_bytes.iter().enumerate() {
                     nonce_bytes[4 + i] ^= b;
                 }
-                let aead_nonce = AeadNonce::from_slice(&nonce_bytes).unwrap();
+                let aead_nonce =
+                    AeadNonce::from_slice(&nonce_bytes).expect("AeadNonce is 12 bytes");
 
                 let bound_key = BoundAeadKey::new(
                     AeadAlgorithm::Aes256Gcm,
                     &keys.server_write_key,
-                    keys.server_write_iv.clone().try_into().unwrap(),
+                    keys.server_write_iv
+                        .clone()
+                        .try_into()
+                        .expect("IV is 12 bytes"),
                 )
                 .map_err(|e| ClientError::Handshake(format!("Key setup failed: {e}")))?;
 
@@ -1038,12 +1043,19 @@ where
         loop {
             // Need at least 4 bytes for length
             if self.buffer.len() >= 4 {
-                let len = u32::from_be_bytes(self.buffer[..4].try_into().unwrap()) as usize;
+                let len = u32::from_be_bytes(
+                    self.buffer[..4]
+                        .try_into()
+                        .expect("Buffer has at least 4 bytes"),
+                ) as usize;
                 // Need length + 8 bytes for counter
                 if self.buffer.len() >= 4 + 8 + len {
                     let _ = self.buffer.split_to(4); // Remove length
-                    let counter =
-                        u64::from_be_bytes(self.buffer.split_to(8)[..8].try_into().unwrap());
+                    let counter = u64::from_be_bytes(
+                        self.buffer.split_to(8)[..8]
+                            .try_into()
+                            .expect("Split to 8 bytes ensures 8 bytes"),
+                    );
                     let ciphertext = self.buffer.split_to(len).to_vec();
                     return Ok(Some(StreamFrame {
                         counter,

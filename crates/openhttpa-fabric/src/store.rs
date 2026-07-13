@@ -215,7 +215,7 @@ impl KvStore {
 
 impl DataStore for KvStore {
     fn get(&self, namespace: &str, key: &str, tee: &dyn TeeProvider) -> Option<Vec<u8>> {
-        let guard = self.namespaces.read().unwrap();
+        let guard = self.namespaces.read().expect("Lock poisoned");
         guard
             .get(namespace)
             .and_then(|ns| ns.get(key))
@@ -236,7 +236,7 @@ impl DataStore for KvStore {
         provenance: Option<ProvenanceChain>,
         tee: &dyn TeeProvider,
     ) -> bool {
-        let mut guard = self.namespaces.write().unwrap();
+        let mut guard = self.namespaces.write().expect("Lock poisoned");
         let ns = guard.entry(namespace.to_string()).or_default();
 
         if let Some(existing) = ns.get(key) {
@@ -292,7 +292,7 @@ impl DataStore for KvStore {
     }
 
     fn delete(&self, namespace: &str, key: &str) {
-        let mut guard = self.namespaces.write().unwrap();
+        let mut guard = self.namespaces.write().expect("Lock poisoned");
         if let Some(ns) = guard.get_mut(namespace) {
             ns.remove(key);
         }
@@ -311,7 +311,7 @@ impl DataStore for KvStore {
 
     fn snapshot_to_disk(&self, path: &str, tee: &dyn TeeProvider) -> Result<(), String> {
         // Enclave Sealing: encrypts memory using a hardware-derived key
-        let guard = self.namespaces.read().unwrap();
+        let guard = self.namespaces.read().expect("Lock poisoned");
         let serialized = serde_json::to_vec(&*guard).map_err(|e| e.to_string())?;
 
         let sealed_data = tee.seal_data(&serialized).map_err(|e| e.to_string())?;
@@ -327,7 +327,7 @@ impl DataStore for KvStore {
         let restored_namespaces: HashMap<String, HashMap<String, FabricEntry>> =
             serde_json::from_slice(&serialized).map_err(|e| e.to_string())?;
 
-        let mut guard = self.namespaces.write().unwrap();
+        let mut guard = self.namespaces.write().expect("Lock poisoned");
         *guard = restored_namespaces;
         Ok(())
     }
@@ -364,7 +364,7 @@ impl VectorStore {
 
 impl DataStore for VectorStore {
     fn get(&self, namespace: &str, key: &str, tee: &dyn TeeProvider) -> Option<Vec<u8>> {
-        let guard = self.namespaces.read().unwrap();
+        let guard = self.namespaces.read().expect("Lock poisoned");
         guard
             .get(namespace)
             .and_then(|ns| ns.get(key))
@@ -385,7 +385,7 @@ impl DataStore for VectorStore {
         provenance: Option<ProvenanceChain>,
         tee: &dyn TeeProvider,
     ) -> bool {
-        let mut guard = self.namespaces.write().unwrap();
+        let mut guard = self.namespaces.write().expect("Lock poisoned");
         let ns = guard.entry(namespace.to_string()).or_default();
 
         if let Some((_, existing)) = ns.get(key) {
@@ -442,7 +442,7 @@ impl DataStore for VectorStore {
     }
 
     fn delete(&self, namespace: &str, key: &str) {
-        let mut guard = self.namespaces.write().unwrap();
+        let mut guard = self.namespaces.write().expect("Lock poisoned");
         if let Some(ns) = guard.get_mut(namespace) {
             ns.remove(key);
         }
@@ -455,7 +455,7 @@ impl DataStore for VectorStore {
         top_k: usize,
         tee: &dyn TeeProvider,
     ) -> Vec<(String, f32, Vec<u8>)> {
-        let guard = self.namespaces.read().unwrap();
+        let guard = self.namespaces.read().expect("Lock poisoned");
         if let Some(ns) = guard.get(namespace) {
             let master_key = match derive_master_key(tee) {
                 Ok(k) => k,
@@ -484,7 +484,7 @@ impl DataStore for VectorStore {
     }
 
     fn snapshot_to_disk(&self, path: &str, tee: &dyn TeeProvider) -> Result<(), String> {
-        let guard = self.namespaces.read().unwrap();
+        let guard = self.namespaces.read().expect("Lock poisoned");
         let serialized = serde_json::to_vec(&*guard).map_err(|e| e.to_string())?;
         let sealed_data = tee.seal_data(&serialized).map_err(|e| e.to_string())?;
         std::fs::write(path, sealed_data).map_err(|e| e.to_string())?;
@@ -498,7 +498,7 @@ impl DataStore for VectorStore {
         let restored_namespaces: VectorNamespaces =
             serde_json::from_slice(&serialized).map_err(|e| e.to_string())?;
 
-        let mut guard = self.namespaces.write().unwrap();
+        let mut guard = self.namespaces.write().expect("Lock poisoned");
         *guard = restored_namespaces;
         Ok(())
     }

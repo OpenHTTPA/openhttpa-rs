@@ -1,3 +1,5 @@
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use jni::sys::jstring;
@@ -8,7 +10,7 @@ use tokio::runtime::Runtime;
 static RUNTIME: OnceLock<Runtime> = OnceLock::new();
 
 fn get_runtime() -> &'static Runtime {
-    RUNTIME.get_or_init(|| Runtime::new().unwrap())
+    RUNTIME.get_or_init(|| Runtime::new().expect("Failed to create tokio runtime"))
 }
 
 #[unsafe(no_mangle)]
@@ -19,15 +21,21 @@ pub extern "system" fn Java_org_openhttpa_ConfidentialClient_chat<'local>(
     model: JString<'local>,
     prompt: JString<'local>,
 ) -> jstring {
-    let endpoint: String = env.get_string(&endpoint).unwrap().into();
-    let _model: String = env.get_string(&model).unwrap().into();
-    let prompt: String = env.get_string(&prompt).unwrap().into();
+    let endpoint: String = env
+        .get_string(&endpoint)
+        .expect("Invalid endpoint string")
+        .into();
+    let _model: String = env.get_string(&model).expect("Invalid model string").into();
+    let prompt: String = env
+        .get_string(&prompt)
+        .expect("Invalid prompt string")
+        .into();
 
     let rt = get_runtime();
     let result = rt.block_on(async {
         let client = ConfidentialLlmClient::builder()
             .await
-            .server_uri(endpoint.parse().unwrap())
+            .server_uri(endpoint.parse().expect("Invalid endpoint URI"))
             .build()
             .await
             .map_err(|e| e.to_string())?;
@@ -42,11 +50,12 @@ pub extern "system" fn Java_org_openhttpa_ConfidentialClient_chat<'local>(
 
     match result {
         Ok(reply) => {
-            let output = env.new_string(reply).unwrap();
+            let output = env.new_string(reply).expect("Failed to create Java string");
             output.into_raw()
         }
         Err(err) => {
-            env.throw_new("java/lang/RuntimeException", err).unwrap();
+            env.throw_new("java/lang/RuntimeException", err)
+                .expect("Failed to throw exception");
             std::ptr::null_mut()
         }
     }

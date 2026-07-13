@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use reqwest::blocking::Client;
 use std::process::exit;
@@ -12,7 +14,7 @@ fn main() {
     let client = Client::builder()
         .timeout(Duration::from_secs(2))
         .build()
-        .unwrap();
+        .expect("Client building should not fail");
 
     match client.get(&url).send() {
         Ok(resp) if resp.status().is_success() => {

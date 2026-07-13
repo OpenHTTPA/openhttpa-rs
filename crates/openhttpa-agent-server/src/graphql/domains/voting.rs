@@ -34,7 +34,7 @@ impl VotingMutation {
             Err(e) => return Err(Error::new(format!("ZK verification error: {}", e))),
         }
 
-        let mut sigs = used_signatures().lock().unwrap();
+        let mut sigs = used_signatures().lock().expect("Lock poisoned");
         if sigs.contains(&blind_signature) {
             return Err(Error::new("Double voting detected: signature already used"));
         }

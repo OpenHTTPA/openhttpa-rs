@@ -135,8 +135,10 @@ async fn handle_handshake(
             })
             .to_string();
             let mut res = Response::new(Full::new(Bytes::from(response_json)));
-            res.headers_mut()
-                .insert("Content-Type", "application/json".parse().unwrap());
+            res.headers_mut().insert(
+                "Content-Type",
+                "application/json".parse().expect("Valid header value"),
+            );
             Ok(res)
         }
         Err(e) => {
@@ -223,8 +225,10 @@ async fn handle_trusted_event(
     );
 
     let mut res = Response::new(Full::new(Bytes::from(resp_json)));
-    res.headers_mut()
-        .insert("Content-Type", "application/json".parse().unwrap());
+    res.headers_mut().insert(
+        "Content-Type",
+        "application/json".parse().expect("Valid header value"),
+    );
     Ok(res)
 }
 

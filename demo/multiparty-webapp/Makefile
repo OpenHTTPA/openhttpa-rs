@@ -16,7 +16,9 @@ WORKSPACE    = ../..
 
 ## up: Build images (if needed) and start all services
 up: wasm
-	$(COMPOSE) up --build --wait
+	@echo "Sleeping to let docker daemon settle..."
+	sleep 2
+	$(COMPOSE) up --build --wait || (echo "Retrying docker compose up..." && sleep 3 && $(COMPOSE) up --build --wait)
 
 ## stable-up: Start a stable demo instance on port 3001 (isolated from E2E)
 stable-up: wasm

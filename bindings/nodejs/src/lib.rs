@@ -24,6 +24,8 @@
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic)]
 #![allow(clippy::unused_async)] // napi-rs async fns require async signature
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;

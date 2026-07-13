@@ -180,7 +180,9 @@ impl AttestTransport for ObliviousClient {
 
             headers.insert(
                 http::header::CONTENT_TYPE,
-                "message/oblivious-http".parse().unwrap(),
+                "message/oblivious-http"
+                    .parse()
+                    .expect("Static string is a valid media type"),
             );
 
             // 5. Send the encapsulated request via the inner transport.

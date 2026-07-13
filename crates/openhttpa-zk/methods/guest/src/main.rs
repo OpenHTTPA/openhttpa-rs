@@ -3,6 +3,8 @@
 
 #![no_main]
 #![no_std]
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use risc0_zkvm::guest::env;
 use serde::{Deserialize, Serialize};
@@ -103,7 +105,7 @@ impl TeeVerifier for SgxDcapVerifier {
         if quote.len() < 1024 || collateral.is_none() {
             return false;
         }
-        let col = collateral.as_ref().unwrap();
+        let col = collateral.as_ref().expect("Collateral presence verified");
 
         // 1. Verify Certificate Chain: Root -> Intermediate -> PCK
         if !self.verify_cert_chain(&col.root_ca, &col.intermediate_ca, &col.pck_cert) {
@@ -113,7 +115,11 @@ impl TeeVerifier for SgxDcapVerifier {
         // 2. Parse SGX DCAP Quote Structure
         // Reference: https://download.01.org/intel-sgx/latest/dcap-latest/linux/docs/Intel_SGX_ECDSA_QuoteLib_Reference_DCAP_API.pdf
         let body = &quote[48..432]; // SGX Enclave Report (Body of the quote)
-        let signature_len = u32::from_le_bytes(quote[432..436].try_into().unwrap()) as usize;
+        let signature_len = u32::from_le_bytes(
+            quote[432..436]
+                .try_into()
+                .expect("Slice is exactly 4 bytes"),
+        ) as usize;
         let signature_bytes = &quote[436..436 + signature_len];
 
         // 3. Verify Enclave Report Data Binding (T-10)
@@ -127,7 +133,7 @@ impl TeeVerifier for SgxDcapVerifier {
         if pck_cert.is_none() {
             return false;
         }
-        let pck_pub = self.extract_verifying_key(&pck_cert.unwrap());
+        let pck_pub = self.extract_verifying_key(&pck_cert.expect("Checked is_none"));
         if pck_pub.is_none() {
             return false;
         }
@@ -138,7 +144,10 @@ impl TeeVerifier for SgxDcapVerifier {
 
         // Verify the signature over the header + body
         let signed_data = &quote[0..432];
-        pck_pub.unwrap().verify(signed_data, &sig.unwrap()).is_ok()
+        pck_pub
+            .expect("Checked is_none")
+            .verify(signed_data, &sig.expect("Checked is_none"))
+            .is_ok()
     }
 }
 
@@ -152,16 +161,16 @@ impl SgxDcapVerifier {
             return false;
         }
 
-        let root_cert = root_cert.unwrap();
-        let inter_cert = inter_cert.unwrap();
-        let pck_cert = pck_cert.unwrap();
+        let root_cert = root_cert.expect("Checked is_none");
+        let inter_cert = inter_cert.expect("Checked is_none");
+        let pck_cert = pck_cert.expect("Checked is_none");
 
         // Verify Intermediate CA signature using Root CA public key
         let root_pub = self.extract_verifying_key(&root_cert);
         if root_pub.is_none() {
             return false;
         }
-        if !self.verify_cert(&inter_cert, &root_pub.unwrap()) {
+        if !self.verify_cert(&inter_cert, &root_pub.expect("Checked is_none")) {
             return false;
         }
 
@@ -170,7 +179,7 @@ impl SgxDcapVerifier {
         if inter_pub.is_none() {
             return false;
         }
-        if !self.verify_cert(&pck_cert, &inter_pub.unwrap()) {
+        if !self.verify_cert(&pck_cert, &inter_pub.expect("Checked is_none")) {
             return false;
         }
 
@@ -178,13 +187,15 @@ impl SgxDcapVerifier {
     }
 
     fn verify_cert(&self, cert: &Certificate, issuer_pub: &VerifyingKey) -> bool {
-        let sig_bytes = cert.signature.as_bytes().unwrap();
+        let sig_bytes = cert.signature.as_bytes().expect("Signature bytes present");
         let sig = Signature::from_der(sig_bytes).ok();
         if sig.is_none() {
             return false;
         }
         let tbs_bytes = cert.tbs_certificate.to_der().unwrap_or_default();
-        issuer_pub.verify(&tbs_bytes, &sig.unwrap()).is_ok()
+        issuer_pub
+            .verify(&tbs_bytes, &sig.expect("Checked is_none"))
+            .is_ok()
     }
 
     fn extract_verifying_key(&self, cert: &Certificate) -> Option<VerifyingKey> {
@@ -356,7 +367,7 @@ struct Tcb {
 fn verify_tcb_status(quote: &[u8], tcb_info_json: &[u8]) -> bool {
     // 1. Extract PCESVN from the quote (Body offset 384, 2 bytes)
     let body = &quote[48..432];
-    let pcesvn = u16::from_le_bytes(body[384..386].try_into().unwrap());
+    let pcesvn = u16::from_le_bytes(body[384..386].try_into().expect("Slice is exactly 2 bytes"));
 
     // 2. Parse TCB Info JSON
     let info: TcbInfo = match serde_json::from_slice(tcb_info_json) {

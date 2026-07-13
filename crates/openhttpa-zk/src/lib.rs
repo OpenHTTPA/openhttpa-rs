@@ -4,6 +4,8 @@
 //! # openhttpa-zk
 //!
 //! Zero-Knowledge proving and verification for `OpenHTTPA`.
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;

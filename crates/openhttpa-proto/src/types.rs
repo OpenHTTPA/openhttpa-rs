@@ -196,6 +196,9 @@ impl std::str::FromStr for CipherSuite {
     }
 }
 
+/// The protocol prefix used for AEAD authenticated data.
+pub const AAD_PREFIX: &[u8] = b"openhttpa:";
+
 // ─── TEE quote type ──────────────────────────────────────────────────────────
 
 /// Identifies the TEE technology that generated an [`AttestQuote`].
@@ -213,7 +216,8 @@ impl std::str::FromStr for CipherSuite {
 /// Therefore, classical cryptographic primitives are **strictly retained and permitted
 /// ONLY** for the purpose of parsing and verifying hardware TEE quotes. They must never
 /// be used for standard session negotiation (`CipherSuite`) unless explicitly required
-/// by legacy clients overriding the PQC policies.
+/// by legacy clients.
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum QuoteType {
@@ -642,7 +646,7 @@ mod tests {
     fn atb_id_round_trip() {
         let id = AtbId::new();
         let s = id.to_string();
-        let id2: AtbId = s.parse().unwrap();
+        let id2: AtbId = s.parse().expect("statically known to be valid");
         assert_eq!(id, id2);
     }
 
@@ -743,8 +747,9 @@ mod tests {
     fn atb_creation_serde_round_trip() {
         let variants = [AtbCreation::New, AtbCreation::Reuse, AtbCreation::Shared];
         for v in &variants {
-            let json = serde_json::to_vec(v).unwrap();
-            let decoded: AtbCreation = serde_json::from_slice(&json).unwrap();
+            let json = serde_json::to_vec(v).expect("statically known to be valid");
+            let decoded: AtbCreation =
+                serde_json::from_slice(&json).expect("statically known to be valid");
             assert_eq!(*v, decoded);
         }
     }
@@ -757,8 +762,9 @@ mod tests {
             AtbTermination::Keep,
         ];
         for v in &variants {
-            let json = serde_json::to_vec(v).unwrap();
-            let decoded: AtbTermination = serde_json::from_slice(&json).unwrap();
+            let json = serde_json::to_vec(v).expect("statically known to be valid");
+            let decoded: AtbTermination =
+                serde_json::from_slice(&json).expect("statically known to be valid");
             assert_eq!(*v, decoded);
         }
     }
@@ -771,8 +777,9 @@ mod tests {
             cipher_suite: CipherSuite::X25519MlKem768Aes256GcmSha384,
             rtt0_eligible: true,
         };
-        let json = serde_json::to_vec(&ticket).unwrap();
-        let decoded: SessionTicket = serde_json::from_slice(&json).unwrap();
+        let json = serde_json::to_vec(&ticket).expect("statically known to be valid");
+        let decoded: SessionTicket =
+            serde_json::from_slice(&json).expect("statically known to be valid");
         assert_eq!(decoded.lifetime, 3600);
         assert!(decoded.rtt0_eligible);
         assert_eq!(decoded.ticket, vec![0x01, 0x02, 0x03]);
@@ -807,8 +814,9 @@ mod tests {
             qudd: Bytes::from_static(b"qudd"),
             collateral_uris: vec!["https://collateral.intel.com/crl.pem".to_owned()],
         };
-        let json = serde_json::to_vec(&quote).unwrap();
-        let decoded: AttestQuote = serde_json::from_slice(&json).unwrap();
+        let json = serde_json::to_vec(&quote).expect("statically known to be valid");
+        let decoded: AttestQuote =
+            serde_json::from_slice(&json).expect("statically known to be valid");
         assert_eq!(decoded.quote_type, QuoteType::Tdx);
         assert_eq!(decoded.collateral_uris.len(), 1);
     }
@@ -867,14 +875,17 @@ mod tests {
         assert!(chain.contains_agent("agent-alpha"));
         assert!(!chain.contains_agent("agent-beta"));
         assert!(chain.origin().is_some());
-        assert_eq!(chain.origin().unwrap().name, "agent-alpha");
+        assert_eq!(
+            chain.origin().expect("statically known to be valid").name,
+            "agent-alpha"
+        );
     }
 
     #[test]
     fn federation_manifest_validity() {
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("statically known to be valid")
             .as_secs();
 
         let valid_manifest = FederationManifest {
@@ -905,7 +916,7 @@ mod tests {
             ("mock", QuoteType::Mock),
         ];
         for (s, qt) in &types {
-            let parsed: QuoteType = s.parse().unwrap();
+            let parsed: QuoteType = s.parse().expect("statically known to be valid");
             assert_eq!(parsed, *qt);
             assert_eq!(qt.to_string(), *s);
         }
@@ -913,7 +924,7 @@ mod tests {
 
     #[test]
     fn quote_type_unknown_fallback() {
-        let qt: QuoteType = "custom_tee".parse().unwrap();
+        let qt: QuoteType = "custom_tee".parse().expect("statically known to be valid");
         assert!(matches!(qt, QuoteType::Unknown(_)));
         assert_eq!(qt.to_string(), "custom_tee");
     }

@@ -52,7 +52,7 @@
 //! let header_map: HeaderMap = req.encode();
 //!
 //! // Decode on the server side.
-//! let decoded = AtHsRequestHeaders::decode(&header_map).unwrap();
+//! let decoded = AtHsRequestHeaders::decode(&header_map).expect("statically known to be valid");
 //! ```
 
 use http::{HeaderMap, HeaderName, HeaderValue};
@@ -362,7 +362,10 @@ fn encode_token_list(values: &[impl std::fmt::Display]) -> HeaderValue {
                 |(_, _)| {
                     sfv::String::from_string(s).map_or_else(
                         |(_, _)| {
-                            BareItem::Token(Token::from_string(UNKNOWN_TOKEN.to_owned()).unwrap())
+                            BareItem::Token(
+                                Token::from_string(UNKNOWN_TOKEN.to_owned())
+                                    .expect("statically known to be valid"),
+                            )
                         },
                         BareItem::String,
                     )
@@ -440,7 +443,12 @@ fn encode_token_sfv(s: &str) -> HeaderValue {
     let bare = Token::from_string(s.to_owned()).map_or_else(
         |(_, original)| {
             sfv::String::from_string(original).map_or_else(
-                |(_, _)| BareItem::Token(Token::from_string(UNKNOWN_TOKEN.to_owned()).unwrap()),
+                |(_, _)| {
+                    BareItem::Token(
+                        Token::from_string(UNKNOWN_TOKEN.to_owned())
+                            .expect("statically known to be valid"),
+                    )
+                },
                 BareItem::String,
             )
         },
@@ -666,22 +674,28 @@ impl AtHsRequestHeaders {
                 .iter()
                 .map(|q| {
                     let type_str = q.quote_type.to_string();
-                    let type_item =
-                        Item::new(BareItem::Token(Token::from_string(type_str).unwrap()));
+                    let type_item = Item::new(BareItem::Token(
+                        Token::from_string(type_str).expect("statically known to be valid"),
+                    ));
                     let mut bytes_item = Item::new(BareItem::ByteSequence(q.raw.to_vec()));
 
                     if q.format != QuoteFormat::Raw {
                         let format_str = q.format.to_string();
                         bytes_item.params.insert(
-                            sfv::Key::try_from("format".to_owned()).unwrap(),
-                            BareItem::Token(Token::from_string(format_str).unwrap()),
+                            sfv::Key::try_from("format".to_owned())
+                                .expect("statically known to be valid"),
+                            BareItem::Token(
+                                Token::from_string(format_str)
+                                    .expect("statically known to be valid"),
+                            ),
                         );
                     }
 
                     let mut il_items = vec![type_item, bytes_item];
                     for uri in &q.collateral_uris {
                         il_items.push(Item::new(BareItem::String(
-                            sfv::String::from_string(uri.clone()).unwrap(),
+                            sfv::String::from_string(uri.clone())
+                                .expect("statically known to be valid"),
                         )));
                     }
                     ListEntry::InnerList(sfv::InnerList::new(il_items))
@@ -885,22 +899,28 @@ impl AtHsResponseHeaders {
                 .iter()
                 .map(|q| {
                     let type_str = q.quote_type.to_string();
-                    let type_item =
-                        Item::new(BareItem::Token(Token::from_string(type_str).unwrap()));
+                    let type_item = Item::new(BareItem::Token(
+                        Token::from_string(type_str).expect("statically known to be valid"),
+                    ));
                     let mut bytes_item = Item::new(BareItem::ByteSequence(q.raw.to_vec()));
 
                     if q.format != QuoteFormat::Raw {
                         let format_str = q.format.to_string();
                         bytes_item.params.insert(
-                            sfv::Key::try_from("format".to_owned()).unwrap(),
-                            BareItem::Token(Token::from_string(format_str).unwrap()),
+                            sfv::Key::try_from("format".to_owned())
+                                .expect("statically known to be valid"),
+                            BareItem::Token(
+                                Token::from_string(format_str)
+                                    .expect("statically known to be valid"),
+                            ),
                         );
                     }
 
                     let mut il_items = vec![type_item, bytes_item];
                     for uri in &q.collateral_uris {
                         il_items.push(Item::new(BareItem::String(
-                            sfv::String::from_string(uri.clone()).unwrap(),
+                            sfv::String::from_string(uri.clone())
+                                .expect("statically known to be valid"),
                         )));
                     }
                     ListEntry::InnerList(sfv::InnerList::new(il_items))
@@ -1239,7 +1259,7 @@ mod tests {
     fn aths_request_round_trip() {
         let headers = make_aths_req();
         let map = headers.encode();
-        let decoded = AtHsRequestHeaders::decode(&map).unwrap();
+        let decoded = AtHsRequestHeaders::decode(&map).expect("statically known to be valid");
         assert_eq!(decoded.random, headers.random);
         assert_eq!(decoded.key_shares_json, headers.key_shares_json);
         assert_eq!(decoded.date, headers.date);
@@ -1255,13 +1275,21 @@ mod tests {
         let headers = make_aths_req();
         let map = headers.encode();
         // SFV Byte Sequence values are delimited by colons.
-        let random_val = map.get(&*HDR_ATTEST_RANDOM).unwrap().to_str().unwrap();
+        let random_val = map
+            .get(&*HDR_ATTEST_RANDOM)
+            .expect("statically known to be valid")
+            .to_str()
+            .expect("statically known to be valid");
         assert!(
             random_val.starts_with(':') && random_val.ends_with(':'),
             "expected ':...:', got {random_val:?}"
         );
         // The key-shares header should also be a Byte Sequence.
-        let ks_val = map.get(&*HDR_ATTEST_KEY_SHARES).unwrap().to_str().unwrap();
+        let ks_val = map
+            .get(&*HDR_ATTEST_KEY_SHARES)
+            .expect("statically known to be valid")
+            .to_str()
+            .expect("statically known to be valid");
         assert!(ks_val.starts_with(':') && ks_val.ends_with(':'));
     }
 
@@ -1273,9 +1301,9 @@ mod tests {
         let map = headers.encode();
         let val = map
             .get(&*HDR_ATTEST_CIPHER_SUITES)
-            .unwrap()
+            .expect("statically known to be valid")
             .to_str()
-            .unwrap();
+            .expect("statically known to be valid");
         // SFV List contains comma-separated tokens (no wrapping quotes / colons).
         // Tokens: [A-Za-z*] first char then [A-Za-z0-9:.!#$%&'*+-^_|~]
         assert!(
@@ -1353,7 +1381,7 @@ mod tests {
             zk_proof: None,
         };
         let map = resp.encode();
-        let decoded = AtHsResponseHeaders::decode(&map).unwrap();
+        let decoded = AtHsResponseHeaders::decode(&map).expect("statically known to be valid");
         assert_eq!(decoded.base_id, atb_id);
         assert_eq!(decoded.expires_secs, 3600);
         assert_eq!(decoded.random, resp.random);
@@ -1381,11 +1409,15 @@ mod tests {
             zk_proof: None,
         };
         let map = resp.encode();
-        let val = map.get(&*HDR_ATTEST_EXPIRES).unwrap().to_str().unwrap();
+        let val = map
+            .get(&*HDR_ATTEST_EXPIRES)
+            .expect("statically known to be valid")
+            .to_str()
+            .expect("statically known to be valid");
         // SFV Integer is just the decimal number.
         assert_eq!(val, "7200", "expected '7200', got {val:?}");
         // Ensure it round-trips.
-        let decoded = AtHsResponseHeaders::decode(&map).unwrap();
+        let decoded = AtHsResponseHeaders::decode(&map).expect("statically known to be valid");
         assert_eq!(decoded.expires_secs, 7200);
     }
 
@@ -1411,7 +1443,7 @@ mod tests {
         .encode();
         // Overwrite with legacy plain decimal (no SFV markers).
         map.insert(HDR_ATTEST_EXPIRES.clone(), HeaderValue::from_static("1800"));
-        let decoded = AtHsResponseHeaders::decode(&map).unwrap();
+        let decoded = AtHsResponseHeaders::decode(&map).expect("statically known to be valid");
         assert_eq!(decoded.expires_secs, 1800);
     }
 
@@ -1434,7 +1466,11 @@ mod tests {
         };
         let map = resp.encode();
         for name in [&*HDR_ATTEST_RANDOM, &*HDR_ATTEST_KEY_SHARE] {
-            let val = map.get(name).unwrap().to_str().unwrap();
+            let val = map
+                .get(name)
+                .expect("statically known to be valid")
+                .to_str()
+                .expect("statically known to be valid");
             assert!(
                 val.starts_with(':') && val.ends_with(':'),
                 "header {name:?} should be SFV ByteSequence, got {val:?}"
@@ -1454,7 +1490,7 @@ mod tests {
         };
         let mut map = HeaderMap::new();
         tr.encode(&mut map);
-        let decoded = TrRequestHeaders::decode(&map).unwrap();
+        let decoded = TrRequestHeaders::decode(&map).expect("statically known to be valid");
         assert_eq!(decoded.base_id, atb_id);
         assert_eq!(decoded.termination, Some(AtbTermination::Destroy));
     }
@@ -1469,7 +1505,7 @@ mod tests {
         };
         let mut map = HeaderMap::new();
         tr.encode(&mut map);
-        let decoded = TrRequestHeaders::decode(&map).unwrap();
+        let decoded = TrRequestHeaders::decode(&map).expect("statically known to be valid");
         assert_eq!(decoded.base_id, atb_id);
         assert_eq!(decoded.termination, None);
     }
@@ -1489,7 +1525,7 @@ mod tests {
             };
             let mut map = HeaderMap::new();
             tr.encode(&mut map);
-            let decoded = TrRequestHeaders::decode(&map).unwrap();
+            let decoded = TrRequestHeaders::decode(&map).expect("statically known to be valid");
             assert_eq!(decoded.termination, Some(term), "failed for {term:?}");
         }
     }
@@ -1500,13 +1536,14 @@ mod tests {
     fn sfv_bytes_roundtrip_arbitrary() {
         let data: Vec<u8> = (0u8..=255u8).collect();
         let hv = encode_bytes_sfv(&data);
-        let s = hv.to_str().unwrap();
+        let s = hv.to_str().expect("statically known to be valid");
         // Must be delimited by colons.
         assert!(s.starts_with(':') && s.ends_with(':'));
         // Decode back.
         let mut tmp = HeaderMap::new();
         tmp.insert(HDR_ATTEST_RANDOM.clone(), hv);
-        let decoded = decode_bytes_sfv(&tmp, &HDR_ATTEST_RANDOM).unwrap();
+        let decoded =
+            decode_bytes_sfv(&tmp, &HDR_ATTEST_RANDOM).expect("statically known to be valid");
         assert_eq!(decoded, data);
     }
 
@@ -1520,7 +1557,8 @@ mod tests {
         let hv = encode_token_list(&suites);
         let mut tmp = HeaderMap::new();
         tmp.insert(HDR_ATTEST_CIPHER_SUITES.clone(), hv);
-        let decoded = decode_token_list_strings(&tmp, &HDR_ATTEST_CIPHER_SUITES).unwrap();
+        let decoded = decode_token_list_strings(&tmp, &HDR_ATTEST_CIPHER_SUITES)
+            .expect("statically known to be valid");
         let parsed: Vec<CipherSuite> = decoded.iter().filter_map(|s| s.parse().ok()).collect();
         assert_eq!(parsed, suites);
     }
@@ -1530,7 +1568,8 @@ mod tests {
         let hv = encode_bytes_sfv(&[]);
         let mut tmp = HeaderMap::new();
         tmp.insert(HDR_ATTEST_RANDOM.clone(), hv);
-        let decoded = decode_bytes_sfv(&tmp, &HDR_ATTEST_RANDOM).unwrap();
+        let decoded =
+            decode_bytes_sfv(&tmp, &HDR_ATTEST_RANDOM).expect("statically known to be valid");
         assert!(decoded.is_empty());
     }
 
@@ -1540,7 +1579,7 @@ mod tests {
             let mut req = make_aths_req();
             req.base_creation = mode;
             let map = req.encode();
-            let decoded = AtHsRequestHeaders::decode(&map).unwrap();
+            let decoded = AtHsRequestHeaders::decode(&map).expect("statically known to be valid");
             assert_eq!(decoded.base_creation, mode, "failed for {mode:?}");
         }
     }
@@ -1549,7 +1588,11 @@ mod tests {
         // SFV tokens cannot contain spaces or certain special chars.
         // encode_token_sfv should fall back to a quoted string or "unknown".
         let hv = encode_token_sfv("invalid token @");
-        assert!(hv.to_str().unwrap().contains("\"invalid token @\""));
+        assert!(
+            hv.to_str()
+                .expect("statically known to be valid")
+                .contains("\"invalid token @\"")
+        );
     }
 
     #[test]
@@ -1557,20 +1600,24 @@ mod tests {
         // SFV integers are limited to 15 digits.
         let large = 2_000_000_000_000_000u64;
         let hv = encode_integer_sfv(large);
-        assert_eq!(hv.to_str().unwrap(), "999999999999999");
+        assert_eq!(
+            hv.to_str().expect("statically known to be valid"),
+            "999999999999999"
+        );
     }
 
     #[test]
     fn sfv_empty_bytes_colon_format() {
         let hv = encode_bytes_sfv(&[]);
-        assert_eq!(hv.to_str().unwrap(), "::");
+        assert_eq!(hv.to_str().expect("statically known to be valid"), "::");
     }
 
     #[test]
     fn decode_token_list_with_empty_string() {
         let mut map = HeaderMap::new();
         map.insert(HDR_ATTEST_VERSIONS.clone(), HeaderValue::from_static("  "));
-        let res = decode_token_list_strings(&map, &HDR_ATTEST_VERSIONS).unwrap();
+        let res = decode_token_list_strings(&map, &HDR_ATTEST_VERSIONS)
+            .expect("statically known to be valid");
         assert!(res.is_empty());
     }
 }
@@ -1592,7 +1639,7 @@ mod proptest_headers {
             let hv = encode_bytes_sfv(&data);
             let mut map = http::HeaderMap::new();
             map.insert(HDR_ATTEST_RANDOM.clone(), hv);
-            let decoded = decode_bytes_sfv(&map, &HDR_ATTEST_RANDOM).unwrap();
+            let decoded = decode_bytes_sfv(&map, &HDR_ATTEST_RANDOM).expect("statically known to be valid");
             prop_assert_eq!(decoded, data);
         }
 
@@ -1620,7 +1667,7 @@ mod proptest_headers {
                 encrypted_hello: None,
             };
             let map = req.encode();
-            let decoded = AtHsRequestHeaders::decode(&map).unwrap();
+            let decoded = AtHsRequestHeaders::decode(&map).expect("statically known to be valid");
             prop_assert_eq!(decoded.random, random);
             prop_assert_eq!(decoded.key_shares_json, ks_json);
         }
@@ -1649,7 +1696,7 @@ mod proptest_headers {
                 zk_proof: None,
             };
             let map = resp.encode();
-            let decoded = AtHsResponseHeaders::decode(&map).unwrap();
+            let decoded = AtHsResponseHeaders::decode(&map).expect("statically known to be valid");
             prop_assert_eq!(decoded.random, random);
             prop_assert_eq!(decoded.key_share_json, ks_json);
             prop_assert_eq!(decoded.expires_secs, expires);
@@ -1678,7 +1725,7 @@ mod proptest_headers {
                 encrypted_hello: None,
             };
             let map = req.encode();
-            let decoded = AtHsRequestHeaders::decode(&map).unwrap();
+            let decoded = AtHsRequestHeaders::decode(&map).expect("statically known to be valid");
             prop_assert_eq!(decoded.direct_attestation, direct);
             prop_assert_eq!(decoded.allow_untrusted_requests, allow_untrusted);
         }
@@ -1704,7 +1751,7 @@ mod proptest_headers {
                 zk_proof: None,
             };
             let map = resp.encode();
-            let decoded = AtHsResponseHeaders::decode(&map).unwrap();
+            let decoded = AtHsResponseHeaders::decode(&map).expect("statically known to be valid");
 
             // Expected value is either original or clamped to SFV MAX
             let expected = expires.min(MAX_SFV_INT);
@@ -1722,10 +1769,10 @@ mod proptest_headers {
             prop_assume!(method1 != method2 || path1 != path2);
 
             let mut map = HeaderMap::new();
-            map.insert("Attest-Test", "Value".parse().unwrap());
+            map.insert("Attest-Test", "Value".parse().expect("statically known to be valid"));
 
-            let ahl1 = canonicalize_ahl(&method1, &path1, None, "example.com", &map).unwrap();
-            let ahl2 = canonicalize_ahl(&method2, &path2, None, "example.com", &map).unwrap();
+            let ahl1 = canonicalize_ahl(&method1, &path1, None, "example.com", &map).expect("statically known to be valid");
+            let ahl2 = canonicalize_ahl(&method2, &path2, None, "example.com", &map).expect("statically known to be valid");
 
             // Different method/path MUST result in different AHL (H-01).
             prop_assert_ne!(ahl1, ahl2);
@@ -1740,8 +1787,8 @@ mod proptest_headers {
         ) {
             prop_assume!(query1 != query2);
             let map = HeaderMap::new();
-            let ahl1 = canonicalize_ahl("GET", &path, Some(&query1), "host", &map).unwrap();
-            let ahl2 = canonicalize_ahl("GET", &path, Some(&query2), "host", &map).unwrap();
+            let ahl1 = canonicalize_ahl("GET", &path, Some(&query1), "host", &map).expect("statically known to be valid");
+            let ahl2 = canonicalize_ahl("GET", &path, Some(&query2), "host", &map).expect("statically known to be valid");
             prop_assert_ne!(ahl1, ahl2);
         }
 
@@ -1754,10 +1801,10 @@ mod proptest_headers {
             let map = HeaderMap::new();
             let ahl_lower = canonicalize_ahl(
                 &method.to_ascii_lowercase(), &path, None, "host", &map,
-            ).unwrap();
+            ).expect("statically known to be valid");
             let ahl_upper = canonicalize_ahl(
                 &method.to_ascii_uppercase(), &path, None, "host", &map,
-            ).unwrap();
+            ).expect("statically known to be valid");
             prop_assert_eq!(ahl_lower, ahl_upper);
         }
     }
@@ -1770,8 +1817,9 @@ mod proptest_headers {
         for i in 0..65 {
             let name = format!("attest-h-{i}");
             map.append(
-                http::HeaderName::from_bytes(name.as_bytes()).unwrap(),
-                "val".parse().unwrap(),
+                http::HeaderName::from_bytes(name.as_bytes())
+                    .expect("statically known to be valid"),
+                "val".parse().expect("statically known to be valid"),
             );
         }
         let res = canonicalize_ahl("POST", "/api", None, "", &map);
@@ -1785,8 +1833,9 @@ mod proptest_headers {
         // Max is 256. "attest-" is 7. So 250 'a's makes it 257.
         let long_name = "attest-".to_string() + &"a".repeat(251);
         map.insert(
-            http::HeaderName::from_bytes(long_name.as_bytes()).unwrap(),
-            "val".parse().unwrap(),
+            http::HeaderName::from_bytes(long_name.as_bytes())
+                .expect("statically known to be valid"),
+            "val".parse().expect("statically known to be valid"),
         );
         let res = canonicalize_ahl("POST", "/api", None, "", &map);
         assert!(
@@ -1798,7 +1847,9 @@ mod proptest_headers {
         let mut map = http::HeaderMap::new();
         map.insert(
             http::HeaderName::from_static("attest-suite"),
-            "a".repeat(5000).parse().unwrap(),
+            "a".repeat(5000)
+                .parse()
+                .expect("statically known to be valid"),
         );
         let res = canonicalize_ahl("POST", "/api", None, "", &map);
         assert!(
@@ -1813,11 +1864,14 @@ mod proptest_headers {
     #[test]
     fn ahl_query_binding_prevents_injection() {
         let map = HeaderMap::new();
-        let ahl_no_query = canonicalize_ahl("GET", "/api/data", None, "host:8080", &map).unwrap();
+        let ahl_no_query = canonicalize_ahl("GET", "/api/data", None, "host:8080", &map)
+            .expect("statically known to be valid");
         let ahl_with_query =
-            canonicalize_ahl("GET", "/api/data", Some("action=read"), "host:8080", &map).unwrap();
+            canonicalize_ahl("GET", "/api/data", Some("action=read"), "host:8080", &map)
+                .expect("statically known to be valid");
         let ahl_tampered =
-            canonicalize_ahl("GET", "/api/data", Some("action=write"), "host:8080", &map).unwrap();
+            canonicalize_ahl("GET", "/api/data", Some("action=write"), "host:8080", &map)
+                .expect("statically known to be valid");
         assert_ne!(
             ahl_no_query, ahl_with_query,
             "absent vs. present query must differ"
@@ -1840,8 +1894,10 @@ mod proptest_headers {
             (Some("x=1&y=2"), Some("x=1")),
             (None, Some("a=1")),
         ] {
-            let a1 = canonicalize_ahl("POST", "/p", *q1, "h", &map).unwrap();
-            let a2 = canonicalize_ahl("POST", "/p", *q2, "h", &map).unwrap();
+            let a1 = canonicalize_ahl("POST", "/p", *q1, "h", &map)
+                .expect("statically known to be valid");
+            let a2 = canonicalize_ahl("POST", "/p", *q2, "h", &map)
+                .expect("statically known to be valid");
             assert_ne!(a1, a2, "query {q1:?} vs {q2:?} should differ");
         }
     }
@@ -1850,9 +1906,12 @@ mod proptest_headers {
     #[test]
     fn ahl_method_normalized_to_uppercase() {
         let map = HeaderMap::new();
-        let ahl_lower = canonicalize_ahl("get", "/api", None, "host", &map).unwrap();
-        let ahl_upper = canonicalize_ahl("GET", "/api", None, "host", &map).unwrap();
-        let ahl_mixed = canonicalize_ahl("Get", "/api", None, "host", &map).unwrap();
+        let ahl_lower = canonicalize_ahl("get", "/api", None, "host", &map)
+            .expect("statically known to be valid");
+        let ahl_upper = canonicalize_ahl("GET", "/api", None, "host", &map)
+            .expect("statically known to be valid");
+        let ahl_mixed = canonicalize_ahl("Get", "/api", None, "host", &map)
+            .expect("statically known to be valid");
         assert_eq!(
             ahl_lower, ahl_upper,
             "lowercase and uppercase must be identical"
@@ -1867,15 +1926,25 @@ mod proptest_headers {
     #[test]
     fn ahl_excludes_ticket_and_binder_headers() {
         let mut map_base = HeaderMap::new();
-        map_base.insert("attest-base-id", "id-123".parse().unwrap());
+        map_base.insert(
+            "attest-base-id",
+            "id-123".parse().expect("statically known to be valid"),
+        );
 
         let mut map_with_ticket = map_base.clone();
-        map_with_ticket.insert(STR_ATTEST_TICKET, "some-ticket".parse().unwrap());
-        map_with_ticket.insert(STR_ATTEST_BINDER, "some-binder".parse().unwrap());
+        map_with_ticket.insert(
+            STR_ATTEST_TICKET,
+            "some-ticket".parse().expect("statically known to be valid"),
+        );
+        map_with_ticket.insert(
+            STR_ATTEST_BINDER,
+            "some-binder".parse().expect("statically known to be valid"),
+        );
 
-        let ahl_base = canonicalize_ahl("POST", "/api", None, "host", &map_base).unwrap();
-        let ahl_with_ticket =
-            canonicalize_ahl("POST", "/api", None, "host", &map_with_ticket).unwrap();
+        let ahl_base = canonicalize_ahl("POST", "/api", None, "host", &map_base)
+            .expect("statically known to be valid");
+        let ahl_with_ticket = canonicalize_ahl("POST", "/api", None, "host", &map_with_ticket)
+            .expect("statically known to be valid");
         assert_eq!(
             ahl_base, ahl_with_ticket,
             "ticket/binder headers must not contribute to the AHL"

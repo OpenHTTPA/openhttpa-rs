@@ -6,6 +6,8 @@
 //! This crate provides a mechanism to fetch SPIFFE Verifiable Identity Documents
 //! (SVIDs) from a local SPIRE agent and bind them into the OpenHTTPA attestation
 //! flow, bridging cloud-native identity with hardware trust.
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use openhttpa_proto::{AttestQuote, QuoteType};
 use openhttpa_tee::{QuoteRequest, TeeProvider, provider::TeeProviderError};

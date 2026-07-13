@@ -143,7 +143,7 @@ impl AttestTransport for MockTransport {
                     openhttpa_crypto::aead::AeadNonce::from_slice(&nonce_bytes).unwrap();
 
                 let mut data = plaintext;
-                let mut aad = b"openhttpa:".to_vec();
+                let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
                 aad.extend_from_slice(base_id_str.as_bytes());
 
                 let key = openhttpa_crypto::aead::AeadKey::new(

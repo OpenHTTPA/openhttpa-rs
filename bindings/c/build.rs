@@ -6,7 +6,7 @@ extern crate cbindgen;
 use std::env;
 
 fn main() {
-    let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    let crate_dir = env::var("CARGO_MANIFEST_DIR").expect("statically known to be valid");
     cbindgen::Builder::new()
         .with_crate(&crate_dir)
         .with_language(cbindgen::Language::C)

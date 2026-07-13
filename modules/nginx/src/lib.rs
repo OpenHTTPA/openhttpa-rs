@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use lazy_static::lazy_static;
 use ngx::ffi;
@@ -14,9 +16,9 @@ lazy_static! {
     static ref REGISTRY: AtbRegistry = AtbRegistry::with_capacity(10_000);
     // [H-07 Hardening] Strict attestation and no debug builds allowed in production module.
     static ref EXECUTOR: AtHsExecutor = AtHsExecutor::with_config(vec![], vec![], true, false);
-    static ref TOKIO: Runtime = Runtime::new().unwrap();
+    static ref TOKIO: Runtime = Runtime::new().expect("Tokio runtime creation must succeed");
     static ref POOL: threadpool::ThreadPool = threadpool::ThreadPool::new(32);
-    static ref TEE: std::sync::Arc<dyn openhttpa_tee::TeeProvider> = openhttpa_tee::detect_best_provider(&openhttpa_tee::TeeConfig::default()).unwrap();
+    static ref TEE: std::sync::Arc<dyn openhttpa_tee::TeeProvider> = openhttpa_tee::detect_best_provider(&openhttpa_tee::TeeConfig::default()).expect("Must detect TEE provider");
     // [Final Rec: Signaling] Queue of requests ready for finalization on the main thread.
     static ref COMPLETION_QUEUE: dashmap::DashSet<usize> = dashmap::DashSet::new();
 }
@@ -127,7 +129,7 @@ extern "C" fn openhttpa_handshake_body_handler(r: *mut ffi::ngx_http_request_t) 
                     ReplayStrategy::default(),
                     hs_res.client_attestation_result.clone(),
                 );
-                REGISTRY.insert(session).unwrap();
+                REGISTRY.insert(session).expect("Registry insertion failed");
 
                 // [Final Rec: Signaling] Mark request as ready.
                 // In a production module, we'd trigger a pipe/event notification here.

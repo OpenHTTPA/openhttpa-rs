@@ -281,7 +281,10 @@ impl FileNonceSequence {
 
 impl NonceSequence for FileNonceSequence {
     fn next_nonce(&self, iv: &[u8; NONCE_LEN]) -> Result<AeadNonce, BoundAeadError> {
-        let _guard = self.mutex.lock().unwrap();
+        let _guard = self
+            .mutex
+            .lock()
+            .map_err(|_| BoundAeadError::Aead(AeadError::IoError("Mutex poisoned".into())))?;
         let file = OpenOptions::new()
             .read(true)
             .write(true)

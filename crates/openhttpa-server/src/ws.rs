@@ -397,7 +397,7 @@ impl AttestWsSession {
         atb_id: &AtbId,
     ) -> Self {
         let atb_id_bytes = *atb_id.as_uuid().as_bytes();
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(atb_id.to_string().as_bytes());
         Self {
             ws,

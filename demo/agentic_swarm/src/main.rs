@@ -11,6 +11,8 @@
 //! - The **MCP Server** (providing tools to the LLM) resides in another enclave.
 //! - All communication between them is fully attested, PQC-encrypted via `OpenHTTPA`,
 //!   and governed by Policy-as-Code.
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use openhttpa_mcp::{OpenHttpaMcpServer, server::McpTool};
 use serde_json::{Value, json};
@@ -121,7 +123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!(
         "🔓 [Agent] Received secure tool response: {}",
-        serde_json::to_string_pretty(&call_res.result.unwrap())?
+        serde_json::to_string_pretty(&call_res.result.expect("Missing result"))?
     );
 
     // 5. The Agent synthesizes the final answer

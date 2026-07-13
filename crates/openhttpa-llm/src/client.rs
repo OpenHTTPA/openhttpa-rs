@@ -343,9 +343,11 @@ impl ConfidentialLlmClientBuilder {
     ///
     /// Returns [`Err`](`LlmError::Handshake`) if the attestation handshake fails.
     pub async fn build(self) -> Result<ConfidentialLlmClient, LlmError> {
-        let uri = self
-            .server_uri
-            .unwrap_or_else(|| "http://127.0.0.1:8080".parse().unwrap());
+        let uri = self.server_uri.unwrap_or_else(|| {
+            "http://127.0.0.1:8080"
+                .parse()
+                .expect("Static string is a valid URI")
+        });
         let model = self.model.unwrap_or_else(|| "llama3".to_owned());
         let inference_path = self
             .inference_path
@@ -519,7 +521,7 @@ mod tests {
                         )
                     })?;
 
-                let mut aad = b"openhttpa:".to_vec();
+                let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
                 aad.extend_from_slice(base_id_str.as_bytes());
 
                 let key = openhttpa_crypto::aead::AeadKey::new(

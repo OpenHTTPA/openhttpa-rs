@@ -1,3 +1,5 @@
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 use log::info;
 use proxy_wasm::traits::*;
 use proxy_wasm::types::*;

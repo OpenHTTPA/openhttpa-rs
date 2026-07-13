@@ -212,7 +212,7 @@ where
 
         debug!(base_id = %base_id, "Session matched");
 
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id_str.as_bytes());
         info!(base_id = %base_id_str, "Hardened AAD constructed");
         Ok(Self { session, aad })

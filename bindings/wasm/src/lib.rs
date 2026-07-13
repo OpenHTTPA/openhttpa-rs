@@ -28,6 +28,8 @@
 //!   cleared immediately after `openhttpa_derive_session` is called.
 //! * Only the first 16 bytes of the combined secret and first 8 bytes of the
 //!   write key are returned to JavaScript for display — never the full secret.
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use std::cell::{Cell, RefCell};
 
@@ -134,7 +136,7 @@ pub fn openhttpa_unseal(base_id: &str, ciphertext_hex: &str) -> Result<String, J
         }
 
         // Hardened AAD: "openhttpa:" + base_id
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id.as_bytes());
 
         // Implicit nonce from server_counter
@@ -187,7 +189,7 @@ pub fn openhttpa_seal_ws(base_id: &str, plaintext: &str) -> Result<Vec<u8>, JsVa
 
         // Normalized AAD: "openhttpa:" + base_id_string (same as HTTP path)
         // WB2/CB2 fix: must match the server-side AAD construction.
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id.as_bytes());
 
         // 1. Get current counter and increment.
@@ -245,7 +247,7 @@ pub fn openhttpa_seal_ws_binary(base_id: &str, plaintext: &[u8]) -> Result<Vec<u
 
         // Normalized AAD: "openhttpa:" + base_id_string (same as HTTP path)
         // WB2/CB2 fix: must match the server-side AAD construction.
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id.as_bytes());
 
         let count = s.ws_client_counter.get();
@@ -305,7 +307,7 @@ pub fn openhttpa_unseal_ws(base_id: &str, frame: &[u8]) -> Result<String, JsValu
 
         // Normalized AAD: "openhttpa:" + base_id_string (same as HTTP path)
         // WB2/CB2 fix: must match the server-side AAD construction.
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id.as_bytes());
 
         let (nonce_bytes, ciphertext) = frame.split_at(12);
@@ -651,7 +653,7 @@ pub fn openhttpa_seal(base_id: &str, plaintext: &str) -> Result<String, JsValue>
         }
 
         // Hardened AAD: "openhttpa:" + base_id
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id.as_bytes());
 
         // Get current counter and increment atomically.
@@ -721,7 +723,7 @@ pub fn openhttpa_seal_with_ahl(
         }
 
         // Hardened AAD: "openhttpa:" + base_id
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id.as_bytes());
 
         // 1. Get current counter and increment.
@@ -828,7 +830,7 @@ pub fn openhttpa_seal_chunk(
             return Err(JsValue::from_str("base_id mismatch"));
         }
 
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id.as_bytes());
 
         let prev_hash =
@@ -896,10 +898,11 @@ pub fn openhttpa_unseal_chunk(
             return Err(JsValue::from_str("frame too short"));
         }
 
-        let counter = u64::from_be_bytes(frame_bytes[..8].try_into().unwrap());
+        let counter =
+            u64::from_be_bytes(frame_bytes[..8].try_into().expect("Length verified >= 8"));
         let ciphertext = &frame_bytes[8..];
 
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id.as_bytes());
 
         let prev_hash =

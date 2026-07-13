@@ -222,7 +222,9 @@ impl AiqlPolicyEngine {
     pub fn new() -> Self {
         Self {
             local_llm: LocalLlmEngine::new("Llama-3-8B-Instruct-Q4"),
-            cache: Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap())),
+            cache: Mutex::new(LruCache::new(
+                NonZeroUsize::new(1000).expect("1000 is not zero"),
+            )),
             metrics: Arc::new(crate::metrics::FabricMetrics::new()),
         }
     }
@@ -259,7 +261,7 @@ impl AuthorizationPolicy for AiqlPolicyEngine {
             let cache_key = format!("{}:{}:{}", measurement.is_debug, namespace, action);
 
             {
-                let mut cache = self.cache.lock().unwrap();
+                let mut cache = self.cache.lock().expect("Lock poisoned");
                 if let Some(&allowed) = cache.get(&cache_key) {
                     tracing::debug!("AIQL intent cache hit for action: {}", action);
                     return Ok(allowed);
@@ -278,7 +280,7 @@ impl AuthorizationPolicy for AiqlPolicyEngine {
             }
 
             {
-                let mut cache = self.cache.lock().unwrap();
+                let mut cache = self.cache.lock().expect("Lock poisoned");
                 cache.put(cache_key, allowed);
             }
 

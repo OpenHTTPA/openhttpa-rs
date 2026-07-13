@@ -9,6 +9,8 @@
 
 #![allow(unsafe_code)] // intentional: C FFI
 #![deny(warnings)]
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
@@ -39,7 +41,7 @@ pub extern "C" fn openhttpa_ctx_new() -> *mut OpenHttpaCtx {
     let registry = AtbRegistry::new();
     let executor = AtHsExecutor::with_config(vec![], vec![], true, false);
     let tee = openhttpa_tee::detect_best_provider(&openhttpa_tee::provider::TeeConfig::default())
-        .unwrap();
+        .expect("Failed to detect TEE");
     let ctx = Box::new(OpenHttpaCtx {
         rt,
         registry,
@@ -334,7 +336,7 @@ pub unsafe extern "C" fn openhttpa_server_decrypt(
         let aead_key =
             AeadKey::new(AeadAlgorithm::Aes256Gcm, &keys.client_write_key).map_err(|_| ())?;
 
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(id_str.as_bytes());
 
         let mut data = ciphertext.clone();
@@ -396,7 +398,7 @@ pub unsafe extern "C" fn openhttpa_server_encrypt(
         let aead_key =
             AeadKey::new(AeadAlgorithm::Aes256Gcm, &keys.server_write_key).map_err(|_| ())?;
 
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(id_str.as_bytes());
 
         let mut data = plaintext.clone();
@@ -521,7 +523,7 @@ mod tests {
         }
         let aead_nonce = AeadNonce(nonce_bytes);
         let aead_key = AeadKey::new(AeadAlgorithm::Aes256Gcm, &keys.client_write_key).unwrap();
-        let mut aad = b"openhttpa:".to_vec();
+        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id.as_bytes());
         let mut data = plaintext.to_vec();
         aead_key

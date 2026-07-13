@@ -179,7 +179,7 @@ impl openhttpa_transport::connection::AttestTransport for SwarmTransport {
             let base_id_str = req.headers.get("Attest-Base-ID").unwrap().to_str().unwrap();
             let keys = self.sessions.get(base_id_str).unwrap();
 
-            let mut aad = b"openhttpa:".to_vec();
+            let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
             aad.extend_from_slice(base_id_str.as_bytes());
 
             let body_bytes = openhttpa_transport::connection::to_bytes(req.body, usize::MAX)

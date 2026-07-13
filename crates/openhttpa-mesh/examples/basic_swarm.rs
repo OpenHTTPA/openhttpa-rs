@@ -213,7 +213,7 @@ impl openhttpa_transport::connection::AttestTransport for ExampleTransport {
             )
             .unwrap();
             let mut data = plaintext;
-            let mut aad = b"openhttpa:".to_vec();
+            let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
             aad.extend_from_slice(base_id_str.as_bytes());
             info!(nonce = ?hex::encode(aead_nonce.0), counter = counter, aad = ?String::from_utf8_lossy(&aad), "Encrypting response");
 

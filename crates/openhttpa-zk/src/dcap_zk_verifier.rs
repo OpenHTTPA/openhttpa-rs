@@ -47,9 +47,13 @@ impl DcapZkVerifier {
         // 3. Perform SNARK Verification
         // We verify that the receipt matches our expected Guest ID and is valid.
         // For ZAA, we check the dcap_verified flag in the journal.
-        let output =
-            crate::verifier::ZkVerifier::verify(&receipt, report_data[..48].try_into().unwrap())
-                .map_err(|_e| VerificationError::SignatureInvalid)?;
+        let output = crate::verifier::ZkVerifier::verify(
+            &receipt,
+            report_data[..48]
+                .try_into()
+                .expect("Slice length is explicitly 48"),
+        )
+        .map_err(|_e| VerificationError::SignatureInvalid)?;
 
         if output.mode != ZkMode::DcapCompression || !output.dcap_verified {
             return Err(VerificationError::SignatureInvalid);
