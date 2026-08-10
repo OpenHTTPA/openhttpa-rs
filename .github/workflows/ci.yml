@@ -27,7 +27,7 @@ jobs:
     runs-on: self-hosted
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Run format and clippy
         run: make ci
       - name: Verify PGP Key Generation
@@ -38,7 +38,7 @@ jobs:
     runs-on: self-hosted
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Proactive Disk Hygiene
         run: rm -rf /tmp/openhttpa-build-* || true
       - name: Run core tests
@@ -49,7 +49,7 @@ jobs:
     runs-on: self-hosted
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Check bindings and examples
         run: make check-bindings verify-examples
 
@@ -58,6 +58,6 @@ jobs:
     runs-on: self-hosted
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Run ProVerif/Tamarin Proofs
         run: make formal-verify
