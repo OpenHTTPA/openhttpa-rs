@@ -175,7 +175,7 @@ impl CollateralCache {
 
 impl Default for CollateralCache {
     fn default() -> Self {
-        Self::new(Duration::from_secs(86400))
+        Self::new(Duration::from_hours(24))
     }
 }
 

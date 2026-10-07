@@ -88,7 +88,6 @@ async fn main() {
 
     // 2. Initialize the Confidential LLM Client with bypass mode
     let llm = ConfidentialLlmClient::builder()
-        .await
         .server_uri("http://127.0.0.1:8080".parse().unwrap())
         .model(model)
         .inference_path("/v1/chat/completions")

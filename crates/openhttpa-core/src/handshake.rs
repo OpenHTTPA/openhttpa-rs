@@ -783,7 +783,10 @@ mod tests {
             .await
             .unwrap();
         // A mock TEE provider should return a quote.
-        assert!(!result.server_quotes.is_empty());
+        assert_ne!(
+            result.server_quotes,
+            [] as [openhttpa_proto::AttestQuote; 0]
+        );
     }
 
     #[tokio::test]

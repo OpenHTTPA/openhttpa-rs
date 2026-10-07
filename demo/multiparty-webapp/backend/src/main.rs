@@ -723,6 +723,7 @@ struct HandshakeResponse {
     version: String,
 }
 
+#[allow(clippy::result_large_err)]
 async fn aths_json(
     State(state): State<AppState>,
     Json(req): Json<HandshakeRequest>,

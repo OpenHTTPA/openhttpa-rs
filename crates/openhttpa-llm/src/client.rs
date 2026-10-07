@@ -80,8 +80,8 @@ impl ConfidentialLlmClient {
     }
 
     /// Build a client and immediately perform the attestation handshake.
-    #[allow(clippy::unused_async)]
-    pub async fn builder() -> ConfidentialLlmClientBuilder {
+    #[must_use]
+    pub fn builder() -> ConfidentialLlmClientBuilder {
         ConfidentialLlmClientBuilder::default()
     }
 
@@ -615,7 +615,7 @@ mod tests {
             }])
             .await
             .unwrap();
-        assert!(!reply.is_empty());
+        assert_ne!(reply, "");
     }
 
     // ── LlmError display tests ───────────────────────────────────────────────

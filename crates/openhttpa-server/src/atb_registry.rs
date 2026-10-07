@@ -79,7 +79,7 @@ impl AtbRegistry {
         // capacity, reject the session without inserting into the DashMap.
         let claimed = self
             .live_count
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
                 if current < self.max_sessions {
                     Some(current + 1)
                 } else {

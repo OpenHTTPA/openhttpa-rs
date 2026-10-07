@@ -802,7 +802,7 @@ mod tests {
             qudd: Bytes::new(),
             collateral_uris: vec![],
         };
-        assert!(!quote.raw_base64().is_empty());
+        assert_ne!(quote.raw_base64(), "");
     }
 
     #[test]

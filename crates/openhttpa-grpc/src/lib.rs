@@ -12,6 +12,7 @@
 
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(clippy::double_must_use)]
 #![forbid(unsafe_code)]
 #![allow(clippy::module_name_repetitions)]
 #![deny(clippy::unwrap_used)]

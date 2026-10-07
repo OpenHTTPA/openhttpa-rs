@@ -18,6 +18,7 @@
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery, clippy::unwrap_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
+#![allow(clippy::double_must_use)]
 #![forbid(unsafe_code)]
 
 pub mod handshake;

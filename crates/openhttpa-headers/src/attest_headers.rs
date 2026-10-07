@@ -1570,7 +1570,7 @@ mod tests {
         tmp.insert(HDR_ATTEST_RANDOM.clone(), hv);
         let decoded =
             decode_bytes_sfv(&tmp, &HDR_ATTEST_RANDOM).expect("statically known to be valid");
-        assert!(decoded.is_empty());
+        assert_eq!(decoded, Vec::<u8>::new());
     }
 
     #[test]
@@ -1618,7 +1618,7 @@ mod tests {
         map.insert(HDR_ATTEST_VERSIONS.clone(), HeaderValue::from_static("  "));
         let res = decode_token_list_strings(&map, &HDR_ATTEST_VERSIONS)
             .expect("statically known to be valid");
-        assert!(res.is_empty());
+        assert_eq!(res, Vec::<String>::new());
     }
 }
 
