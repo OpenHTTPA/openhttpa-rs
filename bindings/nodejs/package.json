@@ -21,6 +21,6 @@
   "author": "The OpenHTTPA Foundation (openhttpa.org) <info@openhttpa.org>",
   "homepage": "https://openhttpa.org",
   "devDependencies": {
-    "@napi-rs/cli": "^3"
+    "@napi-rs/cli": "^3.10.8"
   }
 }
