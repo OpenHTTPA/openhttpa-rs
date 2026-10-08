@@ -16,6 +16,7 @@
 
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery, clippy::unwrap_used)]
+#![allow(clippy::duration_suboptimal_units)]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 #![allow(clippy::double_must_use)]
 #![allow(clippy::unused_async_trait_impl)]

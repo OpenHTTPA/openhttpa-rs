@@ -92,6 +92,7 @@ keywords    = ["http", "attestation", "tee", "pqc", "security"]
 
 [workspace.lints.clippy]
 async_fn_in_trait = "allow"
+duration_suboptimal_units = "allow"
 
 [workspace.dependencies]
 # ── async runtime ──────────────────────────────────────────────────────────────

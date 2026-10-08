@@ -33,8 +33,8 @@ COPY . .
 COPY --from=wasm-builder /wasm-out/ /src/demo/multiparty-webapp/frontend/wasm/
 
 # Install JS/TS dependencies
-RUN pnpm install
+RUN pnpm config set minimum-release-age 0 && pnpm install
 
 # Playwright browsers are already in the base image.
 
-ENTRYPOINT ["pnpm", "exec", "playwright", "test"]
+ENTRYPOINT ["/bin/sh", "-c", "pnpm config set minimum-release-age 0 && pnpm exec playwright test"]

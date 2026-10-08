@@ -18,6 +18,7 @@
 
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(clippy::duration_suboptimal_units)]
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used))]

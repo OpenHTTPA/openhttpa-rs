@@ -68,7 +68,7 @@ darwin-setup: ## Install system dependencies on macOS
 .PHONY: ci
 ci: ## Run all standard CI checks
 	@echo "--- Running CI Checks ---"
-	@$(MAKE) -j3 ci-tools
+	@$(MAKE) ci-tools
 	@$(MAKE) ci-rust
 	@echo "All CI checks passed locally!"
 

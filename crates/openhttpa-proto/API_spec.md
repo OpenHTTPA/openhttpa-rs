@@ -363,16 +363,16 @@ An ordered chain of agents that have handled a request, enabling multi-hop trace
 
 Standard EAT (Entity Attestation Token) claims as per RFC 9334.
 
-| Field              | Type              | Description                                            |
+| Field | Type | Description |
 | ------------------ | ----------------- | ------------------------------------------------------ | --- | ----------- |
-| `ueid`             | `Option<Vec<u8>>` | Unique Entity ID (e.g. `MRENCLAVE                      |     | MRSIGNER`). |
-| `hwmodel`          | `Option<String>`  | Hardware model (e.g. `"Intel SGX"`, `"NVIDIA H100"`).  |
-| `hwversion`        | `Option<String>`  | Hardware version / TCB level.                          |
-| `oemid`            | `Option<String>`  | OEM identifier.                                        |
-| `dbgstat`          | `Option<u8>`      | Debug status: `0` = production, non-zero = debug/test. |
-| `boot_progress`    | `Option<String>`  | Boot measurement / enclave measurement string.         |
-| `security_version` | `Option<u16>`     | Security Version Number (SVN) of the TCB.              |
-| `iat`              | `Option<u64>`     | Issued-At Unix timestamp.                              |
+| `ueid` | `Option<Vec<u8>>` | Unique Entity ID (e.g. `MRENCLAVE                      |     | MRSIGNER`). |
+| `hwmodel` | `Option<String>` | Hardware model (e.g. `"Intel SGX"`, `"NVIDIA H100"`). |
+| `hwversion` | `Option<String>` | Hardware version / TCB level. |
+| `oemid` | `Option<String>` | OEM identifier. |
+| `dbgstat` | `Option<u8>` | Debug status: `0` = production, non-zero = debug/test. |
+| `boot_progress` | `Option<String>` | Boot measurement / enclave measurement string. |
+| `security_version` | `Option<u16>` | Security Version Number (SVN) of the TCB. |
+| `iat` | `Option<u64>` | Issued-At Unix timestamp. |
 
 ### `VerificationResult` (Struct)
 

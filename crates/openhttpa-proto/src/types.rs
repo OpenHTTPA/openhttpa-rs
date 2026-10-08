@@ -826,8 +826,8 @@ mod tests {
         let rec = AttestBaseRecord {
             id: AtbId::new(),
             service_uri: "https://example.com/api".to_owned(),
-            created_at: SystemTime::now() - Duration::from_secs(3600),
-            max_age: Duration::from_secs(60),
+            created_at: SystemTime::now() - Duration::from_hours(1),
+            max_age: Duration::from_mins(1),
             policy: AtbPolicy::default(),
             terminated: false,
         };
@@ -840,7 +840,7 @@ mod tests {
             id: AtbId::new(),
             service_uri: "https://example.com/api".to_owned(),
             created_at: SystemTime::now(),
-            max_age: Duration::from_secs(3600),
+            max_age: Duration::from_hours(1),
             policy: AtbPolicy::default(),
             terminated: false,
         };

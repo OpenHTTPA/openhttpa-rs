@@ -34,7 +34,6 @@ pub extern "system" fn Java_org_openhttpa_ConfidentialClient_chat<'local>(
     let rt = get_runtime();
     let result = rt.block_on(async {
         let client = ConfidentialLlmClient::builder()
-            .await
             .server_uri(endpoint.parse().expect("Invalid endpoint URI"))
             .build()
             .await

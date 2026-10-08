@@ -10,6 +10,7 @@
 
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(clippy::duration_suboptimal_units)]
 // TEE modules contain necessary unsafe FFI; they are individually audited.
 #![deny(clippy::unwrap_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used))]

@@ -23,6 +23,7 @@
 
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic)]
+#![allow(clippy::duration_suboptimal_units)]
 #![allow(clippy::unused_async)] // napi-rs async fns require async signature
 #![deny(clippy::unwrap_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used))]

@@ -23,7 +23,6 @@
 //! #[tokio::main]
 //! async fn main() {
 //!     let llm = ConfidentialLlmClient::builder()
-//!         .await
 //!         .server_uri("https://confidential-llm.example.com".parse().unwrap())
 //!         .build()
 //!         .await
@@ -41,6 +40,7 @@
 
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(clippy::duration_suboptimal_units)]
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
