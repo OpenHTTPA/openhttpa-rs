@@ -36,7 +36,9 @@ impl TeeAdapter for SevSnpTeeProvider {
         #[cfg(all(feature = "sev_snp", target_os = "linux"))]
         {
             use crate::evidence::SevSnpEvidence;
+            use openhttpa_proto::{SevSnpCertificate, SevSnpCertificateType};
             use sev::firmware::guest::Firmware;
+            use sev::firmware::host::CertType;
 
             let mut fw =
                 Firmware::open().map_err(|e| TeeProviderError::NotAvailable(format!("{e:?}")))?;
@@ -44,15 +46,36 @@ impl TeeAdapter for SevSnpTeeProvider {
             let mut user_data = [0u8; 64];
             user_data.copy_from_slice(&request.report_data);
 
-            let report_bytes = fw
-                .get_report(None, Some(user_data), Some(0))
+            let (report_bytes, cert_table) = fw
+                .get_ext_report(None, Some(user_data), Some(0))
                 .map_err(|e| TeeProviderError::QuoteGeneration(format!("{e:?}")))?;
+            let cert_table = cert_table.ok_or_else(|| {
+                TeeProviderError::QuoteGeneration(
+                    "SNP_GET_EXT_REPORT returned no AMD certificate table".to_owned(),
+                )
+            })?;
+            let certificate_table = cert_table
+                .into_iter()
+                .map(|entry| {
+                    let certificate_type = match entry.cert_type {
+                        CertType::ARK => SevSnpCertificateType::Ark,
+                        CertType::ASK => SevSnpCertificateType::Ask,
+                        CertType::VCEK => SevSnpCertificateType::Vcek,
+                        CertType::VLEK => SevSnpCertificateType::Vlek,
+                        CertType::CRL => SevSnpCertificateType::Crl,
+                        CertType::Empty => SevSnpCertificateType::Other("empty".to_owned()),
+                        CertType::OTHER(guid) => SevSnpCertificateType::Other(guid.to_string()),
+                    };
+                    SevSnpCertificate {
+                        certificate_type,
+                        der: entry.data,
+                    }
+                })
+                .collect();
 
             Ok(AttestationEvidence::SevSnp(SevSnpEvidence {
                 report: Bytes::from(report_bytes),
-                // M-03: Use None — the real VCEK cert URI is fetched dynamically
-                // by the verifier from AMD's KDS; hardcoding a URI here would
-                // silently break production verification.
+                certificate_table,
                 vcek_cert_uri: None,
             }))
         }

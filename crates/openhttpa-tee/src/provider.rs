@@ -182,7 +182,7 @@ impl Default for TeeConfig {
     /// Default configuration: allows mock in debug builds, forbids it in release.
     fn default() -> Self {
         Self {
-            allow_mock: cfg!(any(debug_assertions, feature = "mock")),
+            allow_mock: cfg!(any(debug_assertions, test)),
             preferred_type: None,
         }
     }
@@ -201,6 +201,12 @@ impl Default for TeeConfig {
 /// # Errors
 /// Returns [`TeeProviderError::NotAvailable`] if no TEE is found and mock is disabled.
 pub fn detect_best_provider(config: &TeeConfig) -> Result<Arc<dyn TeeProvider>, TeeProviderError> {
+    if config.allow_mock && !cfg!(any(debug_assertions, test)) {
+        return Err(TeeProviderError::Config(
+            "mock attestation is forbidden in release builds".to_owned(),
+        ));
+    }
+
     // 1. Check for environment variable override (highest priority)
     if let Ok(env_type) = std::env::var("OPENHTTPA_TEE_PROVIDER") {
         tracing::info!("Using TEE provider from OPENHTTPA_TEE_PROVIDER: {env_type}");
@@ -304,7 +310,7 @@ pub fn detect_best_provider(config: &TeeConfig) -> Result<Arc<dyn TeeProvider>, 
 /// Helper to select a provider by its string name.
 fn select_by_type(
     tee_type: &str,
-    _allow_mock: bool,
+    allow_mock: bool,
 ) -> Result<Arc<dyn TeeProvider>, TeeProviderError> {
     match tee_type {
         "sgx" => {
@@ -364,6 +370,16 @@ fn select_by_type(
             ));
         }
         "mock" => {
+            if !allow_mock {
+                return Err(TeeProviderError::Config(
+                    "mock provider selection requires explicit allow_mock".to_owned(),
+                ));
+            }
+            if !cfg!(any(debug_assertions, test)) {
+                return Err(TeeProviderError::Config(
+                    "mock provider selection is forbidden in release builds".to_owned(),
+                ));
+            }
             #[cfg(feature = "mock")]
             return Ok(Arc::new(crate::mock::MockTeeProvider::default()));
             #[cfg(not(feature = "mock"))]
@@ -400,6 +416,12 @@ impl CompositeTeeProvider {
 /// # Errors
 /// Returns [`TeeProviderError::NotAvailable`] if no hardware TEE is detected and Mock is disabled.
 pub fn detect_all_providers(config: &TeeConfig) -> Result<CompositeTeeProvider, TeeProviderError> {
+    if config.allow_mock && !cfg!(any(debug_assertions, test)) {
+        return Err(TeeProviderError::Config(
+            "mock attestation is forbidden in release builds".to_owned(),
+        ));
+    }
+
     let mut providers: Vec<Arc<dyn TeeProvider>> = Vec::new();
 
     #[cfg(feature = "nvidia_gpu")]

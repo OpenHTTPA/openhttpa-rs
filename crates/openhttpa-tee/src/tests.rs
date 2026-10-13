@@ -43,6 +43,14 @@ fn test_detect_best_provider() {
     );
 }
 
+#[test]
+fn default_mock_permission_is_debug_or_test_only() {
+    assert_eq!(
+        TeeConfig::default().allow_mock,
+        cfg!(any(debug_assertions, test))
+    );
+}
+
 /// Test failure to detect hardware when Mock is disabled.
 #[test]
 fn test_fail_when_mock_disabled() {
@@ -55,6 +63,12 @@ fn test_fail_when_mock_disabled() {
             };
 
             let res = detect_best_provider(&config);
+            temp_env::with_var(ENV_TEE_PROVIDER, Some("mock"), || {
+                assert!(matches!(
+                    detect_best_provider(&config),
+                    Err(TeeProviderError::Config(message)) if message.contains("allow_mock")
+                ));
+            });
 
             // If we are on real TEE hardware this might return Ok, but in standard CI it should return Err
             if !std::path::Path::new("/dev/tdx-guest").exists()

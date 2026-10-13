@@ -288,6 +288,8 @@ pub enum QuoteFormat {
     Raw,
     /// Entity Attestation Token (EAT) profile.
     Eat,
+    /// Version 1 SEV-SNP bundle containing the raw report and certificate table.
+    SevSnpBundleV1,
     /// An unrecognised format.
     Unknown(String),
 }
@@ -297,6 +299,7 @@ impl std::fmt::Display for QuoteFormat {
         let s = match self {
             Self::Raw => "raw",
             Self::Eat => "eat",
+            Self::SevSnpBundleV1 => "sev_snp_bundle_v1",
             Self::Unknown(s) => s.as_str(),
         };
         f.write_str(s)
@@ -309,6 +312,7 @@ impl std::str::FromStr for QuoteFormat {
         Ok(match s {
             "raw" => Self::Raw,
             "eat" => Self::Eat,
+            "sev_snp_bundle_v1" => Self::SevSnpBundleV1,
             _ => Self::Unknown(s.to_owned()),
         })
     }
@@ -410,6 +414,41 @@ impl std::str::FromStr for AtbId {
 }
 
 // ─── Attest Quote (AtQ) ──────────────────────────────────────────────────────
+
+/// Certificate types carried with a versioned SEV-SNP report bundle.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SevSnpCertificateType {
+    /// AMD Root Key certificate.
+    Ark,
+    /// AMD Signing Key certificate.
+    Ask,
+    /// Versioned Chip Endorsement Key certificate.
+    Vcek,
+    /// Versioned Loaded Endorsement Key certificate.
+    Vlek,
+    /// Certificate revocation list entry.
+    Crl,
+    /// A certificate type unknown to this protocol version.
+    Other(String),
+}
+
+/// One certificate-table entry from an AMD SEV-SNP extended report.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SevSnpCertificate {
+    /// Vendor-defined certificate type.
+    pub certificate_type: SevSnpCertificateType,
+    /// DER-encoded certificate bytes.
+    pub der: Vec<u8>,
+}
+
+/// Version 1 SEV-SNP quote payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SevSnpQuoteBundleV1 {
+    /// Raw AMD SEV-SNP attestation report bytes.
+    pub report: Vec<u8>,
+    /// Certificate table returned with the extended report.
+    pub certificate_table: Vec<SevSnpCertificate>,
+}
 
 /// An opaque attestation quote produced by a TEE's quoting service.
 ///

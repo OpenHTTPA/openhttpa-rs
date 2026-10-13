@@ -173,11 +173,18 @@ impl OpenHttpaServerBuilder {
                 }
             }
             Err(e) => {
-                tracing::warn!(
-                    "Auto-attestation failed to detect hardware TEEs: {}. Falling back to Mock.",
-                    e
-                );
-                Arc::new(openhttpa_tee::mock::MockTeeProvider::default())
+                #[cfg(debug_assertions)]
+                {
+                    tracing::warn!(
+                        "Auto-attestation failed to detect hardware TEEs: {}. Falling back to Mock.",
+                        e
+                    );
+                    Arc::new(openhttpa_tee::mock::MockTeeProvider::default())
+                }
+                #[cfg(not(debug_assertions))]
+                {
+                    panic!("Auto-attestation failed in release mode: {e}");
+                }
             }
         };
 
@@ -213,9 +220,18 @@ impl OpenHttpaServerBuilder {
         let state = Arc::new(AtHsHandlerState {
             executor,
             registry: self.registry.clone(),
-            tee_provider: self
-                .tee_provider
-                .unwrap_or_else(|| Arc::new(openhttpa_tee::mock::MockTeeProvider::default())),
+            tee_provider: self.tee_provider.unwrap_or_else(|| {
+                #[cfg(debug_assertions)]
+                {
+                    Arc::new(openhttpa_tee::mock::MockTeeProvider::default())
+                }
+                #[cfg(not(debug_assertions))]
+                {
+                    panic!(
+                        "a real TEE provider must be configured before building a release server"
+                    )
+                }
+            }),
             verifier: self.verifier,
             #[cfg(feature = "mesh")]
             policy_engine: self.policy_engine,

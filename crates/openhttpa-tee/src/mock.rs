@@ -241,6 +241,7 @@ impl TeeAdapter for MockTeeProvider {
             QuoteType::SevSnp => Ok(AttestationEvidence::SevSnp(
                 crate::evidence::SevSnpEvidence {
                     report: Bytes::from(hash.to_vec()),
+                    certificate_table: vec![],
                     vcek_cert_uri: Some("https://mock.attestation/amd/snp/vcek".to_owned()),
                 },
             )),

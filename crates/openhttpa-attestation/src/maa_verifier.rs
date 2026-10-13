@@ -9,7 +9,7 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use base64ct::{Base64, Encoding as _};
+use base64ct::{Base64, Base64UrlUnpadded, Encoding as _};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -23,6 +23,7 @@ use crate::verifier::{EatClaims, QuoteVerifier, VerificationError, VerificationR
 /// MAA verifier configuration.
 pub struct MaaVerifier {
     endpoint: String,
+    expected_policy_hash: Option<String>,
     client: Client,
     jwks_cache: Arc<RwLock<Option<(SystemTime, JwksResponse)>>>,
 }
@@ -30,6 +31,7 @@ pub struct MaaVerifier {
 #[derive(Serialize)]
 struct MaaAttestRequest {
     quote: String,
+    nonce: String,
     #[serde(rename = "runtimeData")]
     runtime_data: MaaRuntimeData,
 }
@@ -74,14 +76,48 @@ impl MaaVerifier {
     ///
     /// Panics if the underlying `reqwest` client cannot be initialized.
     pub fn new(endpoint: impl Into<String>) -> Self {
-        Self {
-            endpoint: endpoint.into(),
-            client: Client::builder()
-                .use_rustls_tls()
-                .build()
-                .expect("failed to build reqwest client"),
-            jwks_cache: Arc::new(RwLock::new(None)),
+        Self::try_new(endpoint).expect("invalid Azure MAA verifier configuration")
+    }
+
+    /// Create an MAA verifier after validating the remote endpoint.
+    pub fn try_new(endpoint: impl Into<String>) -> Result<Self, VerificationError> {
+        let endpoint = endpoint.into().trim_end_matches('/').to_owned();
+        let parsed = reqwest::Url::parse(&endpoint).map_err(|error| {
+            VerificationError::Malformed(format!("invalid MAA endpoint: {error}"))
+        })?;
+        let host = parsed.host_str().unwrap_or_default();
+        if parsed.scheme() != "https"
+            || !(host == "attest.azure.net" || host.ends_with(".attest.azure.net"))
+            || !parsed.username().is_empty()
+            || parsed.password().is_some()
+            || parsed.query().is_some()
+            || parsed.fragment().is_some()
+        {
+            return Err(VerificationError::PolicyViolation(
+                "MAA endpoint must be an HTTPS Azure Attestation endpoint".to_owned(),
+            ));
         }
+
+        let client = Client::builder()
+            .use_rustls_tls()
+            .timeout(Duration::from_secs(10))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|error| VerificationError::NetworkError(error.to_string()))?;
+
+        Ok(Self {
+            endpoint,
+            expected_policy_hash: None,
+            client,
+            jwks_cache: Arc::new(RwLock::new(None)),
+        })
+    }
+
+    /// Pin the Azure policy hash whose signed result is accepted.
+    #[must_use]
+    pub fn with_expected_policy_hash(mut self, policy_hash: impl Into<String>) -> Self {
+        self.expected_policy_hash = Some(policy_hash.into());
+        self
     }
 
     /// Fetch the MAA JWKS and verify the JWT's RS256 signature.
@@ -92,7 +128,8 @@ impl MaaVerifier {
         &self,
         token: &str,
         expected_report_data: &[u8; 64],
-    ) -> Result<(String, bool), VerificationError> {
+        quote_type: openhttpa_proto::QuoteType,
+    ) -> Result<(String, Option<bool>), VerificationError> {
         // Decode the header to find the `kid`.
         let header: Header = decode_header(token)
             .map_err(|e| VerificationError::Malformed(format!("JWT header decode failed: {e}")))?;
@@ -150,7 +187,7 @@ impl MaaVerifier {
 
         // Build a decoding key from the x5c DER cert or n/e modulus.
         let decoding_key = if let Some(cert_b64) = jwk.x5c.first() {
-            let der = base64ct::Base64::decode_vec(cert_b64)
+            let der = Base64::decode_vec(cert_b64)
                 .map_err(|_| VerificationError::Malformed("x5c base64 decode failed".to_owned()))?;
             DecodingKey::from_rsa_der(&der)
         } else if !jwk.n.is_empty() {
@@ -170,48 +207,72 @@ impl MaaVerifier {
             jsonwebtoken::decode::<serde_json::Value>(token, &decoding_key, &validation)
                 .map_err(|_| VerificationError::SignatureInvalid)?;
 
-        // Extract debug build flag and runtime data.
         let claims: MaaClaims =
-            serde_json::from_value(token_data.claims.clone()).unwrap_or_default();
-
-        Self::validate_claims(&claims, expected_report_data)?;
+            serde_json::from_value(token_data.claims.clone()).map_err(|error| {
+                VerificationError::Malformed(format!("invalid MAA claims: {error}"))
+            })?;
+        self.validate_claims(&claims, expected_report_data, quote_type.clone())?;
 
         let claims_json = serde_json::to_string(&token_data.claims).unwrap_or_default();
-
-        Ok((claims_json, claims.is_debuggable))
+        let is_debuggable = match quote_type {
+            openhttpa_proto::QuoteType::Tdx => claims.tdx_is_debuggable,
+            openhttpa_proto::QuoteType::Sgx => claims.sgx_is_debuggable,
+            _ => None,
+        };
+        Ok((claims_json, is_debuggable))
     }
 
     fn validate_claims(
+        &self,
         claims: &MaaClaims,
         expected_report_data: &[u8; 64],
+        quote_type: openhttpa_proto::QuoteType,
     ) -> Result<(), VerificationError> {
-        // Verify runtime data claim is present and matches our expected report_data.
-        let rd_claim = claims.runtime_data.as_ref().ok_or_else(|| {
-            VerificationError::PolicyViolation("MAA JWT missing x-ms-runtime-data claim".to_owned())
+        let expected_policy_hash = self.expected_policy_hash.as_deref().ok_or_else(|| {
+            VerificationError::PolicyViolation(
+                "expected Azure MAA policy hash is not configured".to_owned(),
+            )
         })?;
-
-        let expected_b64 = Base64::encode_string(expected_report_data);
-        if rd_claim.data != expected_b64 {
+        if claims.policy_hash.as_deref() != Some(expected_policy_hash) {
             return Err(VerificationError::PolicyViolation(
-                "MAA JWT runtime_data mismatch".to_owned(),
+                "Azure MAA policy hash does not match the pinned policy".to_owned(),
             ));
         }
 
+        let nonce = claims.nonce.as_deref().ok_or_else(|| {
+            VerificationError::PolicyViolation("MAA JWT is missing its signed nonce".to_owned())
+        })?;
+        let expected_b64 = Base64UrlUnpadded::encode_string(expected_report_data);
+        if nonce != expected_b64 {
+            return Err(VerificationError::PolicyViolation(
+                "MAA JWT nonce mismatch".to_owned(),
+            ));
+        }
+
+        let debuggable = match quote_type {
+            openhttpa_proto::QuoteType::Tdx => claims.tdx_is_debuggable,
+            openhttpa_proto::QuoteType::Sgx => claims.sgx_is_debuggable,
+            _ => None,
+        };
+        if debuggable == Some(true) {
+            return Err(VerificationError::PolicyViolation(
+                "MAA reports a debug-enabled TEE".to_owned(),
+            ));
+        }
         Ok(())
     }
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Clone, Deserialize, Default)]
 struct MaaClaims {
     #[serde(rename = "x-ms-sgx-is-debuggable", default)]
-    is_debuggable: bool,
-    #[serde(rename = "x-ms-runtime-data", default)]
-    runtime_data: Option<MaaRuntimeDataClaim>,
-}
-
-#[derive(Deserialize)]
-struct MaaRuntimeDataClaim {
-    data: String,
+    sgx_is_debuggable: Option<bool>,
+    #[serde(rename = "x-ms-tdx-is-debuggable", default)]
+    tdx_is_debuggable: Option<bool>,
+    #[serde(rename = "x-ms-policy-hash", default)]
+    policy_hash: Option<String>,
+    #[serde(rename = "nonce", default)]
+    nonce: Option<String>,
 }
 
 impl QuoteVerifier for MaaVerifier {
@@ -229,20 +290,9 @@ impl QuoteVerifier for MaaVerifier {
         Box::pin(async move {
             use openhttpa_proto::QuoteType;
 
-            let quote_b64 = Base64::encode_string(quote.raw.as_ref());
-            let rd_b64 = Base64::encode_string(report_data);
-
-            let body = MaaAttestRequest {
-                quote: quote_b64,
-                runtime_data: MaaRuntimeData {
-                    data: rd_b64,
-                    data_type: "Binary".to_owned(),
-                },
-            };
-
-            let path = match quote.quote_type {
-                QuoteType::Sgx => "SgxEnclave",
-                QuoteType::Tdx => "TdxGuest",
+            let (path, api_version) = match quote.quote_type {
+                QuoteType::Sgx => ("SgxEnclave", "2022-08-01"),
+                QuoteType::Tdx => ("TdxVm", "2025-06-01"),
                 _ => {
                     return Err(VerificationError::PolicyViolation(format!(
                         "MAA verifier does not support quote type: {:?}",
@@ -251,7 +301,24 @@ impl QuoteVerifier for MaaVerifier {
                 }
             };
 
-            let url = format!("{}/attest/{}?api-version=2022-08-01", self.endpoint, path);
+            if quote.qudd.as_ref() != report_data {
+                return Err(VerificationError::PolicyViolation(
+                    "OpenHTTPA QUDD does not match expected report data".to_owned(),
+                ));
+            }
+
+            let quote_b64 = Base64UrlUnpadded::encode_string(quote.raw.as_ref());
+            let rd_b64 = Base64UrlUnpadded::encode_string(report_data);
+
+            let body = MaaAttestRequest {
+                quote: quote_b64,
+                nonce: rd_b64.clone(),
+                runtime_data: MaaRuntimeData {
+                    data: rd_b64,
+                    data_type: "Binary".to_owned(),
+                },
+            };
+            let url = format!("{}/attest/{path}?api-version={api_version}", self.endpoint);
             debug!(%url, "submitting quote to MAA");
 
             let resp = self
@@ -278,7 +345,7 @@ impl QuoteVerifier for MaaVerifier {
             // Verify the JWT signature and extract verified claims (C-QS-4/C-TEE-2).
             #[cfg(feature = "maa")]
             let (_claims_json, debug_build) = self
-                .verify_jwt_signature(&maa_resp.token, report_data)
+                .verify_jwt_signature(&maa_resp.token, report_data, quote.quote_type.clone())
                 .await?;
 
             #[cfg(not(feature = "maa"))]
@@ -291,7 +358,7 @@ impl QuoteVerifier for MaaVerifier {
                     hwmodel: Some(format!("{:?}", quote.quote_type)),
                     hwversion: Some("maa-verified".to_owned()),
                     oemid: Some("Microsoft".to_owned()),
-                    dbgstat: Some(u8::from(debug_build)),
+                    dbgstat: debug_build.map(u8::from),
                     ..Default::default()
                 },
                 tcb_status: "UpToDate".to_owned(),
@@ -306,50 +373,110 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[cfg(feature = "maa")]
     async fn test_maa_verify_missing_kid() {
-        let endpoint = "https://example.com".to_string();
-        let verifier = MaaVerifier::new(endpoint);
+        let endpoint = "https://tenant.attest.azure.net";
+        let verifier = MaaVerifier::new(endpoint).with_expected_policy_hash("pinned-policy");
 
         // JWT header without kid
         let header_json = r#"{"alg":"RS256"}"#;
-        let claims_json = r#"{"iss":"https://example.com"}"#;
+        let claims_json = r#"{"iss":"https://tenant.attest.azure.net"}"#;
         let token = format!(
             "{}.{}.signature",
             Base64::encode_string(header_json.as_bytes()),
             Base64::encode_string(claims_json.as_bytes())
         );
 
-        let result = verifier.verify_jwt_signature(&token, &[0u8; 64]).await;
+        let result = verifier
+            .verify_jwt_signature(&token, &[0u8; 64], openhttpa_proto::QuoteType::Tdx)
+            .await;
         assert!(
             matches!(result, Err(VerificationError::Malformed(m)) if m.contains("missing kid"))
         );
     }
 
     #[test]
-    fn test_maa_validate_claims_missing_runtime_data() {
-        let claims = MaaClaims {
-            is_debuggable: false,
-            runtime_data: None,
-        };
+    fn test_maa_validate_claims_accepts_pinned_policy_nonce_and_non_debug() {
+        let verifier = MaaVerifier::new("https://tenant.attest.azure.net")
+            .with_expected_policy_hash("pinned-policy");
         let report_data = [0u8; 64];
-        let result = MaaVerifier::validate_claims(&claims, &report_data);
+        let claims = MaaClaims {
+            sgx_is_debuggable: None,
+            tdx_is_debuggable: Some(false),
+            policy_hash: Some("pinned-policy".to_owned()),
+            nonce: Some(Base64UrlUnpadded::encode_string(&report_data)),
+        };
         assert!(
-            matches!(result, Err(VerificationError::PolicyViolation(m)) if m.contains("missing x-ms-runtime-data"))
+            verifier
+                .validate_claims(&claims, &report_data, openhttpa_proto::QuoteType::Tdx)
+                .is_ok()
+        );
+
+        let missing_debug = MaaClaims {
+            tdx_is_debuggable: None,
+            ..claims.clone()
+        };
+        assert!(
+            verifier
+                .validate_claims(
+                    &missing_debug,
+                    &report_data,
+                    openhttpa_proto::QuoteType::Tdx
+                )
+                .is_ok()
         );
     }
 
     #[test]
-    fn test_maa_validate_claims_mismatch() {
+    fn test_maa_validate_claims_rejects_missing_nonce_wrong_policy_and_debug() {
+        let verifier = MaaVerifier::new("https://tenant.attest.azure.net")
+            .with_expected_policy_hash("pinned-policy");
+        let report_data = [0x5au8; 64];
         let claims = MaaClaims {
-            is_debuggable: false,
-            runtime_data: Some(MaaRuntimeDataClaim {
-                data: "wrong-data".to_owned(),
-            }),
+            sgx_is_debuggable: None,
+            tdx_is_debuggable: Some(false),
+            policy_hash: Some("pinned-policy".to_owned()),
+            nonce: Some(Base64UrlUnpadded::encode_string(&report_data)),
         };
-        let report_data = [0u8; 64];
-        let result = MaaVerifier::validate_claims(&claims, &report_data);
+        let missing_nonce = MaaClaims {
+            nonce: None,
+            ..claims.clone()
+        };
         assert!(
-            matches!(result, Err(VerificationError::PolicyViolation(m)) if m.contains("mismatch"))
+            verifier
+                .validate_claims(
+                    &missing_nonce,
+                    &report_data,
+                    openhttpa_proto::QuoteType::Tdx
+                )
+                .is_err()
         );
+
+        let wrong_policy = MaaClaims {
+            policy_hash: Some("other-policy".to_owned()),
+            ..claims.clone()
+        };
+        assert!(
+            verifier
+                .validate_claims(&wrong_policy, &report_data, openhttpa_proto::QuoteType::Tdx)
+                .is_err()
+        );
+
+        let debug = MaaClaims {
+            tdx_is_debuggable: Some(true),
+            ..claims
+        };
+        assert!(
+            verifier
+                .validate_claims(&debug, &report_data, openhttpa_proto::QuoteType::Tdx)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn test_maa_endpoint_is_azure_https_only() {
+        assert!(MaaVerifier::try_new("http://127.0.0.1:8080").is_err());
+        assert!(MaaVerifier::try_new("https://attacker.example").is_err());
+        assert!(MaaVerifier::try_new("https://tenant.attest.azure.net").is_ok());
     }
 }

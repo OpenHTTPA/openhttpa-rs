@@ -172,9 +172,16 @@ impl OpenHttpaClientBuilder {
             ))
         };
 
-        let verifier: Arc<dyn QuoteVerifier> = self
-            .verifier
-            .unwrap_or_else(|| Arc::new(openhttpa_attestation::MockVerifier::default()));
+        let verifier: Arc<dyn QuoteVerifier> = self.verifier.unwrap_or_else(|| {
+            #[cfg(debug_assertions)]
+            {
+                Arc::new(openhttpa_attestation::MockVerifier::default())
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                panic!("a real quote verifier must be configured before building a release client")
+            }
+        });
 
         let transport = self.transport.unwrap_or_else(|| {
             Arc::new(openhttpa_transport::reqwest_adapter::ReqwestTransport::new())

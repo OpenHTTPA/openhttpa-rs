@@ -9,8 +9,12 @@
 //! * **Mock** — verifies SHA-384 pseudo-quotes from `openhttpa-tee::mock`.
 //! * **Intel DCAP** — calls `libsgx_dcap_quoteverify.so` via FFI (feature `dcap`).
 //! * **Azure MAA** — submits quotes to the MAA REST endpoint (feature `maa`).
-//! * **AMD SNP** — **planned** (feature `amd_snp`); `SevSnpVerifier` is not yet
-//!   implemented. The feature flag has no effect. Do not rely on it for production.
+//! * **AMD SNP** — validates versioned report/certificate bundles, pins the AMD
+//!   ARK, verifies the VCEK/VLEK chain and report signature, and enforces report
+//!   data, debug, SVN, and launch-measurement policy (feature `amd_snp`). AMD CRL
+//!   freshness remains the caller's responsibility.
+//! * **NVIDIA NRAS** — validates signed NVIDIA Remote Attestation Service results,
+//!   requiring the signed nonce and a positive RIM result (feature `nvidia_nras`).
 //! * **TPM 2.0** — [`TpmVerifier`] compiles and runs but the AIK signature
 //!   verification step (step 2) is **not yet implemented**. Only QUDD nonce
 //!   comparison is performed. **Do not use in production without completing the
@@ -38,7 +42,7 @@ pub mod ita_verifier;
 #[cfg(feature = "maa")]
 pub mod maa_verifier;
 pub mod mock_verifier;
-#[cfg(feature = "ita")]
+#[cfg(any(feature = "ita", feature = "nvidia_nras"))]
 pub mod nvidia_remote_verifier;
 pub mod nvidia_verifier;
 pub mod policy;
@@ -55,7 +59,7 @@ pub use federation::FederatedVerifier;
 #[cfg(feature = "ita")]
 pub use ita_verifier::ItaVerifier;
 pub use mock_verifier::MockVerifier;
-#[cfg(feature = "ita")]
+#[cfg(any(feature = "ita", feature = "nvidia_nras"))]
 pub use nvidia_remote_verifier::NvidiaRemoteVerifier;
 pub use nvidia_verifier::NvidiaGpuVerifier;
 pub use policy::SimplePolicy;

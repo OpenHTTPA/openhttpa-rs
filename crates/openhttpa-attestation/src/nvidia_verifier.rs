@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2026 The `OpenHTTPA` Foundation (openhttpa.org)
 
-//! NVIDIA GPU quote verifier.
+//! Debug/test verifier for synthetic NVIDIA GPU quote fixtures.
+//!
+//! Production H100 CC quotes must use [`crate::NvidiaRemoteVerifier`] or another
+//! verifier that validates NVIDIA-signed evidence and current RIM results.
 
 use openhttpa_proto::{AttestQuote, QuoteType};
 
-use crate::verifier::{EatClaims, QuoteVerifier, VerificationError, VerificationResult};
+#[cfg(all(feature = "mock", debug_assertions))]
+use crate::verifier::EatClaims;
+use crate::verifier::{QuoteVerifier, VerificationError, VerificationResult};
 
 /// Verifier for NVIDIA Hopper GPU attestation quotes.
 #[derive(Debug, Default)]
@@ -37,31 +42,34 @@ impl QuoteVerifier for NvidiaGpuVerifier {
                 ));
             }
 
-            // In a real implementation:
-            // 1. Parse the NVIDIA Rim report.
-            // 2. Validate the certificate chain against NVIDIA Root CA.
-            // 3. Verify the signature of the report.
-            // 4. Check measurements (VBIOS, etc.) against reference values.
-
-            // For the simulation:
+            // This verifier only recognizes the development fixture. Production
+            // NVIDIA quotes must use `NvidiaRemoteVerifier` or another real SDK.
             if quote
                 .raw
                 .starts_with(b"NVIDIA-HOPPER-ATTESTATION-REPORT-SIM")
             {
-                return Ok(VerificationResult {
-                    claims: EatClaims {
-                        hwmodel: Some("NVIDIA H100".to_owned()),
-                        hwversion: Some("hopper_v1".to_owned()),
-                        oemid: Some("NVIDIA".to_owned()),
-                        dbgstat: Some(0),
-                        boot_progress: Some("simulated_gpu_measurement".to_owned()),
+                #[cfg(all(feature = "mock", debug_assertions))]
+                {
+                    return Ok(VerificationResult {
+                        claims: EatClaims {
+                            hwmodel: Some("NVIDIA H100".to_owned()),
+                            hwversion: Some("hopper_v1".to_owned()),
+                            oemid: Some("NVIDIA".to_owned()),
+                            dbgstat: Some(0),
+                            boot_progress: Some("simulated_gpu_measurement".to_owned()),
+                            ..Default::default()
+                        },
+                        tcb_status: "UpToDate".to_owned(),
+                        measurement: Some("simulated_gpu_measurement".to_owned()),
+                        signer_id: Some("nvidia_mock_signer".to_owned()),
                         ..Default::default()
-                    },
-                    tcb_status: "UpToDate".to_owned(),
-                    measurement: Some("simulated_gpu_measurement".to_owned()),
-                    signer_id: Some("nvidia_prod_signer".to_owned()),
-                    ..Default::default()
-                });
+                    });
+                }
+
+                #[cfg(not(all(feature = "mock", debug_assertions)))]
+                {
+                    return Err(VerificationError::SignatureInvalid);
+                }
             }
 
             Err(VerificationError::SignatureInvalid)
@@ -73,6 +81,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[cfg(all(feature = "mock", debug_assertions))]
     async fn test_verify_simulated_gpu_report() {
         let verifier = NvidiaGpuVerifier;
         let report_data = [0xAAu8; 64];
@@ -120,5 +129,22 @@ mod tests {
 
         let result = verifier.verify(&quote, &report_data).await;
         assert!(matches!(result, Err(VerificationError::MalformedQuote(_))));
+    }
+
+    #[tokio::test]
+    #[cfg(not(debug_assertions))]
+    async fn release_rejects_simulated_gpu_report() {
+        let verifier = NvidiaGpuVerifier;
+        let report_data = [0xAAu8; 64];
+        let quote = AttestQuote {
+            quote_type: QuoteType::NvidiaGpu,
+            format: openhttpa_proto::QuoteFormat::default(),
+            raw: b"NVIDIA-HOPPER-ATTESTATION-REPORT-SIM-001".to_vec().into(),
+            qudd: report_data.to_vec().into(),
+            collateral_uris: vec![],
+        };
+
+        let result = verifier.verify(&quote, &report_data).await;
+        assert!(matches!(result, Err(VerificationError::SignatureInvalid)));
     }
 }

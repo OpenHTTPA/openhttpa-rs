@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::debug;
 
-#[cfg(feature = "ita")] // We use the same JWT/JWKS logic as ITA/MAA
+#[cfg(any(feature = "ita", feature = "nvidia_nras"))]
 use jsonwebtoken::{Algorithm, DecodingKey, Header, Validation, decode_header};
 
 use crate::verifier::{EatClaims, QuoteVerifier, VerificationError, VerificationResult};
@@ -67,6 +67,8 @@ impl NvidiaRemoteVerifier {
             endpoint: endpoint.into(),
             client: Client::builder()
                 .use_rustls_tls()
+                .timeout(Duration::from_secs(10))
+                .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .expect("failed to build reqwest client"),
             jwks_cache: Arc::new(RwLock::new(None)),
@@ -74,7 +76,7 @@ impl NvidiaRemoteVerifier {
     }
 
     /// Fetch NVIDIA's JWKS and verify the JWS signature.
-    #[cfg(feature = "ita")] // Reuse feature for JWT logic
+    #[cfg(any(feature = "ita", feature = "nvidia_nras"))]
     async fn verify_jws_signature(
         &self,
         jws: &str,
@@ -146,28 +148,64 @@ impl NvidiaRemoteVerifier {
 
         let claims = &token_data.claims;
 
-        // Verify nonce binding (report_data)
-        if let Some(nonce_claim) = claims.get("nonce").and_then(serde_json::Value::as_str) {
-            let expected_b64 = Base64::encode_string(expected_report_data);
-            if nonce_claim != expected_b64 {
-                return Err(VerificationError::PolicyViolation(
-                    "NVIDIA NRAS nonce mismatch".to_owned(),
-                ));
-            }
+        Self::validate_signed_claims(claims, expected_report_data)?;
+
+        Ok(serde_json::to_string(claims).unwrap_or_default())
+    }
+
+    fn validate_signed_claims(
+        claims: &serde_json::Value,
+        expected_report_data: &[u8; 64],
+    ) -> Result<(), VerificationError> {
+        let nonce_claim = claims
+            .get("nonce")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| {
+                VerificationError::PolicyViolation(
+                    "NVIDIA NRAS response is missing its signed nonce".to_owned(),
+                )
+            })?;
+        let expected_b64 = Base64::encode_string(expected_report_data);
+        if nonce_claim != expected_b64 {
+            return Err(VerificationError::PolicyViolation(
+                "NVIDIA NRAS nonce mismatch".to_owned(),
+            ));
         }
 
-        // Check rim_result and vcek_status
-        if let Some(rim_res) = claims
+        let rim_result = claims
             .get("rim_result")
             .and_then(serde_json::Value::as_bool)
-            && !rim_res
-        {
+            .ok_or_else(|| {
+                VerificationError::PolicyViolation(
+                    "NVIDIA NRAS response is missing its signed RIM result".to_owned(),
+                )
+            })?;
+        if !rim_result {
             return Err(VerificationError::PolicyViolation(
                 "NVIDIA GPU RIM check failed".to_owned(),
             ));
         }
 
-        Ok(serde_json::to_string(claims).unwrap_or_default())
+        Ok(())
+    }
+
+    fn validate_endpoint(&self) -> Result<(), VerificationError> {
+        let endpoint = reqwest::Url::parse(&self.endpoint).map_err(|error| {
+            VerificationError::Malformed(format!("invalid NRAS endpoint: {error}"))
+        })?;
+        if endpoint.scheme() != "https"
+            || endpoint.host_str() != Some("nras.nvidia.com")
+            || endpoint.username() != ""
+            || endpoint.password().is_some()
+            || endpoint.query().is_some()
+            || endpoint.fragment().is_some()
+            || !matches!(endpoint.path(), "/v1" | "/v1/")
+        {
+            return Err(VerificationError::PolicyViolation(
+                "NVIDIA NRAS endpoint must be https://nras.nvidia.com/v1".to_owned(),
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -184,9 +222,15 @@ impl QuoteVerifier for NvidiaRemoteVerifier {
         >,
     > {
         Box::pin(async move {
+            self.validate_endpoint()?;
             if quote.quote_type != openhttpa_proto::QuoteType::NvidiaGpu {
                 return Err(VerificationError::PolicyViolation(
                     "NvidiaRemoteVerifier only supports NvidiaGpu quotes".to_owned(),
+                ));
+            }
+            if quote.qudd.as_ref() != report_data {
+                return Err(VerificationError::PolicyViolation(
+                    "NVIDIA GPU quote QUDD mismatch".to_owned(),
                 ));
             }
 
@@ -220,14 +264,14 @@ impl QuoteVerifier for NvidiaRemoteVerifier {
                 .await
                 .map_err(|e| VerificationError::ServiceError(e.to_string()))?;
 
-            #[cfg(feature = "ita")]
+            #[cfg(any(feature = "ita", feature = "nvidia_nras"))]
             let _claims_json = self
                 .verify_jws_signature(&nras_resp.jws, report_data)
                 .await?;
 
-            #[cfg(not(feature = "ita"))]
+            #[cfg(not(any(feature = "ita", feature = "nvidia_nras")))]
             return Err(VerificationError::PolicyViolation(
-                "NVIDIA remote verification failed: 'ita' feature is disabled".to_owned(),
+                "NVIDIA remote verification requires the 'nvidia_nras' feature".to_owned(),
             ));
 
             Ok(VerificationResult {
@@ -269,5 +313,36 @@ mod tests {
         };
         let result = verifier.verify(&quote, &[0u8; 64]).await;
         assert!(matches!(result, Err(VerificationError::PolicyViolation(_))));
+    }
+
+    #[test]
+    fn nras_requires_matching_nonce_and_positive_rim_result() {
+        let expected = [0x5au8; 64];
+        let valid = serde_json::json!({
+            "nonce": Base64::encode_string(&expected),
+            "rim_result": true,
+        });
+        assert!(NvidiaRemoteVerifier::validate_signed_claims(&valid, &expected).is_ok());
+
+        let missing_nonce = serde_json::json!({"rim_result": true});
+        assert!(NvidiaRemoteVerifier::validate_signed_claims(&missing_nonce, &expected).is_err());
+
+        let missing_rim = serde_json::json!({"nonce": Base64::encode_string(&expected)});
+        assert!(NvidiaRemoteVerifier::validate_signed_claims(&missing_rim, &expected).is_err());
+
+        let failed_rim = serde_json::json!({
+            "nonce": Base64::encode_string(&expected),
+            "rim_result": false,
+        });
+        assert!(NvidiaRemoteVerifier::validate_signed_claims(&failed_rim, &expected).is_err());
+    }
+
+    #[test]
+    fn nras_endpoint_is_fixed_to_vendor_service() {
+        let verifier = NvidiaRemoteVerifier::new("https://attacker.example/v1");
+        assert!(verifier.validate_endpoint().is_err());
+
+        let verifier = NvidiaRemoteVerifier::new("https://nras.nvidia.com/v1");
+        assert!(verifier.validate_endpoint().is_ok());
     }
 }

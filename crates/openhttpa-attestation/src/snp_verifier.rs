@@ -5,58 +5,42 @@
 //!
 //! ## Verification pipeline
 //!
-//! 1. **VCEK chain fetch** — retrieve the VCEK (Versioned Chip Endorsement Key)
-//!    certificate from AMD KDS (`kdsintpk.amd.com`) using [`crate::collateral_fetcher::CollateralFetcher`].
-//! 2. **VCEK chain verify** — verify the VCEK cert chain up to the bundled AMD
-//!    ARK (AMD Root Key) static root CA.
-//! 3. **Report signature verify** — verify the SNP attestation report's
-//!    signature against the VCEK public key extracted from the cert.
-//! 4. **Report data match** — assert that `report.report_data[..64]` equals
-//!    `expected_report_data`.
-//! 5. **TCB / SVN checks** — parse `TCB_VERSION` from the report body and
-//!    enforce the [`SimplePolicy`] minimum SVN.
+//! 1. Parse the versioned bundle containing the report and firmware certificate table.
+//! 2. Verify the ARK/ASK/VEK chain and pin the ARK to an AMD trust anchor.
+//! 3. Verify the report signature with the chained VCEK/VLEK.
+//! 4. Verify report-data binding, debug policy, and the configured SVN floor.
 //!
 //! Steps 2–3 require the `amd_snp` feature to be enabled; without it every
 //! call returns [`VerificationError::PolicyViolation`].
 //!
-//! ## Note on certificate pinning
-//!
-//! The AMD ARK root CA is bundled as a static constant (`AMD_ARK_ROOT_CA_DER`)
-//! rather than fetched at runtime.  This avoids a bootstrap network dependency
-//! and prevents SSRF vectors, at the cost of requiring a code-level update to
-//! rotate the root.  AMD has committed to a stable root CA for SEV-SNP, so
-//! rotation is a rare event.
+//! The default trust anchors are the Milan, Genoa, and Turin ARKs bundled by
+//! the pinned `sev` crate. Operator-provided roots are loaded locally and are
+//! never fetched from the same untrusted source as the quote.
 
-use crate::collateral_fetcher::CollateralFetcher;
 use crate::verifier::{QuoteVerifier, VerificationError, VerificationResult};
 use openhttpa_proto::{AttestQuote, QuoteType};
+#[cfg(feature = "amd_snp")]
+use openhttpa_proto::{QuoteFormat, SevSnpCertificateType, SevSnpQuoteBundleV1};
 
 #[cfg(feature = "amd_snp")]
 use crate::verifier::EatClaims;
 #[cfg(feature = "amd_snp")]
-use aws_lc_rs::signature::{ECDSA_P384_SHA384_FIXED, UnparsedPublicKey};
-#[cfg(feature = "amd_snp")]
 use openhttpa_proto::TeeClass;
-#[cfg(feature = "amd_snp")]
-use tracing::debug;
 
 use std::path::PathBuf;
 
 /// Source of the AMD Root Key (ARK) for VCEK chain verification.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum AmdCaSource {
-    /// Use a static DER byte array bundled at compile time.
+    /// Use the AMD ARKs bundled in the pinned `sev` crate (Milan, Genoa, Turin).
+    #[default]
+    Builtin,
+    /// Use a DER- or PEM-encoded operator-pinned AMD ARK certificate.
     Static(&'static [u8]),
-    /// Load the DER cert from a file path at runtime.
+    /// Load a DER- or PEM-encoded operator-pinned AMD ARK certificate.
     File(PathBuf),
-    /// Fetch the ARK dynamically from AMD KDS (adds startup latency).
+    /// Dynamic trust-on-first-use is intentionally unsupported.
     FetchFromKDS,
-}
-
-impl Default for AmdCaSource {
-    fn default() -> Self {
-        Self::Static(&[]) // Default to an empty static placeholder
-    }
 }
 
 /// AMD SEV-SNP quote verifier.
@@ -68,11 +52,10 @@ impl Default for AmdCaSource {
 /// [`CompositeVerifier`]: crate::composite::CompositeVerifier
 /// [`FederatedVerifier`]: crate::federation::FederatedVerifier
 pub struct SevSnpVerifier {
-    /// Collateral fetcher for VCEK chain retrieval (used with `amd_snp` feature).
-    #[allow(dead_code)] // used only in `#[cfg(feature = "amd_snp")]` code
-    fetcher: CollateralFetcher,
-    /// Minimum required Security Version Number.  `None` means no minimum.
+    /// Minimum required reported microcode SVN. Verification fails if this is unset.
     pub min_svn: Option<u16>,
+    /// Golden SNP launch measurement required by the relying-party policy.
+    pub expected_measurement: Option<[u8; 48]>,
     /// If `true`, debug-mode SNP reports are accepted.  Always `false` in
     /// production — set only in CI/test builds.
     pub allow_debug: bool,
@@ -81,13 +64,30 @@ pub struct SevSnpVerifier {
 }
 
 impl SevSnpVerifier {
-    /// Create a new verifier with a default (production-safe) configuration:
-    /// no minimum SVN, debug reports rejected, and static empty CA.
+    #[cfg(feature = "amd_snp")]
+    fn check_expected_measurement(
+        &self,
+        report: &sev::firmware::guest::AttestationReport,
+    ) -> Result<(), VerificationError> {
+        let expected_measurement = self.expected_measurement.ok_or_else(|| {
+            VerificationError::PolicyViolation(
+                "expected SNP launch measurement must be configured".to_owned(),
+            )
+        })?;
+        if report.measurement != expected_measurement {
+            return Err(VerificationError::PolicyViolation(
+                "SNP launch measurement does not match the pinned value".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Create a verifier using bundled AMD roots, with debug reports rejected.
     #[must_use]
     pub fn new() -> Self {
         Self {
-            fetcher: CollateralFetcher::new(),
             min_svn: None,
+            expected_measurement: None,
             allow_debug: false,
             ca_source: AmdCaSource::default(),
         }
@@ -104,6 +104,13 @@ impl SevSnpVerifier {
     #[must_use]
     pub const fn with_min_svn(mut self, min_svn: u16) -> Self {
         self.min_svn = Some(min_svn);
+        self
+    }
+
+    /// Pin the expected 48-byte SNP launch measurement.
+    #[must_use]
+    pub const fn with_expected_measurement(mut self, measurement: [u8; 48]) -> Self {
+        self.expected_measurement = Some(measurement);
         self
     }
 
@@ -144,9 +151,12 @@ impl std::fmt::Debug for SevSnpVerifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SevSnpVerifier")
             .field("min_svn", &self.min_svn)
+            .field(
+                "expected_measurement",
+                &self.expected_measurement.map(hex::encode),
+            )
             .field("allow_debug", &self.allow_debug)
             .field("ca_source", &self.ca_source)
-            .field("fetcher", &"CollateralFetcher")
             .finish()
     }
 }
@@ -176,7 +186,7 @@ impl QuoteVerifier for SevSnpVerifier {
 
             #[cfg(feature = "amd_snp")]
             {
-                self.verify_snp_report(quote, report_data).await
+                self.verify_snp_report(quote, report_data)
             }
 
             #[cfg(not(feature = "amd_snp"))]
@@ -199,18 +209,42 @@ impl QuoteVerifier for SevSnpVerifier {
 #[cfg(feature = "amd_snp")]
 impl SevSnpVerifier {
     /// Full SEV-SNP report verification (steps 1–5).
-    async fn verify_snp_report(
+    fn verify_snp_report(
         &self,
         quote: &AttestQuote,
         report_data: &[u8; 64],
     ) -> Result<VerificationResult, VerificationError> {
+        use sev::certs::snp::{Chain, Verifiable};
         use sev::firmware::guest::AttestationReport;
+        use sev::firmware::host::{CertTableEntry, CertType};
+        use sev::parser::ByteParser;
+
+        if quote.qudd.as_ref() != report_data {
+            return Err(VerificationError::PolicyViolation(
+                "SEV-SNP quote QUDD mismatch".to_owned(),
+            ));
+        }
+        if quote.format != QuoteFormat::SevSnpBundleV1 || !quote.collateral_uris.is_empty() {
+            return Err(VerificationError::MalformedQuote(
+                "SEV-SNP quotes must use the certificate-bearing sev_snp_bundle_v1 format"
+                    .to_owned(),
+            ));
+        }
+
+        let bundle: SevSnpQuoteBundleV1 = serde_json::from_slice(&quote.raw).map_err(|error| {
+            VerificationError::MalformedQuote(format!("invalid SNP bundle: {error}"))
+        })?;
+        if bundle.certificate_table.is_empty() {
+            return Err(VerificationError::MalformedQuote(
+                "SEV-SNP bundle is missing its certificate table".to_owned(),
+            ));
+        }
 
         // ── Step 1: Parse raw report bytes ────────────────────────────────
-        let report_bytes = quote.raw.as_ref();
-        if report_bytes.len() < std::mem::size_of::<AttestationReport>() {
+        let report_bytes = bundle.report.as_slice();
+        if report_bytes.len() != std::mem::size_of::<AttestationReport>() {
             return Err(VerificationError::MalformedQuote(format!(
-                "SNP report too short: {} bytes (expected >= {})",
+                "SNP report has invalid length: {} bytes (expected {})",
                 report_bytes.len(),
                 std::mem::size_of::<AttestationReport>()
             )));
@@ -220,20 +254,9 @@ impl SevSnpVerifier {
         // `report_bytes` is `&[u8]` (1-byte aligned) but `AttestationReport`
         // may require higher alignment.  Copy into a properly aligned buffer
         // to avoid undefined behavior from misaligned pointer dereference.
-        let report: AttestationReport = {
-            let mut buf = std::mem::MaybeUninit::<AttestationReport>::zeroed();
-            // SAFETY: `buf` is a MaybeUninit of the correct size; we copy
-            // exactly `size_of::<AttestationReport>()` bytes (validated above)
-            // from the source buffer into the MaybeUninit, then assume_init.
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    report_bytes.as_ptr(),
-                    buf.as_mut_ptr().cast::<u8>(),
-                    std::mem::size_of::<AttestationReport>(),
-                );
-                buf.assume_init()
-            }
-        };
+        let report = AttestationReport::from_bytes(report_bytes).map_err(|error| {
+            VerificationError::MalformedQuote(format!("invalid SNP report: {error}"))
+        })?;
 
         // ── Step 2: Report data (nonce) binding ───────────────────────────
         // The SNP report embeds the caller-supplied `report_data` (64 bytes)
@@ -247,6 +270,8 @@ impl SevSnpVerifier {
             ));
         }
 
+        self.check_expected_measurement(&report)?;
+
         // ── Step 3: Debug status check ─────────────────────────────────────
         // H-02: Parse the actual debug flag from `guest_policy`.
         // Per AMD SEV-SNP Firmware ABI Specification §7.3, bit 19 of
@@ -254,52 +279,63 @@ impl SevSnpVerifier {
         // in debug mode and its memory is accessible to the hypervisor.
         // Previous code incorrectly checked `signing_key` (VCEK vs VLEK),
         // which is unrelated to debug status.
-        const SNP_GUEST_POLICY_DEBUG_BIT: u64 = 1 << 19;
-        let is_debug = (report.policy & SNP_GUEST_POLICY_DEBUG_BIT) != 0;
+        let is_debug = report.policy.debug_allowed();
         if is_debug && !self.allow_debug {
             return Err(VerificationError::PolicyViolation(
                 "SNP report: debug-mode reports are not accepted in production".to_owned(),
             ));
         }
 
-        // ── Step 4: Fetch VCEK collateral (if URI present) ─────────────────
-        if let Some(vcek_uri) = quote.collateral_uris.first() {
-            debug!(uri = %vcek_uri, "fetching AMD VCEK chain");
-            let _vcek_chain = self
-                .fetcher
-                .fetch(vcek_uri)
-                .await
-                .map_err(|e| VerificationError::NetworkError(e.to_string()))?;
+        // The hardware certificate table is untrusted input. Build and verify its
+        // full chain, then pin its ARK to an AMD root or operator-provided root.
+        let certificate_entries = bundle
+            .certificate_table
+            .into_iter()
+            .filter_map(|entry| {
+                let cert_type = match entry.certificate_type {
+                    SevSnpCertificateType::Ark => CertType::ARK,
+                    SevSnpCertificateType::Ask => CertType::ASK,
+                    SevSnpCertificateType::Vcek => CertType::VCEK,
+                    SevSnpCertificateType::Vlek => CertType::VLEK,
+                    SevSnpCertificateType::Crl | SevSnpCertificateType::Other(_) => return None,
+                };
+                Some(CertTableEntry::new(cert_type, entry.der))
+            })
+            .collect::<Vec<_>>();
+        let chain = Chain::from_cert_table_der(certificate_entries).map_err(|error| {
+            VerificationError::MalformedQuote(format!("invalid AMD certificate table: {error}"))
+        })?;
 
-            // ── Step 5: VCEK signature verification ────────────────────────
-            // Parse VCEK cert and verify report signature
-            let vcek_pub_key_bytes = &_vcek_chain[..]; // Simplified for now
-            let public_key = UnparsedPublicKey::new(&ECDSA_P384_SHA384_FIXED, vcek_pub_key_bytes);
-
-            // Assume the signature is at the end of the report
-            let signature = &report.signature;
-
-            let mut message = Vec::new();
-            message.extend_from_slice(report_bytes);
-
-            if let Err(e) = public_key.verify(&message, signature) {
-                tracing::warn!(
-                    "SEV-SNP VCEK signature verification failed: {}. Continuing in mock mode.",
-                    e
-                );
-            }
+        let report_ark_der = chain
+            .ca
+            .ark
+            .to_der()
+            .map_err(|error| VerificationError::MalformedQuote(error.to_string()))?;
+        let trusted_arks = self.trusted_ark_der()?;
+        if !trusted_arks
+            .iter()
+            .any(|trusted_ark| trusted_ark == &report_ark_der)
+        {
+            return Err(VerificationError::PolicyViolation(
+                "SEV-SNP certificate chain does not terminate at a trusted AMD ARK".to_owned(),
+            ));
         }
 
+        (&chain, &report)
+            .verify()
+            .map_err(|_error| VerificationError::SignatureInvalid)?;
+
         // ── Step 6: TCB / SVN enforcement ─────────────────────────────────
-        // Parse boot_svn from the SNP report's platform_info / reported_tcb.
-        // For now extract the lowest byte of reported_tcb as an approximate SVN.
         let svn = u16::from(report.reported_tcb.microcode);
-        if let Some(min_svn) = self.min_svn {
-            if svn < min_svn {
-                return Err(VerificationError::PolicyViolation(format!(
-                    "SNP reported_tcb.microcode SVN {svn} is below minimum {min_svn}"
-                )));
-            }
+        let min_svn = self.min_svn.ok_or_else(|| {
+            VerificationError::PolicyViolation(
+                "minimum SNP microcode SVN must be configured".to_owned(),
+            )
+        })?;
+        if svn < min_svn {
+            return Err(VerificationError::PolicyViolation(format!(
+                "SNP reported_tcb.microcode SVN {svn} is below minimum {min_svn}"
+            )));
         }
 
         // ── Step 7: Build normalised EatClaims ────────────────────────────
@@ -323,6 +359,55 @@ impl SevSnpVerifier {
             eat_token: None,
         })
     }
+
+    fn trusted_ark_der(&self) -> Result<Vec<Vec<u8>>, VerificationError> {
+        match &self.ca_source {
+            AmdCaSource::Builtin => [
+                sev::certs::snp::builtin::milan::ark(),
+                sev::certs::snp::builtin::genoa::ark(),
+                sev::certs::snp::builtin::turin::ark(),
+            ]
+            .into_iter()
+            .map(|certificate| {
+                certificate
+                    .and_then(|certificate| certificate.to_der())
+                    .map_err(|error| VerificationError::PolicyViolation(format!("invalid bundled AMD ARK: {error}")))
+            })
+            .collect(),
+            AmdCaSource::Static(der_or_pem) => {
+                let certificate = parse_amd_certificate(der_or_pem)?;
+                Ok(vec![certificate
+                    .to_der()
+                    .map_err(|error| VerificationError::PolicyViolation(error.to_string()))?])
+            }
+            AmdCaSource::File(path) => {
+                let bytes = std::fs::read(path).map_err(|error| {
+                    VerificationError::PolicyViolation(format!("cannot read pinned AMD ARK: {error}"))
+                })?;
+                let certificate = parse_amd_certificate(&bytes)?;
+                Ok(vec![certificate
+                    .to_der()
+                    .map_err(|error| VerificationError::PolicyViolation(error.to_string()))?])
+            }
+            AmdCaSource::FetchFromKDS => Err(VerificationError::PolicyViolation(
+                "fetching an AMD root certificate at verification time is not a trust anchor; configure a pinned ARK".to_owned(),
+            )),
+        }
+    }
+}
+
+#[cfg(feature = "amd_snp")]
+fn parse_amd_certificate(
+    der_or_pem: &[u8],
+) -> Result<sev::certs::snp::Certificate, VerificationError> {
+    use sev::certs::snp::Certificate;
+
+    if der_or_pem.starts_with(b"-----BEGIN CERTIFICATE-----") {
+        Certificate::from_pem(der_or_pem)
+    } else {
+        Certificate::from_der(der_or_pem)
+    }
+    .map_err(|error| VerificationError::PolicyViolation(format!("invalid pinned AMD ARK: {error}")))
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -332,6 +417,7 @@ mod tests {
     use super::*;
     use bytes::Bytes;
 
+    #[cfg(not(feature = "amd_snp"))]
     fn snp_quote(raw: &'static [u8]) -> AttestQuote {
         AttestQuote {
             quote_type: QuoteType::SevSnp,
@@ -360,6 +446,68 @@ mod tests {
                 .to_string()
                 .contains("unexpected quote type")
         );
+    }
+
+    #[tokio::test]
+    #[cfg(feature = "amd_snp")]
+    async fn rejects_raw_snp_report_without_certificate_bundle() {
+        let verifier = SevSnpVerifier::new().with_min_svn(0);
+        let quote = AttestQuote {
+            quote_type: QuoteType::SevSnp,
+            format: QuoteFormat::Raw,
+            raw: Bytes::from_static(b"raw-report-without-certificates"),
+            qudd: Bytes::from_static(&[0u8; 64]),
+            collateral_uris: vec![],
+        };
+
+        let result = verifier.verify(&quote, &[0u8; 64]).await;
+        assert!(matches!(result, Err(VerificationError::MalformedQuote(_))));
+    }
+
+    #[tokio::test]
+    #[cfg(feature = "amd_snp")]
+    async fn rejects_snp_bundle_without_certificate_table() {
+        let verifier = SevSnpVerifier::new().with_min_svn(0);
+        let bundle = SevSnpQuoteBundleV1 {
+            report: vec![],
+            certificate_table: vec![],
+        };
+        let quote = AttestQuote {
+            quote_type: QuoteType::SevSnp,
+            format: QuoteFormat::SevSnpBundleV1,
+            raw: Bytes::from(serde_json::to_vec(&bundle).unwrap()),
+            qudd: Bytes::from_static(&[0u8; 64]),
+            collateral_uris: vec![],
+        };
+
+        let result = verifier.verify(&quote, &[0u8; 64]).await;
+        assert!(matches!(result, Err(VerificationError::MalformedQuote(_))));
+    }
+
+    #[test]
+    #[cfg(feature = "amd_snp")]
+    fn bundled_amd_trust_anchors_are_available() {
+        let roots = SevSnpVerifier::new().trusted_ark_der().unwrap();
+        assert!(roots.len() >= 3);
+        assert!(roots.iter().all(|root| !root.is_empty()));
+    }
+
+    #[test]
+    #[cfg(feature = "amd_snp")]
+    fn expected_measurement_must_be_configured_and_match() {
+        use sev::firmware::guest::AttestationReport;
+
+        let verifier = SevSnpVerifier::new();
+        let mut report = AttestationReport::default();
+        assert!(verifier.check_expected_measurement(&report).is_err());
+
+        let expected = [0x5au8; 48];
+        report.measurement = expected;
+        let verifier = verifier.with_expected_measurement(expected);
+        assert!(verifier.check_expected_measurement(&report).is_ok());
+
+        let verifier = verifier.with_expected_measurement([0xa5u8; 48]);
+        assert!(verifier.check_expected_measurement(&report).is_err());
     }
 
     #[tokio::test]

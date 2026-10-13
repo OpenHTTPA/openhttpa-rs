@@ -9,7 +9,9 @@
 //! specific PCR values or GPU runtime immutable measurements).
 
 use bytes::Bytes;
-use openhttpa_proto::{AttestQuote, QuoteType};
+use openhttpa_proto::{
+    AttestQuote, QuoteFormat, QuoteType, SevSnpCertificate, SevSnpQuoteBundleV1,
+};
 use serde::{Deserialize, Serialize};
 
 /// Detailed attestation evidence for Intel TDX (Trust Domain Extensions).
@@ -26,6 +28,8 @@ pub struct TdxEvidence {
 pub struct SevSnpEvidence {
     /// The SNP Attestation Report signed by the AMD PSP (Platform Security Processor).
     pub report: Bytes,
+    /// Certificate-table entries returned by `SNP_GET_EXT_REPORT`.
+    pub certificate_table: Vec<SevSnpCertificate>,
     /// URI pointing to the AMD VCEK (Versioned Chip Endorsement Key) chain.
     pub vcek_cert_uri: Option<String>,
 }
@@ -94,13 +98,20 @@ impl AttestationEvidence {
                 qudd,
                 collateral_uris: e.pck_cert_uri.clone().into_iter().collect(),
             },
-            Self::SevSnp(e) => AttestQuote {
-                quote_type: QuoteType::SevSnp,
-                format: openhttpa_proto::QuoteFormat::default(),
-                raw: e.report.clone(),
-                qudd,
-                collateral_uris: e.vcek_cert_uri.clone().into_iter().collect(),
-            },
+            Self::SevSnp(e) => {
+                let bundle = SevSnpQuoteBundleV1 {
+                    report: e.report.to_vec(),
+                    certificate_table: e.certificate_table.clone(),
+                };
+                let raw = serde_json::to_vec(&bundle).unwrap_or_default();
+                AttestQuote {
+                    quote_type: QuoteType::SevSnp,
+                    format: QuoteFormat::SevSnpBundleV1,
+                    raw: Bytes::from(raw),
+                    qudd,
+                    collateral_uris: vec![],
+                }
+            }
             Self::Tpm(e) => AttestQuote {
                 quote_type: QuoteType::Tpm,
                 format: openhttpa_proto::QuoteFormat::default(),
@@ -254,6 +265,7 @@ mod tests {
 
         let snp = AttestationEvidence::SevSnp(SevSnpEvidence {
             report: Bytes::new(),
+            certificate_table: vec![],
             vcek_cert_uri: None,
         });
         let claims = snp.to_eat_claims();

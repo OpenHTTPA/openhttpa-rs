@@ -29,6 +29,7 @@
 
 pub mod collateral;
 pub mod evidence;
+pub mod maa_runtime_data;
 pub mod provider;
 pub mod telemetry;
 
