@@ -485,9 +485,13 @@ impl OpenHttpaClient {
                 sha2::Digest::update(&mut hasher, transcript_hash);
                 report_data.copy_from_slice(&hasher.finalize());
 
+                // QUDD is not serialized in the response header. Reconstruct it
+                // from the locally computed transcript instead of trusting wire metadata.
+                let mut bound_quote = quote.clone();
+                bound_quote.qudd = bytes::Bytes::copy_from_slice(&report_data);
                 let res = self
                     .verifier
-                    .verify(quote, &report_data)
+                    .verify(&bound_quote, &report_data)
                     .await
                     .map_err(|e| ClientError::Attestation(e.to_string()))?;
 
@@ -1174,5 +1178,65 @@ mod tests {
             .build();
         let session = client.attest_handshake().await.unwrap();
         assert!(session.is_alive());
+    }
+
+    struct QuddCheckingVerifier;
+    impl openhttpa_attestation::QuoteVerifier for QuddCheckingVerifier {
+        fn verify<'a>(
+            &'a self,
+            quote: &'a openhttpa_proto::AttestQuote,
+            report_data: &'a [u8; 64],
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<
+                            openhttpa_proto::VerificationResult,
+                            openhttpa_attestation::verifier::VerificationError,
+                        >,
+                    > + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async move {
+                assert_eq!(quote.qudd.as_ref(), report_data);
+                Ok(openhttpa_proto::VerificationResult::default())
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn server_quote_qudd_is_reconstructed_from_transcript() {
+        let client = OpenHttpaClient::builder()
+            .server_uri("http://127.0.0.1:8080".parse().unwrap())
+            .verifier(Arc::new(QuddCheckingVerifier))
+            .strict_attestation(true)
+            .build();
+        let response = openhttpa_headers::attest_headers::AtHsResponseHeaders {
+            cipher_suite: openhttpa_proto::CipherSuite::X25519MlKem768Aes256GcmSha384,
+            random: vec![0u8; 32],
+            key_share_json: vec![],
+            base_id: openhttpa_proto::AtbId::new(),
+            version: openhttpa_proto::ProtocolVersion::V2,
+            expires_secs: 3600,
+            quotes: vec![openhttpa_proto::AttestQuote {
+                quote_type: openhttpa_proto::QuoteType::SevSnp,
+                format: openhttpa_proto::QuoteFormat::SevSnpBundleV1,
+                raw: bytes::Bytes::new(),
+                qudd: bytes::Bytes::new(),
+                collateral_uris: vec![],
+            }],
+            secrets: vec![],
+            cargo: None,
+            ticket_resumption: None,
+            server_signatures: vec![],
+            zk_proof: None,
+        };
+
+        assert!(
+            client
+                .verify_server_quotes(&response, &[0x42; 48])
+                .await
+                .is_ok()
+        );
     }
 }
