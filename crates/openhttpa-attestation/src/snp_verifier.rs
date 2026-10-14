@@ -271,11 +271,12 @@ impl SevSnpVerifier {
 
         // ── Step 1: Parse raw report bytes ────────────────────────────────
         let report_bytes = bundle.report.as_slice();
-        if report_bytes.len() != std::mem::size_of::<AttestationReport>() {
+        // The wire format is 1184 bytes; `size_of` of the in-memory struct differs.
+        let expected_len = <AttestationReport as ByteParser<()>>::EXPECTED_LEN.unwrap_or(1184);
+        if report_bytes.len() != expected_len {
             return Err(VerificationError::MalformedQuote(format!(
-                "SNP report has invalid length: {} bytes (expected {})",
+                "SNP report has invalid length: {} bytes (expected {expected_len})",
                 report_bytes.len(),
-                std::mem::size_of::<AttestationReport>()
             )));
         }
 
