@@ -40,8 +40,14 @@ impl TeeAdapter for SevSnpTeeProvider {
             use sev::firmware::guest::Firmware;
             use sev::firmware::host::CertType;
 
-            let mut fw =
-                Firmware::open().map_err(|e| TeeProviderError::NotAvailable(format!("{e:?}")))?;
+            let mut fw = match Firmware::open() {
+                Ok(fw) => fw,
+                #[cfg(feature = "azure_vtpm")]
+                Err(_) if std::path::Path::new("/dev/tpmrm0").exists() => {
+                    return crate::azure_vtpm::generate_evidence(&request.report_data);
+                }
+                Err(e) => return Err(TeeProviderError::NotAvailable(format!("{e:?}"))),
+            };
 
             let mut user_data = [0u8; 64];
             user_data.copy_from_slice(&request.report_data);
@@ -77,6 +83,7 @@ impl TeeAdapter for SevSnpTeeProvider {
                 report: Bytes::from(report_bytes),
                 certificate_table,
                 vcek_cert_uri: None,
+                hcl_runtime_data: None,
             }))
         }
 
@@ -90,7 +97,8 @@ impl TeeAdapter for SevSnpTeeProvider {
 
     fn is_available(&self) -> bool {
         #[cfg(all(feature = "sev_snp", target_os = "linux"))]
-        let res = sev::firmware::guest::Firmware::open().is_ok();
+        let res = sev::firmware::guest::Firmware::open().is_ok()
+            || (cfg!(feature = "azure_vtpm") && std::path::Path::new("/dev/tpmrm0").exists());
 
         #[cfg(not(all(feature = "sev_snp", target_os = "linux")))]
         let res = false;

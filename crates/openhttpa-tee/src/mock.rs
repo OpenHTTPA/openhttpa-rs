@@ -243,6 +243,7 @@ impl TeeAdapter for MockTeeProvider {
                     report: Bytes::from(hash.to_vec()),
                     certificate_table: vec![],
                     vcek_cert_uri: Some("https://mock.attestation/amd/snp/vcek".to_owned()),
+                    hcl_runtime_data: None,
                 },
             )),
             QuoteType::Tpm => Ok(AttestationEvidence::Tpm(crate::evidence::TpmEvidence {

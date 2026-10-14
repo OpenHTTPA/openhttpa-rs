@@ -29,6 +29,35 @@ use openhttpa_proto::TeeClass;
 
 use std::path::PathBuf;
 
+/// Azure paravisor binding: the report holds `SHA256(runtime claims)` and the claims hold the nonce.
+#[cfg(feature = "amd_snp")]
+fn verify_azure_hcl_binding(
+    embedded: &[u8; 64],
+    runtime_data: &[u8],
+    expected: &[u8; 64],
+) -> Result<(), VerificationError> {
+    use sha2::{Digest, Sha256};
+
+    let violation = |m: &str| VerificationError::PolicyViolation(m.to_owned());
+    if Sha256::digest(runtime_data).as_slice() != &embedded[..32] {
+        return Err(violation(
+            "Azure HCL runtime data does not match SNP report_data",
+        ));
+    }
+    let claims: serde_json::Value = serde_json::from_slice(runtime_data)
+        .map_err(|e| VerificationError::MalformedQuote(format!("invalid HCL runtime data: {e}")))?;
+    let user_data = claims
+        .get("user-data")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| violation("Azure HCL runtime data is missing user-data"))?;
+    if !user_data.eq_ignore_ascii_case(&hex::encode(expected)) {
+        return Err(violation(
+            "Azure HCL user-data does not match the expected report_data",
+        ));
+    }
+    Ok(())
+}
+
 /// Source of the AMD Root Key (ARK) for VCEK chain verification.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum AmdCaSource {
@@ -262,8 +291,9 @@ impl SevSnpVerifier {
         // The SNP report embeds the caller-supplied `report_data` (64 bytes)
         // in `report.report_data`.  Verify that it matches our expected value
         // to prevent cross-session replay.
-        let embedded = report.report_data;
-        if embedded != *report_data {
+        if let Some(runtime_data) = &bundle.hcl_runtime_data {
+            verify_azure_hcl_binding(&report.report_data, runtime_data, report_data)?;
+        } else if report.report_data != *report_data {
             return Err(VerificationError::PolicyViolation(
                 "SNP report_data mismatch: the embedded nonce does not match the expected value"
                     .to_owned(),
@@ -471,6 +501,7 @@ mod tests {
         let bundle = SevSnpQuoteBundleV1 {
             report: vec![],
             certificate_table: vec![],
+            hcl_runtime_data: None,
         };
         let quote = AttestQuote {
             quote_type: QuoteType::SevSnp,

@@ -448,6 +448,9 @@ pub struct SevSnpQuoteBundleV1 {
     pub report: Vec<u8>,
     /// Certificate table returned with the extended report.
     pub certificate_table: Vec<SevSnpCertificate>,
+    /// Azure HCL runtime-claims JSON. When set, `report_data` is bound via its SHA-256.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hcl_runtime_data: Option<Vec<u8>>,
 }
 
 /// An opaque attestation quote produced by a TEE's quoting service.

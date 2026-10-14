@@ -32,6 +32,8 @@ pub struct SevSnpEvidence {
     pub certificate_table: Vec<SevSnpCertificate>,
     /// URI pointing to the AMD VCEK (Versioned Chip Endorsement Key) chain.
     pub vcek_cert_uri: Option<String>,
+    /// Azure HCL runtime-claims JSON; present only when the report came from the Azure vTPM.
+    pub hcl_runtime_data: Option<Bytes>,
 }
 
 /// Detailed attestation evidence for TPM 2.0 (Trusted Platform Module).
@@ -102,6 +104,7 @@ impl AttestationEvidence {
                 let bundle = SevSnpQuoteBundleV1 {
                     report: e.report.to_vec(),
                     certificate_table: e.certificate_table.clone(),
+                    hcl_runtime_data: e.hcl_runtime_data.as_ref().map(|d| d.to_vec()),
                 };
                 let raw = serde_json::to_vec(&bundle).unwrap_or_default();
                 AttestQuote {
@@ -267,6 +270,7 @@ mod tests {
             report: Bytes::new(),
             certificate_table: vec![],
             vcek_cert_uri: None,
+            hcl_runtime_data: None,
         });
         let claims = snp.to_eat_claims();
         assert_eq!(claims.tee_class, Some(TeeClass::AmdSevSnp));
