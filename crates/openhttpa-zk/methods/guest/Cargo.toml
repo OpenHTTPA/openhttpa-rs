@@ -22,7 +22,7 @@ serde = { version = "1", default-features = false, features = ["derive"] }
 # Precompiled/accelerated crypto for the guest
 sha2 = { version = "0.11", default-features = false }
 k256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
-p256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
+p256 = { version = "0.14", default-features = false, features = ["ecdsa"] }
 x509-cert = { version = "0.2", default-features = false }
 der = { version = "0.8", default-features = false, features = ["alloc"] }
 serde-big-array = { version = "0.5", default-features = false }
