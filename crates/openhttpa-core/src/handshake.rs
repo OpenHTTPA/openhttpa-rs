@@ -186,6 +186,9 @@ pub struct AtHsExecutor {
     allow_debug: bool,
     policy_engine: Option<Arc<dyn PolicyEngine>>,
     revocation_provider: Option<Arc<dyn RevocationProvider>>,
+    /// Exact set of client quote types that must be presented (each exactly
+    /// once). Empty means client attestation is optional.
+    required_client_quote_types: Vec<openhttpa_proto::QuoteType>,
     #[cfg(feature = "zk")]
     zk_config: Option<openhttpa_zk::ZkConfig>,
 }
@@ -261,9 +264,73 @@ impl AtHsExecutor {
             allow_debug,
             policy_engine,
             revocation_provider,
+            required_client_quote_types: Vec::new(),
             #[cfg(feature = "zk")]
             zk_config: None,
         }
+    }
+
+    /// Require the client to present exactly these quote types, each once.
+    ///
+    /// With a non-empty requirement the handshake fails closed with
+    /// [`HandshakeError::AttestationRequired`] when the client sends no quotes,
+    /// and with [`HandshakeError::Attestation`] when a required type is
+    /// missing, a type is duplicated, or an unexpected type is present. The
+    /// check runs **before** any quote is verified, so a verifier is never
+    /// asked to appraise an incomplete bundle. Duplicates in `types` are
+    /// collapsed.
+    #[must_use]
+    pub fn with_required_client_quote_types(
+        mut self,
+        types: impl IntoIterator<Item = openhttpa_proto::QuoteType>,
+    ) -> Self {
+        let mut required: Vec<_> = types.into_iter().collect();
+        required.sort_by_key(|t| format!("{t:?}"));
+        required.dedup();
+        self.required_client_quote_types = required;
+        self
+    }
+
+    /// The configured client quote-type requirement (empty = optional).
+    #[must_use]
+    pub fn required_client_quote_types(&self) -> &[openhttpa_proto::QuoteType] {
+        &self.required_client_quote_types
+    }
+
+    /// Enforce [`Self::with_required_client_quote_types`] on a submitted bundle.
+    fn check_required_client_quote_types(
+        &self,
+        quotes: &[AttestQuote],
+    ) -> Result<(), HandshakeError> {
+        let required = &self.required_client_quote_types;
+        if required.is_empty() {
+            return Ok(());
+        }
+        if quotes.is_empty() {
+            return Err(HandshakeError::AttestationRequired);
+        }
+        let mut seen = Vec::with_capacity(quotes.len());
+        for quote in quotes {
+            if !required.contains(&quote.quote_type) {
+                return Err(HandshakeError::Attestation(format!(
+                    "unexpected client quote type {:?}",
+                    quote.quote_type
+                )));
+            }
+            if seen.contains(&quote.quote_type) {
+                return Err(HandshakeError::Attestation(format!(
+                    "duplicate client quote type {:?}",
+                    quote.quote_type
+                )));
+            }
+            seen.push(quote.quote_type.clone());
+        }
+        if let Some(missing) = required.iter().find(|t| !seen.contains(t)) {
+            return Err(HandshakeError::Attestation(format!(
+                "missing required client quote type {missing:?}"
+            )));
+        }
+        Ok(())
     }
 
     /// Enable ZK-proving for this executor.
@@ -304,7 +371,8 @@ impl AtHsExecutor {
     ///
     /// # Edge Cases
     /// - **No Client Quotes Provided**: If `req.client_quotes` is empty, verification is skipped unless
-    ///   the protocol mandates mutual attestation at the transport layer.
+    ///   [`Self::with_required_client_quote_types`] is set, in which case the handshake fails with
+    ///   [`HandshakeError::AttestationRequired`].
     /// - **Strict Attestation Enabled without Provider**: If `strict_attestation` is true but no
     ///   `TeeProvider` is available on the server, the handshake aborts early.
     /// - **Unsupported Cipher Suites**: The client provides strong suites, but the server only supports
@@ -558,6 +626,9 @@ impl AtHsExecutor {
         verifier: Option<&dyn QuoteVerifier>,
     ) -> Result<Option<openhttpa_proto::VerificationResult>, HandshakeError> {
         let mut composite_result: Option<openhttpa_proto::VerificationResult> = None;
+        // Fail closed on an empty or incomplete bundle when a quote-type
+        // policy is configured (before any verifier runs).
+        self.check_required_client_quote_types(req.client_quotes)?;
         // Early-exit when no quotes were submitted.
         if req.client_quotes.is_empty() {
             return Ok(None);
@@ -915,6 +986,79 @@ mod tests {
             matches!(result, Err(HandshakeError::AttestationRequired)),
             "expected AttestationRequired when quotes submitted but no verifier provided"
         );
+    }
+
+    fn mock_quote(quote_type: openhttpa_proto::QuoteType) -> AttestQuote {
+        AttestQuote {
+            quote_type,
+            format: openhttpa_proto::QuoteFormat::Raw,
+            raw: bytes::Bytes::from_static(b"q"),
+            qudd: bytes::Bytes::new(),
+            collateral_uris: vec![],
+        }
+    }
+
+    async fn run_with_quotes(
+        executor: &AtHsExecutor,
+        quotes: &[AttestQuote],
+    ) -> Result<(), HandshakeError> {
+        use openhttpa_attestation::MockVerifier;
+        let (client_share, client_random, client_challenge) = setup_client();
+        let verifier = MockVerifier::default();
+        executor
+            .execute_server(
+                &AtHsRequest {
+                    client_suites: &[CipherSuite::X25519MlKem768Aes256GcmSha384],
+                    client_versions: &[ProtocolVersion::V2],
+                    client_random: &client_random,
+                    client_challenge: &client_challenge,
+                    client_share: &client_share,
+                    client_quotes: quotes,
+                    atb_ttl_secs: 3600,
+                    provenance: None,
+                },
+                None,
+                Some(&verifier),
+                None,
+            )
+            .await
+            .map(|_| ())
+    }
+
+    /// Mutual-attestation policy: omission, duplicates, wrong and missing
+    /// types are all denied before any verifier runs.
+    #[tokio::test]
+    async fn required_client_quote_types_fail_closed() {
+        use openhttpa_proto::QuoteType;
+        let executor = AtHsExecutor::new(vec![], vec![])
+            .with_required_client_quote_types([QuoteType::SevSnp, QuoteType::NvidiaGpu]);
+        assert_eq!(executor.required_client_quote_types().len(), 2);
+
+        assert!(matches!(
+            run_with_quotes(&executor, &[]).await,
+            Err(HandshakeError::AttestationRequired)
+        ));
+        let missing = run_with_quotes(&executor, &[mock_quote(QuoteType::SevSnp)]).await;
+        assert!(matches!(missing, Err(HandshakeError::Attestation(m)) if m.contains("missing")));
+        let dup = run_with_quotes(
+            &executor,
+            &[mock_quote(QuoteType::SevSnp), mock_quote(QuoteType::SevSnp)],
+        )
+        .await;
+        assert!(matches!(dup, Err(HandshakeError::Attestation(m)) if m.contains("duplicate")));
+        let wrong = run_with_quotes(
+            &executor,
+            &[mock_quote(QuoteType::SevSnp), mock_quote(QuoteType::Tdx)],
+        )
+        .await;
+        assert!(matches!(wrong, Err(HandshakeError::Attestation(m)) if m.contains("unexpected")));
+    }
+
+    #[tokio::test]
+    async fn required_client_quote_types_unset_keeps_attestation_optional() {
+        let executor = AtHsExecutor::new(vec![], vec![]);
+        assert_eq!(executor.required_client_quote_types().len(), 0);
+        run_with_quotes(&executor, &[]).await.unwrap();
     }
 
     #[tokio::test]

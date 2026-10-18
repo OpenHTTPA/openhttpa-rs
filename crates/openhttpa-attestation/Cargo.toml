@@ -20,6 +20,8 @@ maa       = ["jsonwebtoken"] # Azure MAA REST API
 ita       = ["jsonwebtoken"] # Intel Trust Authority REST API
 amd_snp   = ["sev", "sev/crypto_nossl"] # AMD SEV-SNP VCEK chain verification
 nvidia_nras = ["jsonwebtoken"] # NVIDIA Remote Attestation Service
+# Intel TDX first-party DCAP verification (pure Rust, Intel PCS collateral, pinned Intel root).
+tdx_dcap  = ["dep:dcap-qvl"]
 
 
 [dependencies]
@@ -49,6 +51,8 @@ hex          = "0.4"
 
 zeroize      = { workspace = true }
 # AMD SEV-SNP (M4) — same version pinned in openhttpa-tee
+# Intel DCAP quote verification library (pure Rust).
+dcap-qvl     = { version = "0.7", optional = true }
 sev          = { version = "8.0.0", optional = true, default-features = false, features = ["snp", "crypto_nossl"] }
 
 [dev-dependencies]

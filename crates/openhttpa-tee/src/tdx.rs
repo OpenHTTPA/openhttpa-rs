@@ -41,6 +41,7 @@ impl TeeAdapter for TdxTeeProvider {
                 // by the verifier from Intel's PCS; hardcoding a URI here would
                 // silently break production verification.
                 pck_cert_uri: None,
+                hcl_runtime_data: None,
             }))
         }
 

@@ -32,9 +32,22 @@ mod tests {
         PublicKeyAlgorithm,
     };
 
+    fn mock_agent(id: &str) -> A2AAgent {
+        let client = openhttpa_client::OpenHttpaClient::builder()
+            .server_uri("http://127.0.0.1:8080".parse().unwrap())
+            .tee_provider(std::sync::Arc::new(
+                openhttpa_tee::mock::MockTeeProvider::default(),
+            ))
+            .verifier(std::sync::Arc::new(
+                openhttpa_attestation::MockVerifier::default(),
+            ))
+            .build();
+        A2AAgent::new_with_client(id, client)
+    }
+
     #[test]
     fn test_agent_creation() {
-        let agent = A2AAgent::new("test-agent").unwrap();
+        let agent = mock_agent("test-agent");
         assert_eq!(agent.agent_id, "test-agent");
     }
 
@@ -65,6 +78,9 @@ mod tests {
     fn test_new_with_client_sets_agent_id() {
         let client = openhttpa_client::OpenHttpaClient::builder()
             .server_uri("http://127.0.0.1:9999".parse().unwrap())
+            .verifier(std::sync::Arc::new(
+                openhttpa_attestation::MockVerifier::default(),
+            ))
             .build();
         let agent = A2AAgent::new_with_client("my-agent", client);
         assert_eq!(agent.agent_id, "my-agent");
@@ -165,7 +181,7 @@ mod tests {
 
     #[test]
     fn agent_router_new_initializes_empty_sessions() {
-        let agent = A2AAgent::new("router-agent").unwrap();
+        let agent = mock_agent("router-agent");
         let router = router::AgentRouter::new(agent);
         // Router should start with no sessions
         // We can only verify it constructs without panic

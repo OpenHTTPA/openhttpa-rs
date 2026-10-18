@@ -14,6 +14,10 @@ pub struct A2AAgent {
 impl A2AAgent {
     /// Create a new agent with default client.
     ///
+    /// The default client has no server-quote verifier, so outside a debug
+    /// build with `openhttpa-client/mock` this fails closed; use
+    /// [`Self::new_with_client`] with an explicitly configured client.
+    ///
     /// # Errors
     /// Returns Err if the client cannot be initialized.
     ///
@@ -30,7 +34,8 @@ impl A2AAgent {
                 openhttpa_tee::mock::MockTeeProvider::default(),
             ))
             .require_preflight(true)
-            .build();
+            .try_build()
+            .map_err(|e| e.to_string())?;
         Ok(Self::new_with_client(agent_id, client))
     }
 

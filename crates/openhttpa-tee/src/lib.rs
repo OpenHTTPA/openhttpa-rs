@@ -35,6 +35,8 @@ pub mod telemetry;
 
 #[cfg(feature = "aws_nitro")]
 pub mod aws_nitro;
+#[cfg(feature = "azure_tdx_vtpm")]
+pub mod azure_tdx_vtpm;
 #[cfg(feature = "azure_vtpm")]
 mod azure_vtpm;
 #[cfg(feature = "mock")]

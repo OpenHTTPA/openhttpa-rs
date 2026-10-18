@@ -151,19 +151,41 @@ impl OpenHttpaClientBuilder {
         self
     }
 
-    /// Build the client.
+    /// Build the client, panicking on a configuration error.
+    ///
+    /// Prefer [`Self::try_build`] in production code.
     ///
     /// # Panics
     ///
-    /// Panics if `server_uri` was not set.
+    /// Panics with the [`ClientBuildError`] message if `server_uri` was not
+    /// set, no TEE provider could be detected, or no verifier was configured
+    /// (see [`Self::try_build`]).
     #[must_use]
     pub fn build(self) -> OpenHttpaClient {
-        let uri = self.server_uri.expect("server_uri is required");
+        match self.try_build() {
+            Ok(client) => client,
+            Err(e) => panic!("OpenHttpaClientBuilder::build: {e}"),
+        }
+    }
+
+    /// Build the client, returning an error instead of panicking.
+    ///
+    /// A server-quote verifier is **mandatory**. Only a debug build with the
+    /// crate's `mock` feature falls back to
+    /// [`openhttpa_attestation::MockVerifier`] (with a loud warning); every
+    /// other build fails closed, so a client never silently trusts a server.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientBuildError`] for a missing server URI, a missing verifier, or
+    /// a failed TEE provider auto-detection.
+    pub fn try_build(self) -> Result<OpenHttpaClient, ClientBuildError> {
+        let uri = self.server_uri.ok_or(ClientBuildError::MissingServerUri)?;
 
         let tee_provider: Arc<dyn TeeProvider> = if self.tee_providers.is_empty() {
             let config = self.tee_config.unwrap_or_default();
             detect_best_provider(&config)
-                .expect("Failed to detect a valid TEE provider (check hardware or enable mock)")
+                .map_err(|e| ClientBuildError::NoTeeProvider(e.to_string()))?
         } else if self.tee_providers.len() == 1 {
             self.tee_providers[0].clone()
         } else {
@@ -172,16 +194,17 @@ impl OpenHttpaClientBuilder {
             ))
         };
 
+        #[cfg(all(feature = "mock", debug_assertions))]
         let verifier: Arc<dyn QuoteVerifier> = self.verifier.unwrap_or_else(|| {
-            #[cfg(debug_assertions)]
-            {
-                Arc::new(openhttpa_attestation::MockVerifier::default())
-            }
-            #[cfg(not(debug_assertions))]
-            {
-                panic!("a real quote verifier must be configured before building a release client")
-            }
+            tracing::warn!(
+                "SECURITY: OpenHTTPA client has no quote verifier; using MockVerifier \
+                 because the `mock` feature is enabled. Server attestation is NOT checked."
+            );
+            Arc::new(openhttpa_attestation::MockVerifier::default())
         });
+        #[cfg(not(all(feature = "mock", debug_assertions)))]
+        let verifier: Arc<dyn QuoteVerifier> =
+            self.verifier.ok_or(ClientBuildError::MissingVerifier)?;
 
         let transport = self.transport.unwrap_or_else(|| {
             Arc::new(openhttpa_transport::reqwest_adapter::ReqwestTransport::new())
@@ -198,7 +221,7 @@ impl OpenHttpaClientBuilder {
             transport
         };
 
-        OpenHttpaClient::new(
+        Ok(OpenHttpaClient::new(
             uri,
             tee_provider,
             verifier,
@@ -207,6 +230,60 @@ impl OpenHttpaClientBuilder {
             self.require_preflight,
             self.server_identity_pub,
             self.max_response_size.unwrap_or(DEFAULT_MAX_RESPONSE_SIZE),
-        )
+        ))
+    }
+}
+
+/// Configuration error from [`OpenHttpaClientBuilder::try_build`].
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum ClientBuildError {
+    /// `server_uri` was not set.
+    #[error("server_uri is required")]
+    MissingServerUri,
+    /// No server-quote verifier was configured (and this is not a debug `mock` build).
+    #[error("a quote verifier must be configured (enable the `mock` feature only for tests)")]
+    MissingVerifier,
+    /// TEE provider auto-detection failed.
+    #[error("failed to detect a valid TEE provider: {0}")]
+    NoTeeProvider(String),
+}
+
+#[cfg(test)]
+mod build_tests {
+    use super::*;
+
+    fn builder() -> OpenHttpaClientBuilder {
+        OpenHttpaClientBuilder::default()
+            .server_uri("http://127.0.0.1:1".parse().unwrap())
+            .tee_provider(Arc::new(openhttpa_tee::mock::MockTeeProvider::default()))
+    }
+
+    #[test]
+    fn missing_server_uri_is_an_error() {
+        let err = OpenHttpaClientBuilder::default().try_build().err();
+        assert_eq!(err, Some(ClientBuildError::MissingServerUri));
+    }
+
+    #[cfg(not(all(feature = "mock", debug_assertions)))]
+    #[test]
+    fn missing_verifier_is_an_error_without_mock_feature() {
+        assert_eq!(
+            builder().try_build().err(),
+            Some(ClientBuildError::MissingVerifier)
+        );
+    }
+
+    #[cfg(all(feature = "mock", debug_assertions))]
+    #[test]
+    fn missing_verifier_falls_back_to_mock_only_with_mock_feature() {
+        assert!(builder().try_build().is_ok());
+    }
+
+    #[test]
+    fn explicit_verifier_builds() {
+        let built = builder()
+            .verifier(Arc::new(openhttpa_attestation::MockVerifier::default()))
+            .try_build();
+        assert!(built.is_ok());
     }
 }

@@ -102,6 +102,9 @@ async fn test_composite_attestation_full_handshake() {
         .transport(Arc::new(DummyTransport {
             server_random: [0x55u8; 32],
         }))
+        .verifier(std::sync::Arc::new(
+            openhttpa_attestation::MockVerifier::default(),
+        ))
         .build();
 
     // 3. Perform Handshake

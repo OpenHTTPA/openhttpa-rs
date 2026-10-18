@@ -1175,6 +1175,7 @@ mod tests {
         let client = OpenHttpaClient::builder()
             .server_uri("http://127.0.0.1:8080".parse().unwrap())
             .transport(Arc::new(DummyTransport))
+            .verifier(Arc::new(openhttpa_attestation::MockVerifier::default()))
             .build();
         let session = client.attest_handshake().await.unwrap();
         assert!(session.is_alive());

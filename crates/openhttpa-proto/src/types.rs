@@ -290,6 +290,9 @@ pub enum QuoteFormat {
     Eat,
     /// Version 1 SEV-SNP bundle containing the raw report and certificate table.
     SevSnpBundleV1,
+    /// Version 1 Intel TDX bundle: raw DCAP TD quote plus optional paravisor
+    /// runtime data (see [`TdxQuoteBundleV1`]).
+    TdxBundleV1,
     /// An unrecognised format.
     Unknown(String),
 }
@@ -300,6 +303,7 @@ impl std::fmt::Display for QuoteFormat {
             Self::Raw => "raw",
             Self::Eat => "eat",
             Self::SevSnpBundleV1 => "sev_snp_bundle_v1",
+            Self::TdxBundleV1 => "tdx_bundle_v1",
             Self::Unknown(s) => s.as_str(),
         };
         f.write_str(s)
@@ -313,6 +317,7 @@ impl std::str::FromStr for QuoteFormat {
             "raw" => Self::Raw,
             "eat" => Self::Eat,
             "sev_snp_bundle_v1" => Self::SevSnpBundleV1,
+            "tdx_bundle_v1" => Self::TdxBundleV1,
             _ => Self::Unknown(s.to_owned()),
         })
     }
@@ -449,6 +454,31 @@ pub struct SevSnpQuoteBundleV1 {
     /// Certificate table returned with the extended report.
     pub certificate_table: Vec<SevSnpCertificate>,
     /// Azure HCL runtime-claims JSON. When set, `report_data` is bound via its SHA-256.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hcl_runtime_data: Option<Vec<u8>>,
+}
+
+/// Version 1 Intel TDX quote payload (`tdx_bundle_v1`).
+///
+/// The bundle is cloud-neutral:
+///
+/// * **Bare TDX guests** (e.g. a GCP/bare-metal TD with `/dev/tdx_guest` or
+///   configfs-tsm) leave `hcl_runtime_data` empty; the TD quote's
+///   `REPORTDATA` must then equal the handshake `report_data` byte-for-byte.
+/// * **Azure TDX confidential VMs** run behind the `OpenHCL` paravisor. The
+///   paravisor writes `SHA-256(runtime claims JSON)` into `REPORTDATA[0..32]`
+///   and places the caller's 64-byte report data, hex-encoded, in the JSON's
+///   `user-data` field. The verifier recomputes the hash and compares
+///   `user-data`, so the binding is equally strong.
+///
+/// Intel collateral (TCB info, QE identity, PCK/Root CA CRLs) is *not* carried
+/// here; the verifier fetches it from Intel PCS so that a prover can never
+/// choose stale revocation data.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TdxQuoteBundleV1 {
+    /// Raw Intel DCAP TD quote (v4/v5) signed by the TDX Quoting Enclave.
+    pub quote: Vec<u8>,
+    /// Azure HCL runtime-claims JSON (paravisor variable data), if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hcl_runtime_data: Option<Vec<u8>>,
 }

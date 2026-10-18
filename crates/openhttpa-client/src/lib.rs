@@ -38,7 +38,7 @@
 pub mod builder;
 pub mod client;
 
-pub use builder::OpenHttpaClientBuilder;
+pub use builder::{ClientBuildError, OpenHttpaClientBuilder};
 pub use client::OpenHttpaClient;
 
 #[cfg(test)]
@@ -87,6 +87,9 @@ mod tests {
         // Verify builder chain constructs without panic.
         let _client = OpenHttpaClient::builder()
             .server_uri("http://127.0.0.1:8080".parse().unwrap())
+            .verifier(std::sync::Arc::new(
+                openhttpa_attestation::MockVerifier::default(),
+            ))
             .build();
     }
 
@@ -94,6 +97,9 @@ mod tests {
     fn client_strict_attestation_setter() {
         let client = OpenHttpaClient::builder()
             .server_uri("http://127.0.0.1:8080".parse().unwrap())
+            .verifier(std::sync::Arc::new(
+                openhttpa_attestation::MockVerifier::default(),
+            ))
             .build()
             .strict_attestation(true);
         // If the setter panics, the test fails.

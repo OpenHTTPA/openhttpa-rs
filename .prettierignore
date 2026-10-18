@@ -67,3 +67,6 @@ docs/ietf/*.xml
 
 
 crates/openhttpa-contract/cache/solidity-files-cache.json
+
+# Verbatim third-party evidence fixtures (byte-exact, checked by SHA256SUMS)
+**/testdata/**

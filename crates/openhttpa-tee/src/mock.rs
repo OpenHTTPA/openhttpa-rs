@@ -237,6 +237,7 @@ impl TeeAdapter for MockTeeProvider {
             QuoteType::Tdx => Ok(AttestationEvidence::Tdx(crate::evidence::TdxEvidence {
                 quote: Bytes::from(hash.to_vec()),
                 pck_cert_uri: Some("https://mock.attestation/intel/tdx/pck".to_owned()),
+                hcl_runtime_data: None,
             })),
             QuoteType::SevSnp => Ok(AttestationEvidence::SevSnp(
                 crate::evidence::SevSnpEvidence {

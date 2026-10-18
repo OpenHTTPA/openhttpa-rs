@@ -15,6 +15,10 @@
 //!   freshness remains the caller's responsibility.
 //! * **NVIDIA NRAS** — validates signed NVIDIA Remote Attestation Service results,
 //!   requiring the signed nonce and a positive RIM result (feature `nvidia_nras`).
+//! * **Intel TDX (DCAP)** — first-party verification of TD quotes against
+//!   Intel PCS collateral with a pinned Intel SGX Root CA, enforced PCK/Root
+//!   CA CRLs, strict TCB status, debug, report-data (incl. Azure paravisor)
+//!   and MRTD/RTMR policy (feature `tdx_dcap`).
 //! * **TPM 2.0** — [`TpmVerifier`] compiles and runs but the AIK signature
 //!   verification step (step 2) is **not yet implemented**. Only QUDD nonce
 //!   comparison is performed. **Do not use in production without completing the
@@ -31,6 +35,8 @@
 #![deny(clippy::unwrap_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 
+/// Azure `OpenHCL` paravisor report-data binding (shared by SNP and TDX).
+pub mod azure_hcl;
 pub mod collateral_fetcher;
 pub mod composite;
 
@@ -48,6 +54,9 @@ pub mod nvidia_verifier;
 pub mod policy;
 /// AMD SEV-SNP quote verifier (M4 — `amd_snp` feature).
 pub mod snp_verifier;
+/// Intel TDX first-party DCAP verifier (`tdx_dcap` feature).
+#[cfg(feature = "tdx_dcap")]
+pub mod tdx_dcap_verifier;
 #[cfg(test)]
 mod tests;
 pub mod tpm_verifier;
@@ -66,6 +75,10 @@ pub use policy::SimplePolicy;
 /// AMD SEV-SNP verifier (M4). Available on all feature configurations;
 /// full chain verification requires `--features amd_snp`.
 pub use snp_verifier::SevSnpVerifier;
+#[cfg(feature = "tdx_dcap")]
+pub use tdx_dcap_verifier::{
+    IntelCollateral, TdxDcapVerifier, TdxPckFlags, TdxPolicy, TdxVerificationReport,
+};
 /// TPM 2.0 PCR quote verifier.
 ///
 /// # ⚠️ Production stub

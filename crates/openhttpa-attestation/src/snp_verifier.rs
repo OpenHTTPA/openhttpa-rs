@@ -29,34 +29,8 @@ use openhttpa_proto::TeeClass;
 
 use std::path::PathBuf;
 
-/// Azure paravisor binding: the report holds `SHA256(runtime claims)` and the claims hold the nonce.
 #[cfg(feature = "amd_snp")]
-fn verify_azure_hcl_binding(
-    embedded: &[u8; 64],
-    runtime_data: &[u8],
-    expected: &[u8; 64],
-) -> Result<(), VerificationError> {
-    use sha2::{Digest, Sha256};
-
-    let violation = |m: &str| VerificationError::PolicyViolation(m.to_owned());
-    if Sha256::digest(runtime_data).as_slice() != &embedded[..32] {
-        return Err(violation(
-            "Azure HCL runtime data does not match SNP report_data",
-        ));
-    }
-    let claims: serde_json::Value = serde_json::from_slice(runtime_data)
-        .map_err(|e| VerificationError::MalformedQuote(format!("invalid HCL runtime data: {e}")))?;
-    let user_data = claims
-        .get("user-data")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| violation("Azure HCL runtime data is missing user-data"))?;
-    if !user_data.eq_ignore_ascii_case(&hex::encode(expected)) {
-        return Err(violation(
-            "Azure HCL user-data does not match the expected report_data",
-        ));
-    }
-    Ok(())
-}
+use crate::azure_hcl::verify_azure_hcl_binding;
 
 /// Source of the AMD Root Key (ARK) for VCEK chain verification.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -238,6 +212,8 @@ impl QuoteVerifier for SevSnpVerifier {
 #[cfg(feature = "amd_snp")]
 impl SevSnpVerifier {
     /// Full SEV-SNP report verification (steps 1–5).
+    // Linear fail-closed pipeline; splitting it would scatter the check order.
+    #[allow(clippy::too_many_lines)]
     fn verify_snp_report(
         &self,
         quote: &AttestQuote,
