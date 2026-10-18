@@ -280,7 +280,9 @@ impl OpenHttpaServerBuilder {
     /// Only available when the `fabric`, `mesh`, and `a2a` Cargo features are all enabled.
     ///
     /// # Panics
-    /// Panics if `fabric_config` or `tee_provider` is not set.
+    /// Panics if `fabric_config`, `tee_provider` or `verifier` is not set. The
+    /// mesh and its A2A client verify peer quotes with that verifier; there is
+    /// no mock fallback.
     #[cfg(all(feature = "fabric", feature = "mesh", feature = "a2a"))]
     pub fn build_fabric(self) -> (Router, Arc<openhttpa_mesh::AgentNode>) {
         let (name, caps, endpoint, _topology) = self
@@ -288,11 +290,10 @@ impl OpenHttpaServerBuilder {
             .clone()
             .expect("fabric_config must be set via with_fabric");
         let tee_provider = self.tee_provider.clone().expect("tee_provider must be set");
-        let verifier = self.verifier.clone().unwrap_or_else(|| {
-            Arc::new(openhttpa_attestation::mock_verifier::MockVerifier::new(
-                openhttpa_attestation::verifier::VerificationResult::default(),
-            ))
-        });
+        let verifier = self
+            .verifier
+            .clone()
+            .expect("verifier must be set via with_verifier");
 
         let transport = Arc::new(openhttpa_transport::h2_adapter::H2Transport::new(
             endpoint.parse().unwrap(),
@@ -325,6 +326,8 @@ impl OpenHttpaServerBuilder {
         // We use A2AAgent for A2A communication, which ReplicationManager needs.
         let a2a_client = openhttpa_client::OpenHttpaClient::builder()
             .server_uri(endpoint.parse().unwrap())
+            .tee_provider(tee_provider.clone())
+            .verifier(verifier.clone())
             .build();
         let a2a_agent = Arc::new(openhttpa_a2a::A2AAgent::new_with_client(
             &agent_node.metadata().id.to_string(),

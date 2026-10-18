@@ -9,6 +9,34 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Real-silicon hardening (`enhance/real-silicon`)
+
+- **New `tdx_dcap` feature (`openhttpa-attestation`)**: `TdxDcapVerifier`, a first-party Intel TDX
+  verifier. It is pure Rust on `dcap-qvl` 0.7 and checks the quote signature, QE report and PCK chain
+  up to a **pinned Intel SGX Root CA** (SHA-256 checked before every use). It enforces the PCK and
+  Root CA CRLs and the Intel-signed TCB info and QE identity, with collateral freshness and no grace
+  period. Only `UpToDate` TCB status is accepted unless a status is explicitly allow-listed. It also
+  enforces the debug bit, the MRTD allow-list, optional RTMR pins, and the Azure paravisor
+  report-data binding. The PCK platform flags are explicit policy (`TdxPolicy::cloud_host`) and are
+  always reported. `verify_tdx_bundle_with_collateral` re-verifies stored evidence offline, and
+  `IntelCollateral` is re-exported so collateral can be stored with the evidence.
+- **New `azure_tdx_vtpm` feature (`openhttpa-tee`)**: `AzureTdxVtpmTeeProvider` collects TDX
+  evidence on Azure through the OpenHCL vTPM HCL report and IMDS `/acc/tdquote`, since
+  `/dev/tdx_guest` is not exposed on Azure. It emits the new `QuoteFormat::TdxBundleV1` /
+  `TdxQuoteBundleV1`.
+- **Fix (mutual attestation)**: `AtHsExecutor::with_required_client_quote_types` requires the client
+  to present exactly the listed quote types. An empty, incomplete, duplicated or wrong-type bundle is
+  rejected before any verifier runs.
+- **Fix (client)**: `OpenHttpaClientBuilder` no longer silently falls back to `MockVerifier`. Only a
+  debug build with the `mock` feature does so. The new `try_build()` returns `ClientBuildError`,
+  `build()` panics with that error, and `build_fabric` now requires a verifier. The LLM builder
+  gained `verifier()`, and `OpenHttpaMcpClient::new_with_verifier` was added.
+- Fixed pre-existing pedantic clippy failures in `maa_verifier`, and updated `rustls` to 0.23.46
+  (RUSTSEC-2026-0346..0349).
+- Shared `azure_hcl::verify_azure_hcl_binding` between the SNP and TDX verifiers.
+- Fixtures: genuine Intel TDX quotes and collateral (`dcap-qvl` samples) and a genuine Azure TDX
+  HCL report (`az-cvm-vtpm`), each with PROVENANCE.md and SHA256SUMS.
+
 ### Security — P0 Audit Remediation (SA-01, SA-02, SA-03)
 
 > See [Security Audit Report](docs/security_audit_report.md) for full findings.  

@@ -80,6 +80,12 @@ impl MaaVerifier {
     }
 
     /// Create an MAA verifier after validating the remote endpoint.
+    ///
+    /// # Errors
+    ///
+    /// [`VerificationError::Malformed`] unless the endpoint is an `https://`
+    /// `*.attest.azure.net` URL without credentials, query or fragment, or if
+    /// the HTTP client cannot be built.
     pub fn try_new(endpoint: impl Into<String>) -> Result<Self, VerificationError> {
         let endpoint = endpoint.into().trim_end_matches('/').to_owned();
         let parsed = reqwest::Url::parse(&endpoint).map_err(|error| {
@@ -211,7 +217,7 @@ impl MaaVerifier {
             serde_json::from_value(token_data.claims.clone()).map_err(|error| {
                 VerificationError::Malformed(format!("invalid MAA claims: {error}"))
             })?;
-        self.validate_claims(&claims, expected_report_data, quote_type.clone())?;
+        self.validate_claims(&claims, expected_report_data, &quote_type)?;
 
         let claims_json = serde_json::to_string(&token_data.claims).unwrap_or_default();
         let is_debuggable = match quote_type {
@@ -226,7 +232,7 @@ impl MaaVerifier {
         &self,
         claims: &MaaClaims,
         expected_report_data: &[u8; 64],
-        quote_type: openhttpa_proto::QuoteType,
+        quote_type: &openhttpa_proto::QuoteType,
     ) -> Result<(), VerificationError> {
         let expected_policy_hash = self.expected_policy_hash.as_deref().ok_or_else(|| {
             VerificationError::PolicyViolation(
@@ -408,20 +414,20 @@ mod tests {
         };
         assert!(
             verifier
-                .validate_claims(&claims, &report_data, openhttpa_proto::QuoteType::Tdx)
+                .validate_claims(&claims, &report_data, &openhttpa_proto::QuoteType::Tdx)
                 .is_ok()
         );
 
         let missing_debug = MaaClaims {
             tdx_is_debuggable: None,
-            ..claims.clone()
+            ..claims
         };
         assert!(
             verifier
                 .validate_claims(
                     &missing_debug,
                     &report_data,
-                    openhttpa_proto::QuoteType::Tdx
+                    &openhttpa_proto::QuoteType::Tdx
                 )
                 .is_ok()
         );
@@ -447,7 +453,7 @@ mod tests {
                 .validate_claims(
                     &missing_nonce,
                     &report_data,
-                    openhttpa_proto::QuoteType::Tdx
+                    &openhttpa_proto::QuoteType::Tdx
                 )
                 .is_err()
         );
@@ -458,7 +464,11 @@ mod tests {
         };
         assert!(
             verifier
-                .validate_claims(&wrong_policy, &report_data, openhttpa_proto::QuoteType::Tdx)
+                .validate_claims(
+                    &wrong_policy,
+                    &report_data,
+                    &openhttpa_proto::QuoteType::Tdx
+                )
                 .is_err()
         );
 
@@ -468,7 +478,7 @@ mod tests {
         };
         assert!(
             verifier
-                .validate_claims(&debug, &report_data, openhttpa_proto::QuoteType::Tdx)
+                .validate_claims(&debug, &report_data, &openhttpa_proto::QuoteType::Tdx)
                 .is_err()
         );
     }

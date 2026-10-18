@@ -291,6 +291,7 @@ pub struct ConfidentialLlmClientBuilder {
     model: Option<String>,
     inference_path: Option<String>,
     tee_providers: Vec<Arc<dyn openhttpa_tee::provider::TeeProvider>>,
+    verifier: Option<Arc<dyn openhttpa_attestation::QuoteVerifier>>,
     bypass_attestation: bool,
 }
 
@@ -298,6 +299,14 @@ impl ConfidentialLlmClientBuilder {
     #[must_use]
     pub fn server_uri(mut self, uri: Uri) -> Self {
         self.server_uri = Some(uri);
+        self
+    }
+
+    /// Verifier for the inference server's attestation quotes. Required
+    /// unless this is a debug build with `openhttpa-client/mock`.
+    #[must_use]
+    pub fn verifier(mut self, verifier: Arc<dyn openhttpa_attestation::QuoteVerifier>) -> Self {
+        self.verifier = Some(verifier);
         self
     }
 
@@ -360,8 +369,15 @@ impl ConfidentialLlmClientBuilder {
         for p in self.tee_providers {
             httpa_builder = httpa_builder.add_tee_provider(p);
         }
+        if let Some(verifier) = self.verifier {
+            httpa_builder = httpa_builder.verifier(verifier);
+        }
 
-        let httpa_client = Arc::new(httpa_builder.build());
+        let httpa_client = Arc::new(
+            httpa_builder
+                .try_build()
+                .map_err(|e| LlmError::Handshake(e.to_string()))?,
+        );
 
         let session_lock = if self.bypass_attestation {
             Arc::new(tokio::sync::RwLock::new(None))
@@ -602,6 +618,9 @@ mod tests {
             .transport(std::sync::Arc::new(DummyTransport {
                 sessions: Arc::new(dashmap::DashMap::new()),
             }))
+            .verifier(std::sync::Arc::new(
+                openhttpa_attestation::MockVerifier::default(),
+            ))
             .build();
 
         let client = ConfidentialLlmClient::new(h_client, "mock-model", "/chat/completions")
@@ -707,6 +726,9 @@ mod tests {
             .server_uri("http://127.0.0.1:8080".parse().unwrap())
             .model("test-model")
             .inference_path("/v1/chat/completions")
+            .verifier(std::sync::Arc::new(
+                openhttpa_attestation::MockVerifier::default(),
+            ))
             .with_bypass()
             .build()
             .await

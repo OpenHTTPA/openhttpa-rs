@@ -22,6 +22,8 @@ sev_snp   = ["sev", "sev/crypto_nossl"]
 trustzone = ["optee-teec"]
 tpm       = []
 azure_vtpm = ["sev_snp", "dep:az-cvm-vtpm", "dep:az-snp-vtpm"]
+# Intel TDX on Azure CVMs: vTPM HCL report + IMDS /acc/tdquote (no /dev/tdx_guest).
+azure_tdx_vtpm = ["dep:az-cvm-vtpm", "dep:az-tdx-vtpm"]
 nvidia_gpu = []
 aws_nitro = ["aws-nitro-enclaves-nsm-api"]
 
@@ -54,6 +56,7 @@ sev = { version = "8.0.0", optional = true, default-features = false, features =
 # Azure CVM paravisor vTPM
 az-cvm-vtpm = { version = "0.8", optional = true }
 az-snp-vtpm = { version = "0.8", optional = true }
+az-tdx-vtpm = { version = "0.8", optional = true, default-features = false, features = ["attester"] }
 
 # TrustZone (raw FFI via system libteec)
 optee-teec = { version = "0.9", optional = true }

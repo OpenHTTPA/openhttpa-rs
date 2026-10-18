@@ -196,6 +196,9 @@ async fn test_mcp_e2e_flow() {
         .server_uri("http://127.0.0.1:8080".parse().unwrap())
         .transport(transport)
         .tee_provider(Arc::new(openhttpa_tee::mock::MockTeeProvider::default()))
+        .verifier(std::sync::Arc::new(
+            openhttpa_attestation::MockVerifier::default(),
+        ))
         .build();
 
     // Create MCP client from existing client
@@ -224,10 +227,15 @@ async fn test_a2a_mutual_attestation_flow() {
         .server_uri("http://bob:8080".parse().unwrap())
         .transport(transport)
         .tee_provider(Arc::new(openhttpa_tee::mock::MockTeeProvider::default()))
+        .verifier(std::sync::Arc::new(
+            openhttpa_attestation::MockVerifier::default(),
+        ))
         .build();
 
     let agent_alice = A2AAgent::new_with_client("alice", client_alice);
-    let _agent_bob = A2AAgent::new("bob").unwrap();
+    // Without a configured verifier the default constructor must fail closed
+    // (unless this is a debug build with the client's `mock` feature).
+    let _agent_bob = A2AAgent::new("bob");
 
     // Test Alice connecting to Bob
     let res = agent_alice.connect_to_agent("http://bob:8080").await;
@@ -262,6 +270,9 @@ async fn test_agent_router_session_persistence() {
         .server_uri("http://bob:8080".parse().unwrap())
         .transport(transport)
         .tee_provider(Arc::new(openhttpa_tee::mock::MockTeeProvider::default()))
+        .verifier(std::sync::Arc::new(
+            openhttpa_attestation::MockVerifier::default(),
+        ))
         .build();
 
     let agent_alice = A2AAgent::new_with_client("alice", client_alice);
@@ -293,6 +304,9 @@ async fn test_agent_router_broadcast() {
         .server_uri("http://bob:8080".parse().unwrap())
         .transport(transport)
         .tee_provider(Arc::new(openhttpa_tee::mock::MockTeeProvider::default()))
+        .verifier(std::sync::Arc::new(
+            openhttpa_attestation::MockVerifier::default(),
+        ))
         .build();
 
     let agent_alice = A2AAgent::new_with_client("alice", client_alice);

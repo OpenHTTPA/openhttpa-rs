@@ -36,8 +36,29 @@ impl OpenHttpaMcpClient {
         let client = OpenHttpaClient::builder()
             .server_uri(uri)
             .require_preflight(true)
-            .build();
+            .try_build()
+            .map_err(|e| McpClientError::OpenHttpa(e.to_string()))?;
 
+        Ok(Self { client })
+    }
+
+    /// Create a new MCP client that verifies the server's attestation with `verifier`.
+    ///
+    /// # Errors
+    /// Returns an error if the URL is invalid or the client cannot be built.
+    pub fn new_with_verifier(
+        server_url: &str,
+        verifier: std::sync::Arc<dyn openhttpa_attestation::QuoteVerifier>,
+    ) -> Result<Self, McpClientError> {
+        let uri: http::Uri = server_url
+            .parse()
+            .map_err(|e: http::uri::InvalidUri| McpClientError::Protocol(e.to_string()))?;
+        let client = OpenHttpaClient::builder()
+            .server_uri(uri)
+            .verifier(verifier)
+            .require_preflight(true)
+            .try_build()
+            .map_err(|e| McpClientError::OpenHttpa(e.to_string()))?;
         Ok(Self { client })
     }
 
@@ -110,7 +131,10 @@ mod tests {
 
     #[test]
     fn new_with_valid_url_succeeds() {
-        let result = OpenHttpaMcpClient::new("http://127.0.0.1:8080");
+        let result = OpenHttpaMcpClient::new_with_verifier(
+            "http://127.0.0.1:8080",
+            std::sync::Arc::new(openhttpa_attestation::MockVerifier::default()),
+        );
         assert!(result.is_ok());
     }
 
@@ -118,6 +142,9 @@ mod tests {
     fn new_from_client_constructs() {
         let client = openhttpa_client::OpenHttpaClient::builder()
             .server_uri("http://127.0.0.1:8080".parse().unwrap())
+            .verifier(std::sync::Arc::new(
+                openhttpa_attestation::MockVerifier::default(),
+            ))
             .build();
         let _mcp = OpenHttpaMcpClient::new_from_client(client);
         // Should not panic

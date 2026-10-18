@@ -10,7 +10,7 @@
 
 use bytes::Bytes;
 use openhttpa_proto::{
-    AttestQuote, QuoteFormat, QuoteType, SevSnpCertificate, SevSnpQuoteBundleV1,
+    AttestQuote, QuoteFormat, QuoteType, SevSnpCertificate, SevSnpQuoteBundleV1, TdxQuoteBundleV1,
 };
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +21,12 @@ pub struct TdxEvidence {
     pub quote: Bytes,
     /// URI pointing to the Intel PCK (Provisioning Certification Key) chain.
     pub pck_cert_uri: Option<String>,
+    /// Azure HCL runtime-claims JSON; present only when the TD report came from
+    /// the Azure paravisor vTPM. When set, the quote is emitted as
+    /// [`QuoteFormat::TdxBundleV1`] and `REPORTDATA[0..32]` binds
+    /// `SHA-256(hcl_runtime_data)`.
+    #[serde(default)]
+    pub hcl_runtime_data: Option<Bytes>,
 }
 
 /// Detailed attestation evidence for AMD SEV-SNP (Secure Nested Paging).
@@ -93,13 +99,30 @@ impl AttestationEvidence {
     #[must_use]
     pub fn to_quote(&self, qudd: Bytes) -> AttestQuote {
         match self {
-            Self::Tdx(e) => AttestQuote {
-                quote_type: QuoteType::Tdx,
-                format: openhttpa_proto::QuoteFormat::default(),
-                raw: e.quote.clone(),
-                qudd,
-                collateral_uris: e.pck_cert_uri.clone().into_iter().collect(),
-            },
+            Self::Tdx(e) => {
+                if let Some(runtime_data) = &e.hcl_runtime_data {
+                    let bundle = TdxQuoteBundleV1 {
+                        quote: e.quote.to_vec(),
+                        hcl_runtime_data: Some(runtime_data.to_vec()),
+                    };
+                    let raw = serde_json::to_vec(&bundle).unwrap_or_default();
+                    AttestQuote {
+                        quote_type: QuoteType::Tdx,
+                        format: QuoteFormat::TdxBundleV1,
+                        raw: Bytes::from(raw),
+                        qudd,
+                        collateral_uris: vec![],
+                    }
+                } else {
+                    AttestQuote {
+                        quote_type: QuoteType::Tdx,
+                        format: openhttpa_proto::QuoteFormat::default(),
+                        raw: e.quote.clone(),
+                        qudd,
+                        collateral_uris: e.pck_cert_uri.clone().into_iter().collect(),
+                    }
+                }
+            }
             Self::SevSnp(e) => {
                 let bundle = SevSnpQuoteBundleV1 {
                     report: e.report.to_vec(),
@@ -241,10 +264,22 @@ mod tests {
         let tdx = AttestationEvidence::Tdx(TdxEvidence {
             quote: Bytes::from_static(b"tdx"),
             pck_cert_uri: None,
+            hcl_runtime_data: None,
         });
         let q = tdx.to_quote(qudd.clone());
         assert_eq!(q.quote_type, QuoteType::Tdx);
         assert_eq!(q.raw.as_ref(), b"tdx");
+
+        let azure_tdx = AttestationEvidence::Tdx(TdxEvidence {
+            quote: Bytes::from_static(b"tdx"),
+            pck_cert_uri: None,
+            hcl_runtime_data: Some(Bytes::from_static(b"{}")),
+        });
+        let q = azure_tdx.to_quote(qudd.clone());
+        assert_eq!(q.format, QuoteFormat::TdxBundleV1);
+        let bundle: TdxQuoteBundleV1 = serde_json::from_slice(&q.raw).unwrap();
+        assert_eq!(bundle.quote, b"tdx");
+        assert_eq!(bundle.hcl_runtime_data.as_deref(), Some(&b"{}"[..]));
 
         let mock = AttestationEvidence::Mock(Bytes::from_static(b"mock"));
         let q = mock.to_quote(qudd.clone());
