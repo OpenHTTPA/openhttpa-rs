@@ -464,7 +464,7 @@ where
                                 &salt,
                             )
                         {
-                            tracing::info!("Deriving fresh 0-RTT keys");
+                            tracing::debug!("Deriving fresh 0-RTT keys");
                             durable_state.keys = openhttpa_core::session::SealedSessionKeys::new(k);
                         }
 
@@ -474,7 +474,7 @@ where
                         if let Err(e) = registry.insert(session.clone()) {
                             tracing::error!(error = %e, "Failed to insert resumed session");
                         } else {
-                            tracing::info!(base_id = %session.state().id, "0-RTT session resumed");
+                            tracing::debug!(base_id = %session.state().id, "0-RTT session resumed");
                         }
                     }
                 }

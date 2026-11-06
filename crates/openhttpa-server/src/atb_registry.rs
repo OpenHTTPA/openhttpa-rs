@@ -111,7 +111,7 @@ impl AtbRegistry {
             }
             return None;
         }
-        tracing::info!(%id, "AtB found in registry");
+        tracing::debug!(%id, "AtB found in registry");
         Some(session)
     }
 

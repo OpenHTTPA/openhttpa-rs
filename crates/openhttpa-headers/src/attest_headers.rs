@@ -275,7 +275,7 @@ where
         update(val_str.as_bytes());
 
         // Debug log for each header included in AHL
-        tracing::info!(name = %name_str, value = %val_str, "AHL header included");
+        tracing::debug!(name = %name_str, value = %val_str, "AHL header included");
     }
     Ok(())
 }

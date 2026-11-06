@@ -9,7 +9,7 @@ use axum::{
 };
 use serde::de::DeserializeOwned;
 use std::str::FromStr;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 use openhttpa_core::session::AttestSession;
 use openhttpa_crypto::aead::{AeadAlgorithm, AeadNonce, BoundAeadKey};
@@ -214,7 +214,7 @@ where
 
         let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
         aad.extend_from_slice(base_id_str.as_bytes());
-        info!(base_id = %base_id_str, "Hardened AAD constructed");
+        debug!(base_id = %base_id_str, "Hardened AAD constructed");
         Ok(Self { session, aad })
     }
 }
@@ -285,7 +285,7 @@ where
                 let has_original = original_uri.is_some();
                 let path = original_uri.map_or_else(|| parts.uri.path(), |uri| uri.0.path());
 
-                info!(
+                debug!(
                     path = %path,
                     has_original = has_original,
                     raw_path = %parts.uri.path(),

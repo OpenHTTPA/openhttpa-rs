@@ -435,6 +435,24 @@ impl AttestSession {
         Ok(result)
     }
 
+    /// Like [`Self::with_keys_for_trr`], using the session's next client counter as the replay
+    /// nonce so consecutive requests on one session always pass the local replay check.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the session mutex is poisoned.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Self::with_keys_for_trr`].
+    pub fn with_keys_for_next_trr<F, T, E>(&self, f: F) -> Result<Result<T, E>, SessionError>
+    where
+        F: FnOnce(&SessionKeys, u64) -> Result<T, E>,
+    {
+        let next = self.inner.lock().expect("lock poisoned").client_counter;
+        self.with_keys_for_trr(next, f)
+    }
+
     /// # Errors
     ///
     /// Returns [`Err`](`SessionError::Expired`) if the session has expired or the

@@ -913,38 +913,30 @@ impl OpenHttpaClient {
         extra_headers: Option<&http::HeaderMap>,
     ) -> Result<(http::HeaderMap, Vec<u8>, u64), ClientError> {
         let base_id = session.state().id;
-        // O-03: Unified nonce generation via aws-lc-rs SystemRandom.
-        let mut nonce_bytes = [0u8; 8];
-        let rng = openhttpa_crypto::rand::SystemRandom::new();
-        openhttpa_crypto::rand::SecureRandom::fill(&rng, &mut nonce_bytes)
-            .map_err(|_| ClientError::Handshake("RNG failure".to_owned()))?;
-        let nonce = u64::from_be_bytes(nonce_bytes);
 
         session
-            .with_keys_for_trr(nonce, |keys, counter| {
+            .with_keys_for_next_trr(|keys, counter| {
                 let mut nonce_bytes = [0u8; 12];
                 nonce_bytes.copy_from_slice(&keys.client_write_iv);
                 let count_bytes = counter.to_be_bytes();
                 for (i, b) in count_bytes.iter().enumerate() {
                     nonce_bytes[4 + i] ^= b;
                 }
-                let _aead_nonce = openhttpa_crypto::aead::AeadNonce::from_slice(&nonce_bytes)
+                let aead_nonce = openhttpa_crypto::aead::AeadNonce::from_slice(&nonce_bytes)
                     .map_err(|_| {
                         ClientError::Handshake("nonce length invariant violated".to_owned())
                     })?;
 
-                let bound_key = openhttpa_crypto::aead::BoundAeadKey::new(
+                // The server derives the nonce from the wire counter, so seal with that exact
+                // nonce; a fresh `BoundAeadKey` would restart its own counter at 1 every request.
+                let key = openhttpa_crypto::aead::AeadKey::new(
                     openhttpa_crypto::aead::AeadAlgorithm::Aes256Gcm,
                     &keys.client_write_key,
-                    keys.client_write_iv.clone().try_into().map_err(|_| {
-                        ClientError::Handshake("client_write_iv has wrong length".to_owned())
-                    })?,
                 )
                 .map_err(|e| ClientError::Handshake(format!("Key setup failed: {e}")))?;
 
                 let mut data = body.to_vec();
-                bound_key
-                    .seal(aad, &mut data)
+                key.seal_in_place(&aead_nonce, aad, &mut data)
                     .map_err(|e| ClientError::Handshake(format!("Encryption failed: {e:?}")))?;
 
                 let mut hdrs = extra_headers.map_or_else(http::HeaderMap::new, Clone::clone);

@@ -90,7 +90,9 @@ pub enum HandshakeError {
     Serialisation(String),
     #[error("attestation required but not provided")]
     AttestationRequired,
-    #[error("client attestation verification failed: {0}")]
+    /// Client evidence was rejected, or the server could not produce its own evidence; the
+    /// message says which.
+    #[error("attestation failed: {0}")]
     Attestation(String),
     #[error("revocation check failed: {0}")]
     Revoked(String),
@@ -499,10 +501,23 @@ impl AtHsExecutor {
             report_data.copy_from_slice(&hasher.finalize());
             let req = QuoteRequest { report_data };
 
-            match tee.generate_quotes(&req) {
+            // `TeeProvider` is synchronous and real TEEs block (device I/O, locks, collateral
+            // downloads). Keep that off the async workers so one slow quote cannot stall every
+            // other connection; `block_in_place` needs a multi-thread runtime, so fall back to a
+            // direct call elsewhere (e.g. current-thread test runtimes).
+            let generated = match tokio::runtime::Handle::try_current().map(|h| h.runtime_flavor())
+            {
+                Ok(tokio::runtime::RuntimeFlavor::MultiThread) => {
+                    tokio::task::block_in_place(|| tee.generate_quotes(&req))
+                }
+                _ => tee.generate_quotes(&req),
+            };
+            match generated {
                 Ok(qs) => qs,
                 Err(e) if self.strict_attestation => {
-                    return Err(HandshakeError::Attestation(e.to_string()));
+                    return Err(HandshakeError::Attestation(format!(
+                        "server evidence generation failed: {e}"
+                    )));
                 }
                 Err(_) => vec![],
             }
@@ -663,10 +678,9 @@ impl AtHsExecutor {
             sha2::Digest::update(&mut hasher, client_binding);
             report_data.copy_from_slice(&hasher.finalize());
 
-            let res = v
-                .verify(quote, &report_data)
-                .await
-                .map_err(|e| HandshakeError::Attestation(e.to_string()))?;
+            let res = v.verify(quote, &report_data).await.map_err(|e| {
+                HandshakeError::Attestation(format!("client evidence rejected: {e}"))
+            })?;
 
             if let Some(ref mut primary) = composite_result {
                 primary.secondary.push(res.clone());
@@ -684,13 +698,14 @@ impl AtHsExecutor {
                     .as_secs();
                 if now > iat && now - iat > 86400 {
                     return Err(HandshakeError::Attestation(
-                        "attestation quote has expired (older than 24h)".to_owned(),
+                        "client evidence rejected: quote has expired (older than 24h)".to_owned(),
                     ));
                 }
             }
 
-            res.reject_debug_builds(self.allow_debug)
-                .map_err(|e| HandshakeError::Attestation(e.to_string()))?;
+            res.reject_debug_builds(self.allow_debug).map_err(|e| {
+                HandshakeError::Attestation(format!("client evidence rejected: {e}"))
+            })?;
 
             if let Some(ref pe) = self.policy_engine {
                 pe.evaluate(&res)
@@ -858,6 +873,59 @@ mod tests {
             result.server_quotes,
             [] as [openhttpa_proto::AttestQuote; 0]
         );
+    }
+
+    /// A blocking TEE (real vTPM / SEV firmware) must not starve the runtime's other tasks.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn slow_tee_does_not_block_other_tasks() {
+        use openhttpa_tee::mock::MockTeeProvider;
+        use openhttpa_tee::provider::{QuoteRequest, TeeProvider, TeeProviderError};
+
+        struct SlowTee(MockTeeProvider);
+        impl TeeProvider for SlowTee {
+            fn quote_type(&self) -> openhttpa_proto::QuoteType {
+                self.0.quote_type()
+            }
+            fn generate_quote(
+                &self,
+                r: &QuoteRequest,
+            ) -> Result<openhttpa_proto::AttestQuote, TeeProviderError> {
+                std::thread::sleep(std::time::Duration::from_millis(400));
+                self.0.generate_quote(r)
+            }
+            fn is_available(&self) -> bool {
+                true
+            }
+        }
+
+        let ticker = tokio::spawn(async {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            std::time::Instant::now()
+        });
+        let executor = AtHsExecutor::new(vec![], vec![]);
+        let (client_share, client_random, client_challenge) = setup_client();
+        let tee = SlowTee(MockTeeProvider::default());
+        executor
+            .execute_server(
+                &AtHsRequest {
+                    client_suites: &[CipherSuite::X25519MlKem768Aes256GcmSha384],
+                    client_versions: &[ProtocolVersion::V2],
+                    client_random: &client_random,
+                    client_challenge: &client_challenge,
+                    client_share: &client_share,
+                    client_quotes: &[],
+                    atb_ttl_secs: 3600,
+                    provenance: None,
+                },
+                Some(&tee),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        let done = std::time::Instant::now();
+        // With the single worker blocked inside the quote, the ticker could only run afterwards.
+        assert!(ticker.await.unwrap() + std::time::Duration::from_millis(200) < done);
     }
 
     #[tokio::test]

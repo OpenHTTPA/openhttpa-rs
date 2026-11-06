@@ -196,6 +196,38 @@ impl MlDsaKeyPair {
         })
     }
 
+    /// Rebuild a key pair from previously exported key bytes.
+    ///
+    /// # Errors
+    /// Returns [`Err`] if either key is malformed for ML-DSA-65.
+    pub fn from_bytes(public_key: &[u8], secret_key: &[u8]) -> Result<Self, PqcError> {
+        let sig = oqs::sig::Sig::new(oqs::sig::Algorithm::MlDsa65)
+            .map_err(|e| PqcError::SigKeyGen(e.to_string()))?;
+        sig.public_key_from_bytes(public_key)
+            .ok_or_else(|| PqcError::SigKeyGen("malformed ML-DSA public key".to_owned()))?;
+        let secret = sig
+            .secret_key_from_bytes(secret_key)
+            .ok_or_else(|| PqcError::SigKeyGen("malformed ML-DSA secret key".to_owned()))?
+            .to_owned();
+        Ok(Self {
+            sig,
+            secret_key: Some(secret),
+            public_key: public_key.to_vec(),
+        })
+    }
+
+    /// Export the secret key bytes; the returned buffer is zeroized on drop.
+    ///
+    /// # Errors
+    /// Returns [`Err`] if the secret key was already dropped.
+    pub fn secret_key_bytes(&self) -> Result<zeroize::Zeroizing<Vec<u8>>, PqcError> {
+        let secret_key = self
+            .secret_key
+            .as_ref()
+            .ok_or_else(|| PqcError::Sign("secret key already dropped".to_owned()))?;
+        Ok(zeroize::Zeroizing::new(secret_key.as_ref().to_vec()))
+    }
+
     /// Sign `message` and return the signature bytes.
     ///
     /// # Errors
@@ -284,6 +316,16 @@ mod tests {
         let msg = b"`OpenHTTPA` handshake transcript";
         let sig = kp.sign(msg).unwrap();
         MlDsaKeyPair::verify(&kp.public_key, msg, &sig).unwrap();
+    }
+
+    #[test]
+    fn mldsa_export_import_round_trip() {
+        let kp = MlDsaKeyPair::generate().unwrap();
+        let sk = kp.secret_key_bytes().unwrap();
+        let restored = MlDsaKeyPair::from_bytes(&kp.public_key, &sk).unwrap();
+        let sig = restored.sign(b"m").unwrap();
+        MlDsaKeyPair::verify(&kp.public_key, b"m", &sig).unwrap();
+        assert!(MlDsaKeyPair::from_bytes(&kp.public_key, b"short").is_err());
     }
 
     #[test]
