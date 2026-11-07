@@ -192,7 +192,7 @@ Detailed reports and proofs are available in the [Formal Security Suite](#formal
 
 ### IETF Standardization
 
-- **[IETF Internet-Draft (Protocol Wire)](docs/ietf/draft-openhttpa-protocol-00.md)**: The authoritative protocol specification and wire format definition.
+- **[IETF Internet-Draft (Protocol Wire)](docs/ietf/draft-openhttpa-protocol-02.md)**: The authoritative protocol specification and wire format definition.
 
 ### NIST Technical Reports & Guidelines
 

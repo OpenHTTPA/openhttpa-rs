@@ -3,9 +3,9 @@
 | Metadata           | Value                                                      |
 | :----------------- | :--------------------------------------------------------- |
 | **Document ID**    | OPENHTTPA-SP-2026-001                                      |
-| **Version**        | 1.0 (Official Release)                                     |
+| **Version**        | 1.1 (Revision 1)                                           |
 | **Status**         | Final                                                      |
-| **Date**           | May 2026                                                   |
+| **Date**           | November 2026                                              |
 | **Authors**        | The `OpenHTTPA` Foundation (openhttpa.org)                 |
 | **Classification** | UNCLASSIFIED // PUBLIC                                     |
 | **Subject**        | Operational Security and TEE Configuration for `OpenHTTPA` |
@@ -46,7 +46,14 @@ This document provides operational security guidelines for the deployment and ma
 ### 4.1 Mutual Attestation
 
 - Implementations SHOULD require **Mutual Attestation** for all enclave-to-enclave communication.
-- Both the client and server MUST verify that the Peer measurement (MR ENCLAVE/MR SIGNER) matches the authorized whitelist.
+- Both the client and server MUST verify that the peer's measurements match the authorized allow-list for its Attestation Profile: `launch_measurement` (`direct-sev-snp`), `MRTD` and `RTMR[0..3]` (`direct-tdx`), or the reviewed paravisor build plus vTPM PCRs 4, 7 and 11 (`azure-cvm-snp`, `azure-cvm-tdx`).
+
+### 4.1a Attestation Profiles (Revision 1)
+
+- Policies SHOULD name the profile a server must prove. Verifiers MUST refuse profiles they do not implement and MUST NOT accept evidence of one profile as another.
+- **Class B (Azure)**: the paravisor's launch measurement or `MRTD` changes with the Azure host build. Operators MUST keep a reviewed allow-list of builds and treat a new build as a change requiring review, not as an automatic update.
+- **Identity keys at rest**: seal them to the vTPM under a PCR policy (Class B), or under an SNP `MSG_KEY_REQ` derived key bound to the launch measurement (`direct-sev-snp`). TDX has no sealing key, so `direct-tdx` identity keys are per boot or released by a key broker after attestation. A key protected only by a host-provided vTPM is exposed to the host.
+- Where possible, clients SHOULD pin the server's identity key after first verification: later sessions are then authenticated by ML-DSA-65 even if a classical attestation root is broken.
 
 ### 4.2 Attestation Revocation
 
@@ -59,6 +66,12 @@ This document provides operational security guidelines for the deployment and ma
 
 - The SHA-384 transcript hash of every `OpenHTTPA` handshake SHOULD be logged in a tamper-evident audit trail (e.g., a hash-chain or distributed ledger).
 - These logs allow for post-incident verification that the session was established with a legitimate TEE.
+- For independent review, record handshakes as `openhttpa-audit-v1` records (raw `ATTEST` heads, evidence and AEAD framing; never plaintext). Auditors verify them offline from the raw octets with their own tools, without trusting the implementation that produced them. The recorder's clock is not authenticated; the epoch issue time is.
+
+### 5.1a HTTP Field Names (Revision 1)
+
+- Proxies emit the RFC 6648 field names `OpenHTTPA-Verified`, `OpenHTTPA-Attestation-Type`, `OpenHTTPA-Measurement`, `OpenHTTPA-Sealed-Key-Fingerprint`, `OpenHTTPA-Upstream-Endpoint` and `OpenHTTPA-Error`, together with the legacy `X-OpenHTTPA-*` aliases during the transition. Consumers SHOULD read the unprefixed field first.
+- Proxies MUST strip every field in the namespace, in both spellings and any letter case, from relayed requests and responses before adding their own; consumers MUST NOT trust these fields on traffic that bypassed their own proxy.
 
 ### 5.2 Behavioral Analysis
 
@@ -75,3 +88,10 @@ Adherence to these guidelines ensures that `OpenHTTPA` deployments maintain the 
 - [SP 800-53 Rev. 5] "Security and Privacy Controls for Information Systems and Organizations".
 - [SP 800-147B] "BIOS Protection Guidelines".
 - [SP 800-190] "Application Container Security Guide".
+
+**Revision History**
+
+| Version | Date          | Changes                                                                                                                                 |
+| ------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.0     | May 2026      | Initial release.                                                                                                                        |
+| 1.1     | November 2026 | Profile-specific measurements (§4.1), Attestation Profiles and key sealing (§4.1a), raw wire audit records (§5.1), field names (§5.1a). |

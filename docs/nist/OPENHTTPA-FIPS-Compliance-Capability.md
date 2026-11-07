@@ -3,9 +3,9 @@
 | Metadata           | Value                                                         |
 | :----------------- | :------------------------------------------------------------ |
 | **Document ID**    | OPENHTTPA-FIPS-2026-001                                       |
-| **Version**        | 1.0 (Official Release)                                        |
+| **Version**        | 1.1 (Revision 1)                                              |
 | **Status**         | Final                                                         |
-| **Date**           | May 2026                                                      |
+| **Date**           | November 2026                                                 |
 | **Authors**        | The `OpenHTTPA` Foundation (openhttpa.org)                    |
 | **Classification** | UNCLASSIFIED // PUBLIC                                        |
 | **Subject**        | Assessment of `OpenHTTPA` Cryptographic Module for FIPS 140-3 |
@@ -44,6 +44,14 @@ The following table maps the `OpenHTTPA` primitives to NIST-approved standards:
 | Key Agreement (PQ)        | ML-KEM-768          | FIPS 203              |
 | Key Agreement (Classical) | X25519              | RFC 7748 / SP 800-186 |
 | Digital Signature (PQ)    | ML-DSA-65           | FIPS 204              |
+
+**ML-DSA usage (Revision 1).** Identity signatures are pure ML-DSA-65 (FIPS 204 Algorithm 2,
+`M' = 0x00 || len(ctx) || ctx || M`) with a non-empty context per role (FIPS 204 §5.2):
+`"openhttpa/v1/hs-server-transcript"` for the handshake transcript and
+`"openhttpa/v1/epoch-session-binding"` for epoch session bindings. The module enforces context
+lengths of 1 to 255 octets. HashML-DSA is not used. Interoperability of the context signatures
+was checked against an independent FIPS 204 implementation. The ML-DSA provider (liboqs) is not a
+CMVP-validated module (see §1).
 
 ## 4. Self-Tests and Integrity Checks
 
@@ -91,4 +99,12 @@ The `OpenHTTPA` cryptographic module architecture is fully aligned with FIPS 140
 - [FIPS 140-3] "Security Requirements for Cryptographic Modules".
 - [FIPS 203] "Module-Lattice-Based Key-Encapsulation Mechanism Standard".
 - [FIPS 204] "Module-Lattice-Based Digital Signature Standard".
+
+**Revision History**
+
+| Version | Date          | Changes                                               |
+| ------- | ------------- | ----------------------------------------------------- |
+| 1.0     | May 2026      | Initial release.                                      |
+| 1.1     | November 2026 | ML-DSA-65 context strings and their enforcement (§3). |
+
 - [SP 800-131A] "Transitions: Recommendation for Transitioning the Use of Cryptographic Algorithms and Key Lengths".

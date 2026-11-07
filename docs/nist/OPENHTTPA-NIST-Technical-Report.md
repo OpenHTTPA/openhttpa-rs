@@ -3,9 +3,9 @@
 | Metadata           | Value                                                     |
 | :----------------- | :-------------------------------------------------------- |
 | **Document ID**    | OPENHTTPA-TR-2026-001                                     |
-| **Version**        | 1.0 (Official Release)                                    |
+| **Version**        | 1.1 (Revision 1)                                          |
 | **Status**         | Final                                                     |
-| **Date**           | May 2026                                                  |
+| **Date**           | November 2026                                             |
 | **Authors**        | The `OpenHTTPA` Foundation (openhttpa.org)                |
 | **Classification** | UNCLASSIFIED // PUBLIC                                    |
 | **Subject**        | Formal Specification and Security Analysis of `OpenHTTPA` |
@@ -71,14 +71,61 @@ Following NIST SP 800-227 (Draft) guidance, `OpenHTTPA` uses a hybrid KEM combin
 
 The combined secret is derived using a length-prefixed IKM construction to maintain IND-CCA2 security properties.
 
+### 4.3 Cloud-Agnostic Core and Attestation Profiles (Revision 1)
+
+The protocol is split into a normative core that is identical on every cloud and hypervisor, and
+pluggable Attestation Profiles (draft-openhttpa-protocol-02, Sections "Normative Core" and
+"Attestation Profiles").
+
+**Core.** The transcript hash `T` is SHA-384 over the length-prefixed (u64, big-endian) client
+random, 48-octet challenge, both X25519 keys, both ML-KEM-768 encapsulation keys and the ML-KEM
+ciphertext, followed by the suite (u16) and version (u8) identifiers. From it:
+
+```text
+R = SHA-512("openhttpa hs server" || T)
+D = SHA-512("openhttpa-az-cvm/v1/session-nonce" || B || SHA-256(id_pub))
+    B = R (fresh evidence)  or  B = E = SHA-512("openhttpa-az-cvm/v1/epoch" || nonce32 || u64(issued))
+```
+
+`D` binds both the session and the server's long-term ML-DSA-65 identity key `id_pub` into one
+64-octet value, which is what hardware evidence carries.
+
+**Profiles.**
+
+| Class | Profiles                         | Where                                     | How `D` reaches the hardware                                                                                                                               |
+| ----- | -------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A     | `direct-sev-snp`, `direct-tdx`   | Google Cloud, bare metal (`configfs-tsm`) | `D` is the CPU's `REPORT_DATA` (SNP report `0x50..0x90`; TD quote `568..632`)                                                                              |
+| B     | `azure-cvm-snp`, `azure-cvm-tdx` | Azure (OpenHCL paravisor at VMPL 0)       | `REPORT_DATA[0..32] = SHA-256(runtime data)`; runtime data holds the vTPM AK and `user-data = D`; the AK signs `TPMS_ATTEST` with `extraData = SHA-256(D)` |
+
+In Class A the workload is measured by `launch_measurement` (SNP) or `MRTD` + `RTMR[0..3]` (TDX).
+In Class B those registers measure the paravisor, and the guest is measured in vTPM PCRs 4, 7 and
+11 (plus deployment PCRs). A verifier dispatches on the profile before parsing and refuses
+profiles it does not implement. Class B is verified on Azure production silicon, including a
+published live SEV-SNP session; Class A is specified for direct-device deployments.
+
 ## 5. Cryptographic Specifications
 
-| Primitive          | Algorithm Standard      | Security Strength |
-| ------------------ | ----------------------- | ----------------- |
-| Key Exchange       | X25519 + ML-KEM-768     | 128-bit (PQ-Min)  |
-| Payload Encryption | AES-256-GCM             | 256-bit           |
-| Key Derivation     | HKDF-SHA-384 (RFC 5869) | 192-bit           |
-| Digital Signature  | TEE-ECDSA + ML-DSA-65   | 192-bit (PQ)      |
+| Primitive                 | Algorithm Standard                           | Security Strength                     |
+| ------------------------- | -------------------------------------------- | ------------------------------------- |
+| Key Exchange              | X25519 + ML-KEM-768 (hybrid)                 | 128-bit classical; NIST PQ Category 3 |
+| Payload Encryption        | AES-256-GCM                                  | 256-bit                               |
+| Key Derivation            | HKDF-SHA-384 (RFC 5869)                      | 192-bit                               |
+| Identity Signature        | ML-DSA-65 (FIPS 204), role-specific contexts | NIST PQ Category 3                    |
+| Attestation roots (AMD)   | ARK/ASK RSA-4096-PSS, VCEK ECDSA P-384       | classical only                        |
+| Attestation roots (Intel) | PCK chain and attestation key, ECDSA P-256   | classical only                        |
+| vTPM AK (Class B)         | RSA 2048 bits or more, RSASSA-PKCS1-v1_5     | about 112-bit classical only          |
+
+**Identity signature contexts (Revision 1).** The identity key signs pure ML-DSA-65 (FIPS 204
+Algorithm 2) under non-empty contexts: `"openhttpa/v1/hs-server-transcript"` over `T`, and
+`"openhttpa/v1/epoch-session-binding"` over `"openhttpa-az-cvm/v1/epoch-session-sig" || E || R`.
+Signatures from Revision 0 implementations use the empty context; verifiers may accept them for
+recorded sessions and deployed servers and must report it (openhttpa-rs ADR-005).
+
+**Hybrid threat model.** Session confidentiality is post-quantum: recorded traffic stays protected
+while either half of the hybrid KEM holds. Attestation authenticity is classical: an adversary who
+can forge a vendor or AK signature can attest a TEE that does not exist to a client that has not
+pinned the server's identity key. Once the identity key is pinned, authentication rests on
+ML-DSA-65 alone. No post-quantum attestation root is offered by the TEE vendors today.
 
 ## 6. Formal Verification and Symbolic Analysis
 
@@ -123,7 +170,7 @@ To support the integration of off-chain data into blockchain ecosystems (Bitcoin
 
 ### 10.1 Transcript-Bound Attestation
 
-The extension enforces strict transcript binding by injecting a mathematically sound digest into the TEE's hardware-signed `REPORT_DATA` field. Because physical TEE report registers (e.g., SGX or TDX `REPORT_DATA`) are fixed to exactly 64 bytes, `OpenHTTPA` avoids all truncation vulnerabilities by computing a full `SHA-512` digest over the protocol context. For Oracle fetches, the `REPORT_DATA` is generated as `SHA-512("openhttpa oracle v1" || transcript_hash || oracle_response)`. This strictly binds the fetched payload to the secure session identity, guaranteeing 256-bit collision resistance and immunity to length-extension attacks. This mathematically ensures that an Oracle quote cannot be replayed, altered, or re-used in a different session, effectively mitigating "quote poaching" and data spoofing attacks.
+The extension enforces strict transcript binding by injecting a mathematically sound digest into the TEE's hardware-signed `REPORT_DATA` field. Because physical TEE report registers (e.g., SGX or TDX `REPORT_DATA`) are fixed to exactly 64 bytes, `OpenHTTPA` avoids all truncation vulnerabilities by computing a full `SHA-512` digest over the protocol context. For Oracle fetches, the `REPORT_DATA` is generated as `SHA-512("openhttpa oracle v1" || transcript_hash || oracle_response)`. This strictly binds the fetched payload to the secure session identity, with 256-bit classical collision resistance (about 2^171 against the Brassard-Hoyer-Tapp quantum algorithm) and no length-extension exposure, because the digest is never extended. This mathematically ensures that an Oracle quote cannot be replayed, altered, or re-used in a different session, effectively mitigating "quote poaching" and data spoofing attacks.
 
 ### 10.2 ZK-Integrated Data Verification
 
@@ -132,6 +179,16 @@ For maximum assurance on-chain, the extension supports the generation of RISC Ze
 1.  The data was fetched via a valid `OpenHTTPA` session.
 2.  The data transformation (e.g., price aggregation) was performed correctly inside the TEE.
 3.  The hardware quote matches the expected system measurement (MRTDX/MRENCLAVE).
+
+## 10a. Raw Wire Auditability (Revision 1)
+
+A client can record each handshake as an `openhttpa-audit-v1` record: the exact `ATTEST` request
+and response heads, the evidence they carry, and the AEAD framing (AAD, ticket counter, length and
+tag, never plaintext) of the first encrypted exchanges. A third party re-verifies the record
+offline from its octets alone: `T`, `D`, both ML-DSA-65 signatures, and every vendor and vTPM link.
+A live Azure SEV-SNP session recorded this way is published with the reference implementation,
+together with byte-offset tables. It is verified by two implementations that share no code:
+the Rust reference and a Python verifier on an independent FIPS 204 implementation.
 
 ## 11. Conclusion
 
@@ -143,3 +200,12 @@ For maximum assurance on-chain, the extension supports the generation of RISC Ze
 - [RFC 8446] "The Transport Layer Security (TLS) Protocol Version 1.3".
 - [SP 800-90B] NIST, "Recommendation for the Entropy Sources Used for Random Bit Generation".
 - [ProVerif] Blanchet, B., "ProVerif: Cryptographic Protocol Verifier in the Formal Model".
+- [FIPS 204] NIST, "Module-Lattice-Based Digital Signature Standard", 2024.
+- [draft-openhttpa-protocol-02] "OpenHTTPA: Hypertext Transfer Protocol with Attestation".
+
+**Revision History**
+
+| Version | Date          | Changes                                                                                                                                                                  |
+| ------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1.0     | May 2026      | Initial release.                                                                                                                                                         |
+| 1.1     | November 2026 | Normative core vs. Attestation Profiles (§4.3); FIPS 204 contexts and hybrid threat model (§5); raw wire auditability (§10a); quantum collision bound corrected (§10.1). |
