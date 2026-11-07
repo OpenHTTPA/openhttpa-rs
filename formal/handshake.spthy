@@ -7,6 +7,10 @@ begin
 
 builtins: diffie-hellman, hashing, signing
 
+/* Signatures carry their role (ADR-005): the server's ML-DSA-65 transcript signature uses the
+ * FIPS 204 context 'openhttpa/v1/hs-server-transcript'; the client's evidence is bound under the
+ * 'openhttpa hs client' prefix. A signature made for one role never verifies for the other. */
+
 /* --- Infrastructure --- */
 
 rule Setup_Server_TEE:
@@ -42,7 +46,7 @@ rule Server_Hello:
   in
   [ In(<c_random, pk_c, ek_c, challenge>), !Ltk('Server', sk_s_tee), Fr(~sk_s), Fr(~s_random), Fr(~sk_ml_srv) ]
   --[ Server_Sends_SH(challenge, k_session) ]->
-  [ Out(<~s_random, pk_s, ct_ml, sign(h(transcript), sk_s_tee)>), Server_State_Wait(challenge, k_session, transcript) ]
+  [ Out(<~s_random, pk_s, ct_ml, sign(<'openhttpa/v1/hs-server-transcript', h(transcript)>, sk_s_tee)>), Server_State_Wait(challenge, k_session, transcript) ]
 
 rule Client_Verify_And_Finish:
   let
@@ -54,13 +58,13 @@ rule Client_Verify_And_Finish:
     k_session = h(<ss_dh, ss_ml, h(transcript)>)
   in
   [ Client_State(sk_c, sk_ml, c_random, challenge), In(<s_random, pk_s, ct_ml, s_quote>), !Pk('Server', pk_s_tee), !Ltk('Client', sk_c_tee) ]
-  --[ Eq(verify(s_quote, h(transcript), pk_s_tee), true),
+  --[ Eq(verify(s_quote, <'openhttpa/v1/hs-server-transcript', h(transcript)>, pk_s_tee), true),
       Client_Accepts(challenge, k_session) ]->
-  [ Out(<sign(h(transcript), sk_c_tee)>), Client_Session(challenge, k_session) ]
+  [ Out(<sign(<'openhttpa hs client', h(transcript)>, sk_c_tee)>), Client_Session(challenge, k_session) ]
 
 rule Server_Verify_Finish:
   [ Server_State_Wait(challenge, k_session, transcript), In(c_quote), !Pk('Client', pk_c_tee) ]
-  --[ Eq(verify(c_quote, h(transcript), pk_c_tee), true),
+  --[ Eq(verify(c_quote, <'openhttpa hs client', h(transcript)>, pk_c_tee), true),
       Server_Accepts(challenge, k_session) ]->
   [ Server_Session(challenge, k_session) ]
 

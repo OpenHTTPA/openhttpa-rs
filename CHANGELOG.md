@@ -9,6 +9,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Security
+
+- **⚠️ BREAKING (ADR-005): ML-DSA-65 identity signatures use FIPS 204 context strings.** The
+  server signs the handshake transcript hash under `"openhttpa/v1/hs-server-transcript"`
+  (`HS_SERVER_SIG_CONTEXT`) instead of the empty context, so its signatures cannot be confused with
+  any other signature the same key makes. New `MlDsaKeyPair::{sign_with_context,
+verify_with_context}` and `openhttpa_core::handshake::verify_server_transcript_signature`, which
+  also accepts, and reports as `LegacyEmpty`, signatures from servers built before this change.
+  Pinned-identity clients older than this change reject new servers: upgrade clients first. The
+  Tamarin model now tags each role's signature.
+
 ### Real-silicon hardening (`enhance/real-silicon`)
 
 - **New `tdx_dcap` feature (`openhttpa-attestation`)**: `TdxDcapVerifier`, a first-party Intel TDX

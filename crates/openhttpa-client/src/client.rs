@@ -313,9 +313,16 @@ impl OpenHttpaClient {
             ));
         }
         let sig = &resp_hdrs.server_signatures[0];
-        openhttpa_crypto::pqc::MlDsaKeyPair::verify(pub_key_bytes, transcript_hash, sig).map_err(
-            |e| ClientError::Attestation(format!("PQC signature verification failed: {e}")),
+        let ctx = openhttpa_core::handshake::verify_server_transcript_signature(
+            pub_key_bytes,
+            transcript_hash,
+            sig,
         )
+        .map_err(|e| ClientError::Attestation(format!("PQC signature verification failed: {e}")))?;
+        if ctx == openhttpa_core::handshake::TranscriptSigContext::LegacyEmpty {
+            tracing::warn!("server signed the transcript with the legacy empty ML-DSA context");
+        }
+        Ok(())
     }
 
     /// Perform a preflight `OPTIONS` request to obtain a fresh challenge from the server.

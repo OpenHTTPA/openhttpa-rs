@@ -37,6 +37,59 @@ pub const SIG_ALG_ML_DSA_65: SigAlg = SigAlg::MlDsa65;
 pub const HS_SERVER_PREFIX: &[u8] = b"openhttpa hs server";
 /// Domain separation prefix for client TEE quotes.
 pub const HS_CLIENT_PREFIX: &[u8] = b"openhttpa hs client";
+/// FIPS 204 context string of the server's ML-DSA-65 signature over the transcript hash
+/// (ADR-005). The signed message is the 48-byte SHA-384 transcript hash itself.
+pub const HS_SERVER_SIG_CONTEXT: &[u8] = b"openhttpa/v1/hs-server-transcript";
+
+/// How a server transcript signature verified (ADR-005).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TranscriptSigContext {
+    /// Signed under [`HS_SERVER_SIG_CONTEXT`] (current servers).
+    Context,
+    /// Signed with the empty FIPS 204 context (servers before ADR-005); accepted so recorded
+    /// sessions and deployed servers keep verifying.
+    LegacyEmpty,
+}
+
+impl TranscriptSigContext {
+    /// Human-readable label used in logs and audit output.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Context => "FIPS 204 context \"openhttpa/v1/hs-server-transcript\"",
+            Self::LegacyEmpty => "legacy empty FIPS 204 context (pre-ADR-005 server)",
+        }
+    }
+}
+
+/// Verify the server's ML-DSA-65 signature over `transcript_hash` under `identity_pub`.
+///
+/// The signature must verify under [`HS_SERVER_SIG_CONTEXT`]; failing that, under the empty
+/// context of servers built before ADR-005. Accepting both is safe because a key used by current
+/// software never signs with the empty context, so no signature from another role of the same key
+/// can be replayed here.
+///
+/// # Errors
+/// Returns [`openhttpa_crypto::pqc::PqcError::Verify`] if neither form verifies.
+pub fn verify_server_transcript_signature(
+    identity_pub: &[u8],
+    transcript_hash: &[u8],
+    signature: &[u8],
+) -> Result<TranscriptSigContext, openhttpa_crypto::pqc::PqcError> {
+    use openhttpa_crypto::pqc::MlDsaKeyPair;
+    if MlDsaKeyPair::verify_with_context(
+        identity_pub,
+        transcript_hash,
+        signature,
+        HS_SERVER_SIG_CONTEXT,
+    )
+    .is_ok()
+    {
+        return Ok(TranscriptSigContext::Context);
+    }
+    MlDsaKeyPair::verify(identity_pub, transcript_hash, signature)
+        .map(|()| TranscriptSigContext::LegacyEmpty)
+}
 
 /// The post-quantum digital signature algorithm negotiated during `AtHS`.
 ///
@@ -531,7 +584,7 @@ impl AtHsExecutor {
         let mut server_signatures = Vec::new();
         if let Some(key) = identity_key {
             let sig = key
-                .sign(&transcript_bytes)
+                .sign_with_context(&transcript_bytes, HS_SERVER_SIG_CONTEXT)
                 .map_err(|e| HandshakeError::Internal(format!("ML-DSA sign failed: {e}")))?;
             server_signatures.push(sig);
         }
@@ -768,6 +821,58 @@ mod tests {
         assert_eq!(suite, CipherSuite::X25519MlKem768Aes256GcmSha384);
         assert_eq!(ver, ProtocolVersion::V2);
         assert_eq!(result.session_keys.client_write_key.len(), 32);
+    }
+
+    /// ADR-005: the server signs the transcript under `HS_SERVER_SIG_CONTEXT`; the bytes differ
+    /// from the pre-ADR-005 empty-context signature, which still verifies as `LegacyEmpty`.
+    #[tokio::test]
+    async fn transcript_signature_uses_the_fips204_context() {
+        use openhttpa_crypto::pqc::MlDsaKeyPair;
+        let executor = AtHsExecutor::new(vec![], vec![]);
+        let identity = MlDsaKeyPair::generate().unwrap();
+        let (client_share, client_random, client_challenge) = setup_client();
+        let (_, _, _, result) = executor
+            .execute_server(
+                &AtHsRequest {
+                    client_suites: &[CipherSuite::X25519MlKem768Aes256GcmSha384],
+                    client_versions: &[ProtocolVersion::V2],
+                    client_random: &client_random,
+                    client_challenge: &client_challenge,
+                    client_share: &client_share,
+                    client_quotes: &[],
+                    atb_ttl_secs: 3600,
+                    provenance: None,
+                },
+                None,
+                None,
+                Some(&identity),
+            )
+            .await
+            .unwrap();
+        let t = result.transcript_hash;
+        let sig = &result.server_signatures[0];
+        let pk = &identity.public_key;
+        // New output: verifies only under the context, never as an empty-context signature.
+        MlDsaKeyPair::verify_with_context(pk, &t, sig, HS_SERVER_SIG_CONTEXT).unwrap();
+        assert!(MlDsaKeyPair::verify(pk, &t, sig).is_err());
+        assert_eq!(
+            verify_server_transcript_signature(pk, &t, sig).unwrap(),
+            TranscriptSigContext::Context
+        );
+        // Old output still verifies, and is reported as legacy.
+        let legacy = identity.sign(&t).unwrap();
+        assert_eq!(
+            verify_server_transcript_signature(pk, &t, &legacy).unwrap(),
+            TranscriptSigContext::LegacyEmpty
+        );
+        // A signature under another context, or over another transcript, is refused.
+        let other = identity
+            .sign_with_context(&t, b"openhttpa/v1/epoch-session-binding")
+            .unwrap();
+        assert!(verify_server_transcript_signature(pk, &t, &other).is_err());
+        let mut t2 = t;
+        t2[0] ^= 1;
+        assert!(verify_server_transcript_signature(pk, &t2, sig).is_err());
     }
 
     #[tokio::test]

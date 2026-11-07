@@ -100,6 +100,12 @@ Optional, high-privacy extension using Zero-Knowledge proofs to wrap TEE attesta
 - **Classical**: X25519 or P-384
 - **Post-Quantum**: ML-KEM-768 or ML-KEM-1024 (FIPS 203)
 - **Signatures**: ML-DSA-65 or higher (FIPS 204) for post-quantum identity. (See [ADR-002](docs/adr/ADR-002-mldsa-fips-conflict.md) regarding FIPS migration status).
+  Identity signatures are pure ML-DSA with a role-specific FIPS 204 context ([ADR-005](docs/adr/ADR-005-mldsa-context-strings.md)):
+  the server's transcript signature in `Attest-Server-Signatures` is
+  `ML-DSA-65.Sign(sk, M = transcript_hash, ctx = "openhttpa/v1/hs-server-transcript")`
+  (`HS_SERVER_SIG_CONTEXT`); verify it with `verify_server_transcript_signature`, which also
+  accepts the empty context of earlier servers and reports which form verified.
+  `MlDsaKeyPair::sign_with_context` / `verify_with_context` take a 1..=255-byte context.
 
 ### AEAD
 

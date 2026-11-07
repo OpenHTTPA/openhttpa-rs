@@ -263,6 +263,71 @@ impl MlDsaKeyPair {
             .ok_or(PqcError::Verify)?;
         sig.verify(message, s, pk).map_err(|_| PqcError::Verify)
     }
+
+    /// Sign `message` under the FIPS 204 context string `context` (pure ML-DSA,
+    /// `M' = 0x00 || len(ctx) || ctx || M`, FIPS 204 Algorithm 2).
+    ///
+    /// A non-empty context separates signatures made by one key for different
+    /// purposes: a signature never verifies under another context, nor under
+    /// the empty context that [`Self::sign`] uses.
+    ///
+    /// # Errors
+    /// Returns [`Err`] if `context` is empty or longer than 255 bytes, or if signing fails.
+    pub fn sign_with_context(&self, message: &[u8], context: &[u8]) -> Result<Vec<u8>, PqcError> {
+        check_context(context).map_err(PqcError::Sign)?;
+        let secret_key = self
+            .secret_key
+            .as_ref()
+            .ok_or_else(|| PqcError::Sign("secret key already dropped".to_owned()))?;
+        if !self.sig.has_ctx_str_support() {
+            return Err(PqcError::Sign(
+                "ML-DSA context strings unsupported".to_owned(),
+            ));
+        }
+        let sig = self
+            .sig
+            .sign_with_ctx_str(message, context, secret_key)
+            .map_err(|e| PqcError::Sign(e.to_string()))?;
+        Ok(sig.into_vec())
+    }
+
+    /// Verify a signature made by [`Self::sign_with_context`] under `context`.
+    ///
+    /// # Errors
+    /// Returns [`Err`] if `context` is empty or longer than 255 bytes, the key or
+    /// signature is malformed, or the signature does not verify under `context`.
+    pub fn verify_with_context(
+        public_key_bytes: &[u8],
+        message: &[u8],
+        signature: &[u8],
+        context: &[u8],
+    ) -> Result<(), PqcError> {
+        check_context(context).map_err(|_| PqcError::Verify)?;
+        let sig = oqs::sig::Sig::new(oqs::sig::Algorithm::MlDsa65)
+            .map_err(|e| PqcError::SigKeyGen(e.to_string()))?;
+        if !sig.has_ctx_str_support() {
+            return Err(PqcError::Verify);
+        }
+        let pk = sig
+            .public_key_from_bytes(public_key_bytes)
+            .ok_or(PqcError::Verify)?;
+        let s = sig
+            .signature_from_bytes(signature)
+            .ok_or(PqcError::Verify)?;
+        sig.verify_with_ctx_str(message, s, context, pk)
+            .map_err(|_| PqcError::Verify)
+    }
+}
+
+/// FIPS 204 allows a context of 0..=255 bytes; a domain-separating context must be non-empty.
+fn check_context(context: &[u8]) -> Result<(), String> {
+    if context.is_empty() || context.len() > 255 {
+        return Err(format!(
+            "ML-DSA context must be 1..=255 bytes, got {}",
+            context.len()
+        ));
+    }
+    Ok(())
 }
 
 // ─── Wrapped shared-secret from PQC KEM ──────────────────────────────────────
@@ -316,6 +381,32 @@ mod tests {
         let msg = b"`OpenHTTPA` handshake transcript";
         let sig = kp.sign(msg).unwrap();
         MlDsaKeyPair::verify(&kp.public_key, msg, &sig).unwrap();
+    }
+
+    #[test]
+    fn mldsa_context_separates_signatures() {
+        let kp = MlDsaKeyPair::generate().unwrap();
+        let m = b"transcript";
+        let with_ctx = kp.sign_with_context(m, b"openhttpa/test/a").unwrap();
+        MlDsaKeyPair::verify_with_context(&kp.public_key, m, &with_ctx, b"openhttpa/test/a")
+            .unwrap();
+        // Neither another context nor the empty context (plain `verify`) accepts it, and a
+        // plain signature does not verify under a context.
+        assert!(
+            MlDsaKeyPair::verify_with_context(&kp.public_key, m, &with_ctx, b"openhttpa/test/b")
+                .is_err()
+        );
+        assert!(MlDsaKeyPair::verify(&kp.public_key, m, &with_ctx).is_err());
+        let plain = kp.sign(m).unwrap();
+        assert!(
+            MlDsaKeyPair::verify_with_context(&kp.public_key, m, &plain, b"openhttpa/test/a")
+                .is_err()
+        );
+        // Empty and over-long contexts are refused.
+        assert!(kp.sign_with_context(m, b"").is_err());
+        assert!(kp.sign_with_context(m, &[0u8; 256]).is_err());
+        assert!(MlDsaKeyPair::verify_with_context(&kp.public_key, m, &with_ctx, b"").is_err());
+        assert!(kp.sign_with_context(m, &[7u8; 255]).is_ok());
     }
 
     #[test]
