@@ -28,6 +28,15 @@ This document provides operational security guidelines for the deployment and ma
 > [!WARNING]
 > **Security Version Number (SVN)**: Implementations MUST enforce a minimum SVN policy. Enclaves running on platforms with known, unpatched microcode vulnerabilities (e.g., L1TF, MDS) MUST be rejected by the `OpenHTTPA` verifier.
 
+**TCB floors across a fleet (Revision 1).** A cloud provider updates firmware and microcode host by
+host, so hosts running the same image report different TCB levels. Two live Azure SEV-SNP captures
+of the same paravisor reported bootloader 12, TEE 0, SNP 28, microcode 88 on one host, and
+bootloader 10, TEE 0, SNP 23, microcode 84 on another (both ABI 0.31). Verifiers MUST require the
+SEV-SNP `reported_tcb` to equal the VCEK's AMD KDS TCB extensions (`1.3.6.1.4.1.3704.1.3.*`).
+Operators SHOULD set the policy floor (bootloader, TEE, SNP, microcode, ABI; `TEE_TCB_SVN` for
+TDX) to the lowest level they accept on any host, and raise it as AMD or Intel security bulletins
+require. Under OHMP the Delegate-MA enforces these floors at appraisal time.
+
 ## 3. Key Lifecycle Management
 
 ### 3.1 Session Key Entropy
@@ -91,7 +100,7 @@ Adherence to these guidelines ensures that `OpenHTTPA` deployments maintain the 
 
 **Revision History**
 
-| Version | Date          | Changes                                                                                                                                 |
-| ------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 1.0     | May 2026      | Initial release.                                                                                                                        |
-| 1.1     | November 2026 | Profile-specific measurements (§4.1), Attestation Profiles and key sealing (§4.1a), raw wire audit records (§5.1), field names (§5.1a). |
+| Version | Date          | Changes                                                                                                                                                          |
+| ------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.0     | May 2026      | Initial release.                                                                                                                                                 |
+| 1.1     | November 2026 | Profile-specific measurements (§4.1), Attestation Profiles and key sealing (§4.1a), raw wire audit records (§5.1), field names (§5.1a), fleet TCB floors (§2.2). |

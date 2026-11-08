@@ -3,6 +3,7 @@ title: 'OpenHTTPA: Hypertext Transfer Protocol with Attestation'
 abbrev: 'OpenHTTPA'
 docname: draft-openhttpa-protocol-02
 category: std
+submissiontype: IETF
 
 ipr: trust200902
 area: Security
@@ -33,6 +34,13 @@ normative:
     date: 2024
 
 informative:
+  OHMP:
+    title: 'OpenHTTPA Hierarchical Measurement Protocol (OHMP) and Transparency Log'
+    author:
+      - name: G. King
+    seriesinfo:
+      Internet-Draft: draft-openhttpa-ohmp-00
+    date: 2026-11
   AMD-SNP-ABI:
     title: 'SEV Secure Nested Paging Firmware ABI Specification'
     author:
@@ -364,12 +372,15 @@ evidence, MUST reject a profile it does not implement, and MUST NOT accept evide
 as another. A relying-party policy SHOULD name the profile it requires. Profiles fall into two
 classes.
 
-| Profile          | Class | TEE type  | `format`             | `D` placement                      | Workload measurements            |
-| ---------------- | ----- | --------- | -------------------- | ---------------------------------- | -------------------------------- |
-| `direct-sev-snp` | A     | `sev_snp` | `direct_sev_snp_v1`  | SNP `REPORT_DATA` (`0x50..0x90`)   | `launch_measurement`             |
-| `direct-tdx`     | A     | `tdx`     | `direct_tdx_v1`      | TD quote `REPORTDATA` (`568..632`) | `MRTD`, `RTMR[0..3]`             |
-| `azure-cvm-snp`  | B     | `sev_snp` | `az_cvm_snp_vtpm_v1` | HCL runtime data `user-data`       | vTPM PCRs 4, 7, 11 (+12, 14, 15) |
-| `azure-cvm-tdx`  | B     | `tdx`     | `az_cvm_tdx_vtpm_v1` | HCL runtime data `user-data`       | vTPM PCRs 4, 7, 11 (+12, 14, 15) |
+| Profile          | Class | `format`             | `D` placement                      | Workload measurements            |
+| ---------------- | ----- | -------------------- | ---------------------------------- | -------------------------------- |
+| `direct-sev-snp` | A     | `direct_sev_snp_v1`  | SNP `REPORT_DATA` (`0x50..0x90`)   | `launch_measurement`             |
+| `direct-tdx`     | A     | `direct_tdx_v1`      | TD quote `REPORTDATA` (`568..632`) | `MRTD`, `RTMR[0..3]`             |
+| `azure-cvm-snp`  | B     | `az_cvm_snp_vtpm_v1` | HCL runtime data `user-data`       | vTPM PCRs 4, 7, 11 (+12, 14, 15) |
+| `azure-cvm-tdx`  | B     | `az_cvm_tdx_vtpm_v1` | HCL runtime data `user-data`       | vTPM PCRs 4, 7, 11 (+12, 14, 15) |
+
+The TEE type ({{tee-type-registry}}) is `sev_snp` for the `-sev-snp` and `-snp` profiles and `tdx`
+for the `-tdx` profiles.
 
 Offsets are half-open byte ranges. SNP offsets are relative to the `ATTESTATION_REPORT`
 ({{AMD-SNP-ABI}}); TD quote offsets are relative to an Intel DCAP v4 quote ({{INTEL-TDX-DCAP}}).
@@ -708,7 +719,31 @@ launch_measurement (paravisor)
                   20241bdbc44d5255222da65cce1c7f48
 GUEST_POLICY      0x3001f (DEBUG = 0, MIGRATE_MA = 0); VMPL 0
 reported_tcb      bootloader 12, TEE 0, SNP 28, microcode 88 (equal to the VCEK's)
+ABI (GUEST_POLICY) 0.31
 ```
+
+### TCB Levels Across Hosts {#tcb-across-hosts}
+
+A second capture, made on 2026-11-08 during a cross-silicon run of {{OHMP}}, carries the same
+paravisor `launch_measurement` (`6587d41e...7f48`) but reports `bootloader 10, TEE 0, SNP 23,
+microcode 84, ABI 0.31`. In that run three Intel TDX Root-MAs (2-of-3 quorum) and an Intel TDX
+Delegate-MA in Azure `westus3` endorsed an AMD SEV-SNP workload in `eastus2`. The record is
+published as `crates/openhttpa-proxy/tests/fixtures/ohmp-real-silicon/` in `openhttpa-proxy-rs`
+at commit `2af53dc`.
+
+The two servers ran on different Genoa chips, with different VCEKs. A cloud provider updates PSP
+firmware and microcode host by host, so `reported_tcb` differs between hosts, clusters and
+regions even for an identical guest image. Two rules bind the value:
+
+- The VCEK is issued for one chip at one TCB. Its AMD KDS extensions `1.3.6.1.4.1.3704.1.3.1`
+  (bootloader), `.3.2` (TEE), `.3.3` (SNP) and `.3.8` (microcode), plus `.3.9` (FMC) on Turin,
+  carry those levels. A verifier MUST require `reported_tcb` to equal them, as in both captures;
+  otherwise a report could claim levels its chip key was never issued for.
+- The minimum acceptable TCB is policy. Under {{OHMP}} the Delegate-MA appraises evidence against
+  per-component floors (`min_bootloader`, `min_tee`, `min_snp`, `min_microcode_svn`,
+  `min_abi_major`, `min_abi_minor`) and endorses only evidence that meets every one. A fleet
+  floor is the lowest TCB the operator accepts on any host. A floor copied from the first host,
+  here `12/0/28/88`, would refuse the `10/0/23/84` host, though it runs the same image.
 
 ## Binary Trailer Layouts
 
@@ -936,7 +971,7 @@ The `mac_key` used depends on the sender: the client MUST use the `client_mac_ke
 
 To guarantee the high-assurance required for Confidential AI and Web3 Oracles, implementations of `OpenHTTPA` SHOULD adhere to the following strict guidelines:
 
-1. **Formal Modeling**: Core protocol models MUST maintain ongoing machine-checked formal verification (using frameworks like ProVerif or Tamarin) proving perfect forward secrecy and injective authentication against both classical and post-quantum Dolev-Yao adversaries.
+1. **Formal Modeling**: Core protocol models MUST maintain ongoing machine-checked formal verification (using frameworks like ProVerif {{ProVerif}} or Tamarin {{Tamarin}}) proving perfect forward secrecy and injective authentication against both classical and post-quantum Dolev-Yao adversaries.
 2. **Memory Safety**: Implementations SHOULD be authored in memory-safe languages (e.g., Rust) to eliminate classes of vulnerabilities related to buffer manipulation during parsing of untrusted network inputs.
 3. **FIPS 140-3 Readiness**: Underlying cryptographic primitives and random number generators MUST be sourced from validated or validateable modules (e.g., `aws-lc-rs` or `BoringSSL`) to ensure enterprise compliance.
 
@@ -1065,6 +1100,14 @@ This section records the implementation status as of November 2026.
   For `azure-cvm-snp`, a full live session was captured and is published with byte-offset tables
   ({{live-snp-vector}}). `azure-cvm-tdx` evidence has been verified on Azure TDX silicon; no
   `openhttpa-audit-v1` wire capture of a TDX session is published yet.
+- **Cross-silicon OHMP run** (`openhttpa-proxy-rs` `2af53dc`, `ohmp-rs` `2478f75`): five Azure
+  CVMs. Three Intel TDX Root-MAs (2-of-3) and one Intel TDX Delegate-MA in `westus3`, with
+  ML-DSA-65 keys sealed to the vTPM under PCRs 4 and 11, endorsed an AMD SEV-SNP workload in
+  `eastus2` ({{OHMP}}). The Relying Party verified the workload's OpenHTTPA session and its OHMP
+  endorsement, inclusion proof and STH quorum. Signatures under all six context strings verify,
+  including `openhttpa/v1/hs-server-transcript` and `openhttpa/v1/epoch-session-binding`. The
+  workload host's TCB differs from that of {{live-snp-vector}}; see {{tcb-across-hosts}}. All
+  three Root-MAs ran on one provider, so a multi-provider quorum has not been run live.
 - **Class A, specified** (`direct-sev-snp`, `direct-tdx`): this document gives the wire
   specification for Google Cloud and bare-metal deployments. The verifier in `openhttpa-proxy-rs`
   recognises Class A quotes and policies and refuses them by name, because no Class A verifier has
@@ -1224,7 +1267,7 @@ Furthermore, the following specific key slots are logically prefixed by the prot
 - `client mac key`
 - `server mac key`
 
-## TEE Type Registry
+## TEE Type Registry {#tee-type-registry}
 
 This document establishes a new IANA registry titled "`OpenHTTPA` TEE Types".
 
@@ -1275,4 +1318,5 @@ This document establishes a new IANA registry titled "OpenHTTPA Extended Error C
 - IANA: `OpenHTTPA-*` field names (RFC 6648, with `X-OpenHTTPA-*` transition aliases), the `httpa`
   URI scheme (provisional), the `httpa/1` ALPN ID, and the OpenHTTPA Attestation Profile
   Identifiers registry.
-- Test vector: a live `azure-cvm-snp` session captured on production silicon.
+- Test vector: a live `azure-cvm-snp` session captured on production silicon, and a second
+  host's TCB from a cross-silicon OHMP run, explaining why TCB levels differ between hosts.

@@ -81,6 +81,15 @@ def replace_texttables(xml: str) -> str:
     )
 
 
+def replace_references_title(xml: str) -> str:
+    """<references title='X' ...> → <references ...><name>X</name> (RFC 7991 §2.42)."""
+    return re.sub(
+        r"""<references title=(['"])(.*?)\1([^>]*)>""",
+        r'<references\3>\n<name>\2</name>',
+        xml,
+    )
+
+
 def strip_line_pis(xml: str) -> str:
     """Remove <?line N?> processing instructions inserted by kramdown-rfc."""
     return re.sub(r'\s*<\?line \d+\?>', '', xml)
@@ -93,6 +102,7 @@ def main() -> None:
     xml = replace_spanx(xml)
     xml = replace_lists(xml)
     xml = replace_texttables(xml)
+    xml = replace_references_title(xml)
     xml = strip_line_pis(xml)
 
     if path:

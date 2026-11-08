@@ -190,6 +190,23 @@ A live Azure SEV-SNP session recorded this way is published with the reference i
 together with byte-offset tables. It is verified by two implementations that share no code:
 the Rust reference and a Python verifier on an independent FIPS 204 implementation.
 
+A second capture comes from a cross-silicon run of the OpenHTTPA Hierarchical Measurement Protocol
+(OHMP) on five Azure CVMs (`openhttpa-proxy-rs` `2af53dc`). Three Intel TDX Root-MAs (2-of-3) and
+an Intel TDX Delegate-MA in `westus3` endorsed an AMD SEV-SNP workload in `eastus2`. The same two
+verifiers check that session, the OHMP endorsement, its inclusion proof and the STH quorum.
+
+| Capture                     | Host                 | `reported_tcb` (bootloader / TEE / SNP / microcode) | ABI  |
+| --------------------------- | -------------------- | --------------------------------------------------- | ---- |
+| `audit-real-snp.jsonl`      | Azure Genoa, eastus2 | 12 / 0 / 28 / 88                                    | 0.31 |
+| `ohmp-real-silicon/` (OHMP) | Azure Genoa, eastus2 | 10 / 0 / 23 / 84                                    | 0.31 |
+
+Both servers ran the same paravisor (`launch_measurement` `6587d41e…7f48`) on different chips.
+Providers update PSP firmware and microcode host by host, so TCB levels vary across a fleet. In
+both captures `reported_tcb` equals the VCEK's AMD KDS TCB extensions (`1.3.6.1.4.1.3704.1.3.1`,
+`.2`, `.3`, `.8`), which bind the report to the levels its chip key was issued for. The minimum
+acceptable TCB is policy: OHMP Delegate-MAs pin a per-component floor, set at the lowest TCB the
+operator accepts on any host.
+
 ## 11. Conclusion
 
 ---
@@ -205,7 +222,7 @@ the Rust reference and a Python verifier on an independent FIPS 204 implementati
 
 **Revision History**
 
-| Version | Date          | Changes                                                                                                                                                                  |
-| ------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1.0     | May 2026      | Initial release.                                                                                                                                                         |
-| 1.1     | November 2026 | Normative core vs. Attestation Profiles (§4.3); FIPS 204 contexts and hybrid threat model (§5); raw wire auditability (§10a); quantum collision bound corrected (§10.1). |
+| Version | Date          | Changes                                                                                                                                                                                                 |
+| ------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.0     | May 2026      | Initial release.                                                                                                                                                                                        |
+| 1.1     | November 2026 | Normative core vs. Attestation Profiles (§4.3); FIPS 204 contexts and hybrid threat model (§5); raw wire auditability and cross-silicon OHMP capture (§10a); quantum collision bound corrected (§10.1). |
