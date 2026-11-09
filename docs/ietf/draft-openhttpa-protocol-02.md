@@ -2,12 +2,10 @@
 title: 'OpenHTTPA: Hypertext Transfer Protocol with Attestation'
 abbrev: 'OpenHTTPA'
 docname: draft-openhttpa-protocol-02
-category: std
-submissiontype: IETF
+category: exp
+submissiontype: independent
 
 ipr: trust200902
-area: Security
-workgroup: HTTPBIS, TEE, SECDISPATCH
 keyword: [http, attestation, tee, post-quantum, pqc, sigma-i, eat]
 
 normative:
@@ -16,7 +14,6 @@ normative:
   RFC6648:
   RFC7301:
   RFC7595:
-  RFC8126:
   RFC9110:
   RFC8446:
   RFC5869:
@@ -34,6 +31,7 @@ normative:
     date: 2024
 
 informative:
+  RFC8726:
   OHMP:
     title: 'OpenHTTPA Hierarchical Measurement Protocol (OHMP) and Transparency Log'
     author:
@@ -130,9 +128,11 @@ seamlessly bind these hardware proofs to HTTP sessions.
     semantic context (Method, Path, Query) to the hardware-verified session.
 6.  **0-RTT Confidentiality**: Sub-millisecond session resumption for latency-critical agentic and oracle workflows.
 
-## Working Group Target
+## Document Status and Review
 
-This document is submitted for cross-working-group review:
+This document is submitted to the Independent Submission Stream for publication as an
+Experimental RFC. It is not the product of any IETF working group and has no IETF consensus.
+Review is nonetheless welcome from the following communities:
 
 - **HTTPBIS**: For extensions to the HTTP protocol, including the `ATTEST` method and SFV headers.
 - **TEE**: For the use of hardware attestation reports and Entity Attestation Tokens (EAT) {{RFC9334}}.
@@ -1132,9 +1132,19 @@ The following individuals have contributed to the design and implementation of `
 
 # IANA Considerations
 
-## HTTP Method Registry
+This document is published on the Independent Submission Stream. In line with {{RFC8726}}, it
+requests assignments only from existing registries whose policy is not IETF Review or Standards
+Action, and it does not ask IANA to create any new registry. The identifier namespaces it defines
+(attestation profiles, HKDF labels, TEE types and extended error codes) are specified by this
+document alone and are listed below for reference only. A future IETF-stream specification may
+request IANA registries for them.
 
-This document requests the registration of the `ATTEST` method in the "HTTP Method Registry".
+## HTTP Method `ATTEST`
+
+The "HTTP Method Registry" requires IETF Review ({{RFC9110}}, Section 16.1.1), which is not
+available to Independent Stream documents. This document therefore makes no IANA request for the
+`ATTEST` method. `ATTEST` is used experimentally and is unregistered; its registration is left to
+a future IETF-stream specification. Its properties are:
 
 | Method | Safe | Idempotent | Reference     |
 | ------ | ---- | ---------- | ------------- |
@@ -1229,14 +1239,13 @@ connection.
 
 > **Open issue**: neither the `httpa` scheme nor the `httpa/1` ALPN ID is used by the reference
 > implementation yet. `httpa/1` is also the `Attest-Versions` token of protocol version 1, whereas
-> the current version is `openhttpa`. The working group should decide whether the ALPN ID tracks
+> the current version is `openhttpa`. A future revision will decide whether the ALPN ID tracks
 > the version token.
 
 ## OpenHTTPA Attestation Profile Identifiers
 
-This document establishes a new IANA registry titled "OpenHTTPA Attestation Profile Identifiers",
-with the registration policy Specification Required ({{RFC8126}}). The designated expert verifies
-that a new profile specifies all five elements of {{attestation-profiles}}. An entry records the
+This document defines the following Attestation Profile identifiers. No IANA registry is
+requested. A new profile MUST specify all five elements of {{attestation-profiles}}. An entry records the
 identifier, class, TEE type token, `format` label, a description and a reference. Identifiers are
 lowercase ASCII letters, digits and hyphens.
 
@@ -1247,9 +1256,10 @@ lowercase ASCII letters, digits and hyphens.
 | `azure-cvm-snp`  | B     | `sev_snp` | `az_cvm_snp_vtpm_v1` | AMD SEV-SNP behind Azure OpenHCL with a vTPM                          | This document |
 | `azure-cvm-tdx`  | B     | `tdx`     | `az_cvm_tdx_vtpm_v1` | Intel TDX behind Azure OpenHCL with a vTPM                            | This document |
 
-## OpenHTTPA HKDF Labels Registry
+## OpenHTTPA HKDF Labels
 
-This document establishes a new IANA registry titled "OpenHTTPA HKDF Labels" to prevent namespace collisions with TLS. The following labels are registered for use with HKDF expansion in OpenHTTPA.
+To prevent namespace collisions with TLS, this document defines the following labels for HKDF
+expansion in `OpenHTTPA`. No IANA registry is requested.
 
 | Label               | DTLS-OK | Reference     |
 | ------------------- | ------- | ------------- |
@@ -1267,9 +1277,9 @@ Furthermore, the following specific key slots are logically prefixed by the prot
 - `client mac key`
 - `server mac key`
 
-## TEE Type Registry {#tee-type-registry}
+## TEE Types {#tee-type-registry}
 
-This document establishes a new IANA registry titled "`OpenHTTPA` TEE Types".
+This document defines the following `OpenHTTPA` TEE type tokens. No IANA registry is requested.
 
 | TEE Type Token | Description                    | Reference     |
 | -------------- | ------------------------------ | ------------- |
@@ -1280,9 +1290,10 @@ This document establishes a new IANA registry titled "`OpenHTTPA` TEE Types".
 | `nvidia_gpu`   | NVIDIA Hopper/Blackwell GPU    | This document |
 | `tpm`          | Trusted Platform Module 2.0    | This document |
 
-## OpenHTTPA Extended Error Codes Registry
+## OpenHTTPA Extended Error Codes
 
-This document establishes a new IANA registry titled "OpenHTTPA Extended Error Codes".
+This document defines the following `OpenHTTPA` extended error codes. No IANA registry is
+requested.
 
 | Error Code                   | Description                                    | Reference     |
 | ---------------------------- | ---------------------------------------------- | ------------- |
@@ -1317,6 +1328,10 @@ This document establishes a new IANA registry titled "OpenHTTPA Extended Error C
   profile confusion, identity keys at rest, raw wire auditability, field spoofing.
 - IANA: `OpenHTTPA-*` field names (RFC 6648, with `X-OpenHTTPA-*` transition aliases), the `httpa`
   URI scheme (provisional), the `httpa/1` ALPN ID, and the OpenHTTPA Attestation Profile
-  Identifiers registry.
+  Identifiers.
+- Retargeted to the Independent Submission Stream as an Experimental RFC. Following {{RFC8726}},
+  the `ATTEST` method is no longer requested from the IETF Review "HTTP Method Registry", and the
+  profile, HKDF label, TEE type and error code namespaces are document-defined rather than new
+  IANA registries.
 - Test vector: a live `azure-cvm-snp` session captured on production silicon, and a second
   host's TCB from a cross-silicon OHMP run, explaining why TCB levels differ between hosts.
