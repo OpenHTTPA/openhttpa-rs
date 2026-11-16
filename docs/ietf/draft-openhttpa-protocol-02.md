@@ -15,9 +15,9 @@ normative:
   RFC7301:
   RFC7595:
   RFC9110:
-  RFC8446:
+  RFC9846:
   RFC5869:
-  RFC8941:
+  RFC9651:
   RFC9334:
   FIPS-203:
     title: 'Module-Lattice-Based Key-Encapsulation Mechanism Standard'
@@ -106,7 +106,7 @@ This document supersedes draft-openhttpa-protocol-01.
 
 # Introduction
 
-Modern web architectures rely on Transport Layer Security (TLS) {{RFC8446}} for data-in-transit
+Modern web architectures rely on Transport Layer Security (TLS) {{RFC9846}} for data-in-transit
 protection. However, TLS termination often occurs at the network edge (e.g., Load Balancers,
 CDNs, or WAFs), leaving data exposed within internal cloud networks and vulnerable to
 privileged insiders or compromised host software.
@@ -196,7 +196,7 @@ Attest-Versions: openhttpa
 ```
 
 The server responds with supported versions and hardware types using Structured Field Values
-{{RFC8941}}.
+{{RFC9651}}.
 
 ```http
 HTTP/1.1 204 No Content
@@ -477,7 +477,7 @@ elements.
 
 ## Structured Field Values (SFV)
 
-All `OpenHTTPA` headers MUST follow {{RFC8941}}.
+All `OpenHTTPA` headers MUST follow {{RFC9651}}.
 
 ### Attest-Versions
 
@@ -819,7 +819,7 @@ The `label` MUST be `b"openhttpa hybrid kem v1"`.
 
 ## Session Key Schedule
 
-The key schedule follows {{RFC5869}} and is aligned with {{RFC8446}} Section 7.1.
+The key schedule follows {{RFC5869}} and is aligned with {{RFC9846}} Section 7.1.
 
 ### HKDF-Extract
 
@@ -881,7 +881,7 @@ To achieve the required `< 5ms overhead` SLA in distributed Agentic Swarms, clie
 
 ### 0-RTT Forward Secrecy Limitations
 
-Similar to TLS 1.3 early data (Section 8 of {{RFC8446}}), 0-RTT requests do not provide perfect forward secrecy against an attacker who compromises the `Resumption Master Secret` of the parent session. If the server's long-term hardware secrets or the specific session's resumption secret are compromised, the 0-RTT data sent on that connection could be decrypted. Clients SHOULD NOT send highly sensitive data (e.g., identity credentials or financial transactions) in 0-RTT payloads.
+Similar to TLS 1.3 early data (Section 8 of {{RFC9846}}), 0-RTT requests do not provide perfect forward secrecy against an attacker who compromises the `Resumption Master Secret` of the parent session. If the server's long-term hardware secrets or the specific session's resumption secret are compromised, the 0-RTT data sent on that connection could be decrypted. Clients SHOULD NOT send highly sensitive data (e.g., identity credentials or financial transactions) in 0-RTT payloads.
 
 ### 0-RTT Replay Protection
 
@@ -1118,7 +1118,7 @@ This section records the implementation status as of November 2026.
 
 # Acknowledgements
 
-The authors would like to thank the contributors to the The `OpenHTTPA` Foundation (openhttpa.org) and the IETF
+The authors would like to thank the contributors to the `OpenHTTPA` Foundation and the IETF
 Security area for their feedback on early iterations of this protocol.
 
 # Contributors
