@@ -33,6 +33,13 @@ impl QuoteVerifier for TpmVerifier {
                 ));
             }
 
+            // 0. Bind quote QUDD to the expected 64-byte handshake report_data.
+            if quote.qudd.as_ref() != report_data.as_slice() {
+                return Err(VerificationError::PolicyViolation(
+                    "TPM quote QUDD does not match expected report_data".to_owned(),
+                ));
+            }
+
             // 1. Fetch AIK certificate from collateral_uris if available
             let aik_cert: Vec<u8> = if let Some(uri) = quote.collateral_uris.first() {
                 tracing::debug!("Fetching TPM AIK collateral from: {uri}");
@@ -46,17 +53,16 @@ impl QuoteVerifier for TpmVerifier {
             };
 
             // 2. Verify signature on the PCR quote using the AIK public key.
+            // Fail closed on any signature failure; never fall back to mock acceptance.
             let public_key = UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, &aik_cert);
 
-            let mut message = Vec::new();
+            let mut message = Vec::with_capacity(report_data.len());
             message.extend_from_slice(report_data);
 
-            if let Err(e) = public_key.verify(&message, &quote.raw) {
-                tracing::warn!(
-                    "TPM AIK signature verification failed: {}. Continuing in mock mode.",
-                    e
-                );
-            }
+            public_key.verify(&message, &quote.raw).map_err(|e| {
+                tracing::warn!("TPM AIK signature verification failed: {e}");
+                VerificationError::SignatureInvalid
+            })?;
 
             Ok(VerificationResult {
                 claims: crate::verifier::EatClaims {

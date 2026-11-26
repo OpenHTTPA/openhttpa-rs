@@ -108,7 +108,7 @@ impl<const W: usize> ReplayGuardInner<W> {
             return Ok(());
         }
         let diff = self.highest - nonce;
-        if diff as usize >= W * 64 {
+        if diff >= (W * 64) as u64 {
             return Err(ReplayError::TooOld(nonce));
         }
 
@@ -123,13 +123,16 @@ impl<const W: usize> ReplayGuardInner<W> {
     }
 
     #[allow(clippy::cast_possible_truncation)]
-    // SAFETY: Same cast rationale as `check` above — `advance as usize` is
-    // bounded by the `W * 64` guard on entry; all index casts are within
-    // window-size bounds.  See `check` for the full argument.
+    // SAFETY: Same cast rationale as `check` above — `advance` is checked
+    // against `(W * 64) as u64` before casting to `usize`, avoiding 32-bit
+    // truncation bugs.
     fn accept(&mut self, nonce: u64) {
+        if nonce == 0 {
+            return;
+        }
         if nonce > self.highest {
             let advance = nonce - self.highest;
-            if advance as usize >= W * 64 {
+            if advance >= (W * 64) as u64 {
                 self.window = [0u64; W];
             } else {
                 for step in 1..=(advance as usize) {
@@ -140,6 +143,9 @@ impl<const W: usize> ReplayGuardInner<W> {
                 }
             }
             self.highest = nonce;
+        } else if self.highest - nonce >= (W * 64) as u64 {
+            // Out-of-window nonce must never overwrite an in-window bit.
+            return;
         }
 
         let slot = (nonce as usize) % W;

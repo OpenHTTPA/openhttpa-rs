@@ -13,8 +13,8 @@ use openhttpa_transport::connection::AttestTransport;
 
 use crate::client::OpenHttpaClient;
 
-/// Builder for [`OpenHttpaClient`].  All fields optional; sensible defaults apply.
-#[derive(Default)]
+/// Builder for [`OpenHttpaClient`].  All fields optional; fail-closed defaults apply
+/// (`strict_attestation` defaults to `true`).
 pub struct OpenHttpaClientBuilder {
     server_uri: Option<Uri>,
     tee_providers: Vec<Arc<dyn TeeProvider>>,
@@ -28,6 +28,25 @@ pub struct OpenHttpaClientBuilder {
     /// Maximum bytes to buffer for a non-streaming response body.
     /// Defaults to [`DEFAULT_MAX_RESPONSE_SIZE`].
     max_response_size: Option<usize>,
+}
+
+impl Default for OpenHttpaClientBuilder {
+    fn default() -> Self {
+        Self {
+            server_uri: None,
+            tee_providers: Vec::new(),
+            verifier: None,
+            transport: None,
+            tee_config: None,
+            // Fail closed by default: refuse unattested servers unless the
+            // caller explicitly opts out via `.strict_attestation(false)`.
+            strict_attestation: true,
+            require_preflight: false,
+            oblivious_config: None,
+            server_identity_pub: None,
+            max_response_size: None,
+        }
+    }
 }
 
 /// Default maximum response size for non-streaming trusted requests (16 MiB).

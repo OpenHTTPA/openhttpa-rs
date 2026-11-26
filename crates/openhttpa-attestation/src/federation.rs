@@ -164,25 +164,70 @@ impl FederatedVerifier {
         Ok(())
     }
 
+    /// Verify a single ML-DSA-65 signature over canonical manifest bytes.
+    fn verify_mldsa_sig(
+        payload: &[u8],
+        pk_bytes: &[u8],
+        sig_bytes: &[u8],
+    ) -> Result<(), VerificationError> {
+        let sig_alg = oqs::sig::Sig::new(oqs::sig::Algorithm::MlDsa65)
+            .map_err(|e| VerificationError::Malformed(e.to_string()))?;
+        let pk = sig_alg
+            .public_key_from_bytes(pk_bytes)
+            .ok_or(VerificationError::SignatureInvalid)?;
+        let sig = sig_alg
+            .signature_from_bytes(sig_bytes)
+            .ok_or(VerificationError::SignatureInvalid)?;
+        sig_alg
+            .verify(payload, sig, pk)
+            .map_err(|_| VerificationError::SignatureInvalid)
+    }
+
     /// Internal: verify the signature on the manifest based on the configured trust root.
     fn verify_manifest_signature(
         &self,
         manifest: &FederationManifest,
     ) -> Result<(), VerificationError> {
+        let canonical_payload = serde_json::to_vec(&(
+            manifest.version,
+            manifest.issued_at,
+            manifest.expires_at,
+            &manifest.entries,
+        ))
+        .map_err(|e| {
+            VerificationError::PolicyViolation(format!(
+                "failed to serialize FederationManifest for signature verification: {e}"
+            ))
+        })?;
+
         match &self.trust_root {
             ManifestTrustRoot::InsecureSkipSignatureCheck => {
-                warn!("FederatedVerifier: skipping manifest signature check (insecure mode).");
-                Ok(())
+                #[cfg(not(debug_assertions))]
+                {
+                    let _ = &canonical_payload;
+                    return Err(VerificationError::PolicyViolation(
+                        "ManifestTrustRoot::InsecureSkipSignatureCheck is forbidden in release builds"
+                            .into(),
+                    ));
+                }
+                #[cfg(debug_assertions)]
+                {
+                    warn!("FederatedVerifier: skipping manifest signature check (insecure mode).");
+                    Ok(())
+                }
             }
             ManifestTrustRoot::Operator(expected_key) => {
-                if let ManifestSignature::Operator { public_key, .. } = &manifest.signature {
+                if let ManifestSignature::Operator {
+                    public_key,
+                    signature,
+                } = &manifest.signature
+                {
                     if public_key != expected_key {
                         return Err(VerificationError::PolicyViolation(
                             "FederationManifest signed by unknown operator key".into(),
                         ));
                     }
-                    // NOTE: In production, the cryptographic signature bytes over the manifest
-                    // payload would be verified here using openhttpa_crypto.
+                    Self::verify_mldsa_sig(&canonical_payload, public_key, signature)?;
                     debug!("FederatedVerifier: validated operator signature on manifest.");
                     Ok(())
                 } else {
@@ -207,11 +252,13 @@ impl FederatedVerifier {
                         )));
                     }
 
-                    let mut valid_sigs = 0;
-                    for (pk, _sig) in signatures {
-                        // NOTE: In production, we'd verify the signature cryptographic validity
-                        // here before counting it towards the quorum.
-                        if validators.contains(pk) {
+                    let mut seen_validators = std::collections::HashSet::new();
+                    let mut valid_sigs: u32 = 0;
+                    for (pk, sig) in signatures {
+                        if validators.contains(pk)
+                            && seen_validators.insert(pk.as_slice())
+                            && Self::verify_mldsa_sig(&canonical_payload, pk, sig).is_ok()
+                        {
                             valid_sigs += 1;
                         }
                     }

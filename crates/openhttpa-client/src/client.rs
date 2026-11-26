@@ -73,8 +73,9 @@ pub enum ClientError {
 ///
 /// # Security defaults
 ///
-/// - `strict_attestation` defaults to `false` (development mode). **Set to
-///   `true` in production** to reject sessions with no server attestation quotes.
+/// - `strict_attestation` defaults to `true` (fail-closed production posture).
+///   Explicitly call `.strict_attestation(false)` only for local development against
+///   unattested servers.
 /// - `max_response_size` defaults to [`crate::builder::DEFAULT_MAX_RESPONSE_SIZE`] (16 MiB).
 ///   Increase only for known bulk-data endpoints.
 #[allow(dead_code)]
@@ -1042,6 +1043,7 @@ where
 
     async fn next_frame(&mut self) -> Result<Option<StreamFrame>, ClientError> {
         use futures::StreamExt;
+        const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024; // 16 MiB cap
 
         loop {
             // Need at least 4 bytes for length
@@ -1051,6 +1053,11 @@ where
                         .try_into()
                         .expect("Buffer has at least 4 bytes"),
                 ) as usize;
+                if len > MAX_FRAME_SIZE {
+                    return Err(ClientError::Transport(format!(
+                        "Frame size {len} exceeds maximum allowed ({MAX_FRAME_SIZE} bytes)"
+                    )));
+                }
                 // Need length + 8 bytes for counter
                 if self.buffer.len() >= 4 + 8 + len {
                     let _ = self.buffer.split_to(4); // Remove length
@@ -1175,9 +1182,24 @@ mod tests {
             .server_uri("http://127.0.0.1:8080".parse().unwrap())
             .transport(Arc::new(DummyTransport))
             .verifier(Arc::new(openhttpa_attestation::MockVerifier::default()))
+            .strict_attestation(false)
             .build();
         let session = client.attest_handshake().await.unwrap();
         assert!(session.is_alive());
+    }
+
+    #[tokio::test]
+    async fn default_client_rejects_unattested_server() {
+        let client = OpenHttpaClient::builder()
+            .server_uri("http://127.0.0.1:8080".parse().unwrap())
+            .transport(Arc::new(DummyTransport))
+            .verifier(Arc::new(openhttpa_attestation::MockVerifier::default()))
+            .build();
+        let err = client.attest_handshake().await.unwrap_err();
+        assert!(
+            matches!(err, ClientError::Attestation(_)),
+            "expected fail-closed Attestation error by default, got {err:?}"
+        );
     }
 
     struct QuddCheckingVerifier;

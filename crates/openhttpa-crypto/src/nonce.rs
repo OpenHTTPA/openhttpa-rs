@@ -54,18 +54,27 @@ pub trait NonceStorage: Send + Sync + std::fmt::Debug {
 #[derive(Debug)]
 pub struct FileNonceStorage {
     path: std::path::PathBuf,
+    write_lock: std::sync::Mutex<()>,
 }
 
 impl FileNonceStorage {
     /// Create a new `FileNonceStorage` at `path`.
     #[must_use]
     pub fn new(path: impl Into<std::path::PathBuf>) -> Self {
-        Self { path: path.into() }
+        Self {
+            path: path.into(),
+            write_lock: std::sync::Mutex::new(()),
+        }
     }
 }
 
 impl NonceStorage for FileNonceStorage {
     fn save(&self, next_send: u64, last_seen: u64) -> Result<(), NonceError> {
+        let _guard = self
+            .write_lock
+            .lock()
+            .map_err(|e| NonceError::Storage(format!("nonce storage lock poisoned: {e}")))?;
+
         let data = serde_json::json!({
             "next_send": next_send,
             "last_seen": last_seen,
@@ -73,28 +82,28 @@ impl NonceStorage for FileNonceStorage {
         let content =
             serde_json::to_string(&data).map_err(|e| NonceError::Storage(e.to_string()))?;
 
-        // SEC-04: Use an atomic write-to-temp-then-rename pattern so a crash
+        // SEC-04: Use an atomic write-to-temp-then-fsync-then-rename pattern so a crash
         // mid-write never leaves a truncated nonce file. A corrupted file
-        // would reset the counter to (1, 0) on restart, enabling replay of
-        // every historical nonce.
+        // would reset the counter on restart, enabling replay of historical nonces.
         let mut tmp = self.path.clone();
         tmp.set_extension("tmp");
 
-        #[cfg(unix)]
         {
             use std::io::Write;
-            use std::os::unix::fs::OpenOptionsExt;
             let mut opts = std::fs::OpenOptions::new();
-            opts.write(true).create(true).truncate(true).mode(0o600);
+            opts.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                opts.mode(0o600);
+            }
             let mut file = opts
                 .open(&tmp)
                 .map_err(|e| NonceError::Storage(e.to_string()))?;
             file.write_all(content.as_bytes())
                 .map_err(|e| NonceError::Storage(e.to_string()))?;
-        }
-        #[cfg(not(unix))]
-        {
-            std::fs::write(&tmp, &content).map_err(|e| NonceError::Storage(e.to_string()))?;
+            file.sync_all()
+                .map_err(|e| NonceError::Storage(e.to_string()))?;
         }
 
         std::fs::rename(&tmp, &self.path).map_err(|e| NonceError::Storage(e.to_string()))?;
@@ -109,8 +118,12 @@ impl NonceStorage for FileNonceStorage {
             std::fs::read_to_string(&self.path).map_err(|e| NonceError::Storage(e.to_string()))?;
         let data: serde_json::Value =
             serde_json::from_str(&content).map_err(|e| NonceError::Storage(e.to_string()))?;
-        let next = data["next_send"].as_u64().unwrap_or(1);
-        let last = data["last_seen"].as_u64().unwrap_or(0);
+        let next = data["next_send"].as_u64().ok_or_else(|| {
+            NonceError::Storage("corrupted nonce file: missing or invalid 'next_send'".to_owned())
+        })?;
+        let last = data["last_seen"].as_u64().ok_or_else(|| {
+            NonceError::Storage("corrupted nonce file: missing or invalid 'last_seen'".to_owned())
+        })?;
         Ok((next, last))
     }
 }
@@ -152,17 +165,28 @@ impl NonceManager {
 
     /// Acquire the next send nonce.  Fails if the counter would overflow.
     ///
+    /// Uses a CAS loop so `next_send` never wraps past `u64::MAX` back to `0`.
+    ///
     /// # Errors
     /// Returns [`Err`] if the nonce counter has overflowed.
     pub fn next_send_nonce(&self) -> Result<u64, NonceError> {
-        let prev = self.next_send.fetch_add(1, Ordering::SeqCst);
-        if prev == u64::MAX {
-            return Err(NonceError::Overflow);
+        loop {
+            let current = self.next_send.load(Ordering::SeqCst);
+            if current == u64::MAX {
+                return Err(NonceError::Overflow);
+            }
+            let next = current + 1;
+            if self
+                .next_send
+                .compare_exchange(current, next, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                if let Some(ref storage) = self.storage {
+                    storage.save(next, self.last_seen.load(Ordering::SeqCst))?;
+                }
+                return Ok(current);
+            }
         }
-        if let Some(ref storage) = self.storage {
-            storage.save(prev + 1, self.last_seen.load(Ordering::SeqCst))?;
-        }
-        Ok(prev)
     }
 
     /// Validate an incoming nonce from the peer.

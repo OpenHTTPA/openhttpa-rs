@@ -26,15 +26,25 @@ async fn graphql_handler(
 ) -> GraphQLResponse {
     let mut req = req.into_inner();
 
-    // Extract simulated client posture from headers for demo/testing
-    use openhttpa_proto::{ClientSecurityPosture, TeeClass};
-    let posture = match headers
-        .get("x-simulate-client-posture")
-        .and_then(|h| h.to_str().ok())
-    {
-        Some("MutualTee") => ClientSecurityPosture::MutualTee(TeeClass::IntelTdx),
-        Some("SimulatedTee") => ClientSecurityPosture::SimulatedTee,
-        _ => ClientSecurityPosture::OneDirectional, // Default
+    // Only allow simulated posture headers in debug builds; in release builds,
+    // never trust unauthenticated client-supplied security posture claims.
+    use openhttpa_proto::ClientSecurityPosture;
+    #[cfg(debug_assertions)]
+    let posture = {
+        use openhttpa_proto::TeeClass;
+        match headers
+            .get("x-simulate-client-posture")
+            .and_then(|h| h.to_str().ok())
+        {
+            Some("MutualTee") => ClientSecurityPosture::MutualTee(TeeClass::IntelTdx),
+            Some("SimulatedTee") => ClientSecurityPosture::SimulatedTee,
+            _ => ClientSecurityPosture::OneDirectional,
+        }
+    };
+    #[cfg(not(debug_assertions))]
+    let posture = {
+        let _ = &headers;
+        ClientSecurityPosture::OneDirectional
     };
     req = req.data(posture);
 

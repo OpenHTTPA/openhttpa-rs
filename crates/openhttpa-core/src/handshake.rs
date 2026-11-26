@@ -531,8 +531,11 @@ impl AtHsExecutor {
             .map_err(|e| HandshakeError::KeyDerivation(e.to_string()))?;
 
         let atb_id = AtbId::new();
-        let expires_at =
-            std::time::Instant::now() + std::time::Duration::from_secs(req.atb_ttl_secs);
+        let expires_at = std::time::Instant::now()
+            .checked_add(std::time::Duration::from_secs(req.atb_ttl_secs))
+            .ok_or_else(|| {
+                HandshakeError::KeyDerivation("atb_ttl_secs overflows Instant".to_owned())
+            })?;
 
         // Bind the transcript hash into TEE quotes so the client can verify
         // the server's attestation covers this specific session (C-TEE-1).
@@ -572,7 +575,13 @@ impl AtHsExecutor {
                         "server evidence generation failed: {e}"
                     )));
                 }
-                Err(_) => vec![],
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "server evidence generation failed in non-strict mode; proceeding without server quotes"
+                    );
+                    vec![]
+                }
             }
         } else {
             if self.strict_attestation {

@@ -258,7 +258,14 @@ impl AuthorizationPolicy for AiqlPolicyEngine {
         let action = action.to_string();
         async move {
             self.metrics.inc_aiql_evaluations();
-            let cache_key = format!("{}:{}:{}", measurement.is_debug, namespace, action);
+            let cache_key = format!(
+                "{}:{}:{}:{}:{}",
+                measurement.mrenclave,
+                measurement.mrsigner,
+                measurement.is_debug,
+                namespace,
+                action
+            );
 
             {
                 let mut cache = self.cache.lock().expect("Lock poisoned");

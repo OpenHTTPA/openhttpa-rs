@@ -279,25 +279,27 @@ impl DistributedReplayGuard for LocalReplayGuard {
     /// accepted just before a rotation are still rejected as replays.
     fn check_and_accept(
         &self,
-        _key: &str,
+        key: &str,
         nonce: u64,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ReplayError>> + Send + '_>>
     {
+        let mut item_bytes = Vec::with_capacity(key.len() + 1 + 8);
+        item_bytes.extend_from_slice(key.as_bytes());
+        item_bytes.push(0u8);
+        item_bytes.extend_from_slice(&nonce.to_be_bytes());
         Box::pin(async move {
-            let nonce_bytes = nonce.to_be_bytes().to_vec();
-
             // Check overlap filter first (read-only, no insertion).
             if let Some(ref prev) = *self.prev_bloom.lock().expect("prev_bloom mutex poisoned")
-                && prev.check(&nonce_bytes)
+                && prev.check(&item_bytes)
             {
                 return Err(ReplayError::Replay(nonce));
             }
 
             let mut bloom = self.bloom.lock().expect("bloom mutex poisoned");
-            if bloom.check(&nonce_bytes) {
+            if bloom.check(&item_bytes) {
                 return Err(ReplayError::Replay(nonce));
             }
-            bloom.set(&nonce_bytes);
+            bloom.set(&item_bytes);
             drop(bloom);
             self.count
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -314,14 +316,17 @@ impl DistributedReplayGuard for LocalReplayGuard {
 
     fn check(
         &self,
-        _key: &str,
+        key: &str,
         nonce: u64,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ReplayError>> + Send + '_>>
     {
+        let mut item_bytes = Vec::with_capacity(key.len() + 1 + 8);
+        item_bytes.extend_from_slice(key.as_bytes());
+        item_bytes.push(0u8);
+        item_bytes.extend_from_slice(&nonce.to_be_bytes());
         Box::pin(async move {
-            let nonce_bytes = nonce.to_be_bytes().to_vec();
             if let Some(ref prev) = *self.prev_bloom.lock().expect("prev_bloom mutex poisoned")
-                && prev.check(&nonce_bytes)
+                && prev.check(&item_bytes)
             {
                 return Err(ReplayError::Replay(nonce));
             }
@@ -329,7 +334,7 @@ impl DistributedReplayGuard for LocalReplayGuard {
                 .bloom
                 .lock()
                 .expect("bloom mutex poisoned")
-                .check(&nonce_bytes)
+                .check(&item_bytes)
             {
                 Err(ReplayError::Replay(nonce))
             } else {
@@ -439,44 +444,62 @@ where
                     return Ok(resp);
                 }
 
-                if let Ok(ticket_b64) = hdr_val.to_str()
-                    && let Ok(ticket_raw) = hex::decode(ticket_b64)
-                    && let Ok(mut durable_state) = engine.unseal_session(&ticket_raw)
-                {
-                    // SEC-02: Check distributed replay guard using the ticket's internal nonce.
-                    // We use the AtbId as the key for the replay guard window.
-                    let nonce = durable_state.client_counter; // In 0-RTT, the nonce is bound to the state
-                    let atb_id_str = durable_state.id.to_string();
-
-                    // SEC-03: Use the atomic check_and_accept to avoid
-                    // the TOCTOU window between a separate check + accept.
-                    if guard.check_and_accept(&atb_id_str, nonce).await.is_err() {
-                        tracing::warn!(base_id = %atb_id_str, nonce = nonce, "Blocked replayed 0-RTT ticket");
-                    } else {
-                        // SA-05: Handle 0-RTT key derivation if salt is present
-                        let rtt0_salt = openhttpa_headers::decode_attest_ticket(req.headers())
-                            .ok()
-                            .and_then(|d| d.salt);
-
-                        if let Some(salt) = rtt0_salt
-                            && let Ok(k) = openhttpa_core::handshake::SessionKeys::derive_0rtt(
-                                &durable_state.resumption_secret,
-                                &salt,
-                            )
-                        {
-                            tracing::debug!("Deriving fresh 0-RTT keys");
-                            durable_state.keys = openhttpa_core::session::SealedSessionKeys::new(k);
-                        }
-
-                        // Nonce was already committed atomically above by check_and_accept.
-
-                        let session = AttestSession::from_durable(&durable_state);
-                        if let Err(e) = registry.insert(session.clone()) {
-                            tracing::error!(error = %e, "Failed to insert resumed session");
-                        } else {
-                            tracing::debug!(base_id = %session.state().id, "0-RTT session resumed");
-                        }
+                let Ok(ticket_b64) = hdr_val.to_str() else {
+                    let mut resp = Response::new(Body::empty());
+                    *resp.status_mut() = http::StatusCode::UNAUTHORIZED;
+                    return Ok(resp);
+                };
+                let Ok(ticket_raw) = hex::decode(ticket_b64) else {
+                    let mut resp = Response::new(Body::empty());
+                    *resp.status_mut() = http::StatusCode::UNAUTHORIZED;
+                    return Ok(resp);
+                };
+                let mut durable_state = match engine.unseal_session(&ticket_raw) {
+                    Ok(state) => state,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Rejected invalid or expired 0-RTT ticket");
+                        let mut resp = Response::new(Body::empty());
+                        *resp.status_mut() = http::StatusCode::UNAUTHORIZED;
+                        return Ok(resp);
                     }
+                };
+
+                // SEC-02: Check distributed replay guard using the ticket's internal nonce.
+                // We use the AtbId as the key for the replay guard window.
+                let nonce = durable_state.client_counter; // In 0-RTT, the nonce is bound to the state
+                let atb_id_str = durable_state.id.to_string();
+
+                // SEC-03: Use the atomic check_and_accept to avoid
+                // the TOCTOU window between a separate check + accept.
+                if guard.check_and_accept(&atb_id_str, nonce).await.is_err() {
+                    tracing::warn!(base_id = %atb_id_str, nonce = nonce, "Blocked replayed 0-RTT ticket");
+                    let mut resp = Response::new(Body::empty());
+                    *resp.status_mut() = http::StatusCode::TOO_EARLY;
+                    return Ok(resp);
+                }
+
+                // SA-05: Handle 0-RTT key derivation if salt is present
+                let rtt0_salt = openhttpa_headers::decode_attest_ticket(req.headers())
+                    .ok()
+                    .and_then(|d| d.salt);
+
+                if let Some(salt) = rtt0_salt
+                    && let Ok(k) = openhttpa_core::handshake::SessionKeys::derive_0rtt(
+                        &durable_state.resumption_secret,
+                        &salt,
+                    )
+                {
+                    tracing::debug!("Deriving fresh 0-RTT keys");
+                    durable_state.keys = openhttpa_core::session::SealedSessionKeys::new(k);
+                }
+
+                // Nonce was already committed atomically above by check_and_accept.
+
+                let session = AttestSession::from_durable(&durable_state);
+                if let Err(e) = registry.insert(session.clone()) {
+                    tracing::error!(error = %e, "Failed to insert resumed session");
+                } else {
+                    tracing::debug!(base_id = %session.state().id, "0-RTT session resumed");
                 }
             }
 

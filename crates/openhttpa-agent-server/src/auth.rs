@@ -19,12 +19,21 @@ pub async fn auth_middleware(
 
     match auth_header {
         Some(token) => {
-            let resolver = IdentityResolver::new("http://localhost:8545").expect("Valid URL");
+            let resolver = IdentityResolver::new("http://localhost:8545")
+                .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
             match resolver.resolve_did(token).await {
                 Ok(mrenclave) => {
                     tracing::info!("Successfully resolved DID to MRENCLAVE: {}", mrenclave);
                 }
                 Err(IdentityResolverError::NotImplemented { .. }) => {
+                    #[cfg(not(debug_assertions))]
+                    {
+                        tracing::error!(
+                            "DID resolution not implemented; failing closed in release build"
+                        );
+                        return Err(axum::http::StatusCode::SERVICE_UNAVAILABLE);
+                    }
+                    #[cfg(debug_assertions)]
                     tracing::warn!("DID resolution not implemented; skipping check for testbed");
                 }
                 Err(e) => {

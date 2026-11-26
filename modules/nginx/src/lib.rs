@@ -150,13 +150,17 @@ extern "C" fn openhttpa_handshake_body_handler(r: *mut ffi::ngx_http_request_t) 
     });
 }
 
+/// Previous body filter in the Nginx filter chain, saved during `openhttpa_post_config`
+/// so `openhttpa_body_filter` delegates to the next filter instead of recursing into itself.
+static mut NEXT_BODY_FILTER: ffi::ngx_http_output_body_filter_pt = None;
+
 // Body filter function
 extern "C" fn openhttpa_body_filter(
     r: *mut ffi::ngx_http_request_t,
     in_chain: *mut ffi::ngx_chain_t,
 ) -> ffi::ngx_int_t {
     unsafe {
-        if let Some(next) = ffi::ngx_http_top_body_filter {
+        if let Some(next) = NEXT_BODY_FILTER {
             next(r, in_chain)
         } else {
             ffi::NGX_OK as ffi::ngx_int_t
@@ -164,8 +168,13 @@ extern "C" fn openhttpa_body_filter(
     }
 }
 
+const MAX_NGINX_BODY_BYTES: usize = 1024 * 1024; // 1 MiB cap for handshake bodies
+
 unsafe fn read_request_body(r: *mut ffi::ngx_http_request_t) -> Option<Vec<u8>> {
     unsafe {
+        if r.is_null() {
+            return None;
+        }
         let rb = (*r).request_body;
         if rb.is_null() || (*rb).bufs.is_null() {
             return None;
@@ -174,10 +183,19 @@ unsafe fn read_request_body(r: *mut ffi::ngx_http_request_t) -> Option<Vec<u8>> 
         let mut chain = (*rb).bufs;
         while !chain.is_null() {
             let buf = (*chain).buf;
-            let data = std::slice::from_raw_parts(
-                (*buf).pos,
-                ((*buf).last as usize) - ((*buf).pos as usize),
-            );
+            if buf.is_null() {
+                return None;
+            }
+            let pos = (*buf).pos;
+            let last = (*buf).last;
+            if pos.is_null() || last.is_null() || (last as usize) < (pos as usize) {
+                return None;
+            }
+            let chunk_len = (last as usize) - (pos as usize);
+            if body.len().saturating_add(chunk_len) > MAX_NGINX_BODY_BYTES {
+                return None;
+            }
+            let data = std::slice::from_raw_parts(pos, chunk_len);
             body.extend_from_slice(data);
             chain = (*chain).next;
         }
@@ -226,7 +244,7 @@ unsafe extern "C" fn openhttpa_set(
 pub static mut openhttpa_commands: [ffi::ngx_command_t; 2] = [
     ffi::ngx_command_t {
         name: ffi::ngx_str_t {
-            len: 7,
+            len: 9,
             data: c"openhttpa".as_ptr() as *mut u8,
         },
         type_: (ffi::NGX_HTTP_MAIN_CONF
@@ -255,6 +273,7 @@ pub static mut openhttpa_module_ctx: ffi::ngx_http_module_t = ffi::ngx_http_modu
 
 extern "C" fn openhttpa_post_config(_cf: *mut ffi::ngx_conf_t) -> ffi::ngx_int_t {
     unsafe {
+        NEXT_BODY_FILTER = ffi::ngx_http_top_body_filter;
         ffi::ngx_http_top_body_filter = Some(openhttpa_body_filter);
     }
     ffi::NGX_OK as ffi::ngx_int_t

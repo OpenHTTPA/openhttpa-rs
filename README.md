@@ -213,7 +213,7 @@ Detailed reports and proofs are available in the [Formal Security Suite](#formal
 ### Future Strategic Roadmap
 
 - **FIPS 140-3 Certification Validation**: Completing formal NIST CMVP validation for the underlying `aws-lc-rs` cryptographic boundary.
-- **IETF RFC Publication**: Advancing `draft-openhttpa-protocol-00` through the HTTPBIS and SECDISPATCH working groups toward an official Request for Comments (RFC).
+- **IETF RFC Publication**: Advancing `draft-openhttpa-protocol-02` through the Independent Submission stream toward an official Request for Comments (RFC).
 - **Expanded Hardware Support**: Extending native attestation providers to include upcoming confidential compute architectures (e.g., RISC-V Keystone).
 - **ZK-Oracle Mainnet Deployment**: Transitioning the Confidential Oracle Bridge from evaluation to full production deployment on EVM/Bitcoin mainnets.
 

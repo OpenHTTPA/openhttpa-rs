@@ -159,6 +159,7 @@ pub(crate) const fn is_real_hardware_type(qt: &QuoteType) -> bool {
             | QuoteType::Tpm
             | QuoteType::NvidiaGpu
             | QuoteType::TrustZone
+            | QuoteType::AwsNitro
     )
 }
 
@@ -322,10 +323,10 @@ pub fn verify_mock_quote(quote: &AttestQuote, report_data: &[u8; 64]) -> Result<
     // Note: Mock quotes in this version are raw SHA-384 hashes of report_data
     let expected = Sha384::digest(report_data);
     if quote.raw.as_ref() != expected.as_slice() {
-        println!(
-            "mock expected: {:?}, got: {:?}",
-            expected.as_slice(),
-            quote.raw.as_ref()
+        tracing::warn!(
+            expected_len = expected.len(),
+            got_len = quote.raw.len(),
+            "mock quote hash mismatch"
         );
         return Err("mock quote hash mismatch".to_owned());
     }

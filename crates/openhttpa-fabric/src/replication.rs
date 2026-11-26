@@ -71,6 +71,37 @@ pub trait FabricAttestationValidator: Send + Sync {
 
 pub struct DefaultFabricValidator;
 
+/// Compute the 64-byte TEE `report_data` binding for a fabric state delta.
+///
+/// Binds namespace, key, version, payload data, and provenance so a valid quote
+/// cannot be replayed with modified state contents.
+fn compute_sync_binding(payload: &SyncPayload) -> [u8; 64] {
+    let mut hasher = Sha384::new();
+    hasher.update(b"openhttpa-fabric-sync-v1:");
+    hasher.update((payload.namespace.len() as u64).to_be_bytes());
+    hasher.update(payload.namespace.as_bytes());
+    hasher.update((payload.key.len() as u64).to_be_bytes());
+    hasher.update(payload.key.as_bytes());
+    let mut version_entries: Vec<(&String, &u64)> = payload.version.iter().collect();
+    version_entries.sort_by_key(|(a, _)| *a);
+    hasher.update((version_entries.len() as u64).to_be_bytes());
+    for (k, v) in version_entries {
+        hasher.update((k.len() as u64).to_be_bytes());
+        hasher.update(k.as_bytes());
+        hasher.update(v.to_be_bytes());
+    }
+    hasher.update((payload.data.len() as u64).to_be_bytes());
+    hasher.update(&payload.data);
+    if let Ok(prov_bytes) = serde_json::to_vec(&payload.provenance) {
+        hasher.update((prov_bytes.len() as u64).to_be_bytes());
+        hasher.update(&prov_bytes);
+    }
+    let hash = hasher.finalize();
+    let mut binding = [0u8; 64];
+    binding[..48].copy_from_slice(&hash);
+    binding
+}
+
 impl FabricAttestationValidator for DefaultFabricValidator {
     fn validate_sync<'a>(
         &'a self,
@@ -86,12 +117,8 @@ impl FabricAttestationValidator for DefaultFabricValidator {
                 )
             })?;
 
-            // Re-derive the expected report data binding (QUDD)
-            // For SDMF, the report data is the hash of the namespace and key
-            let mut binding = [0u8; 64];
-            let msg = format!("{}:{}", payload.namespace, payload.key);
-            let hash = Sha384::digest(msg.as_bytes());
-            binding[..48].copy_from_slice(&hash);
+            // Re-derive the expected report data binding (QUDD) over the full delta.
+            let binding = compute_sync_binding(payload);
 
             verifier.verify(quote, &binding).await.map_err(|e| {
                 format!(
@@ -165,10 +192,7 @@ impl ReplicationManager {
         mut payload: SyncPayload,
     ) -> Result<(), String> {
         if payload.quote.is_none() {
-            let mut binding = [0u8; 64];
-            let msg = format!("{}:{}", payload.namespace, payload.key);
-            let hash = Sha384::digest(msg.as_bytes());
-            binding[..48].copy_from_slice(&hash);
+            let binding = compute_sync_binding(&payload);
 
             let req = QuoteRequest {
                 report_data: binding,

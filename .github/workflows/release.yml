@@ -76,7 +76,7 @@ jobs:
         run: |
           # HIGH-01: Enforce exhaustive validation (lints, tests, e2e) before release
           # Ensure mock features are NOT enabled for formal verification unless explicitly testing mock logic
-          OpenHTTPA_SKIP_ZK_BUILD=1 RISC0_SKIP_BUILD_KERNELS=1 make verify-all
+          OPENHTTPA_SKIP_ZK_BUILD=1 RISC0_SKIP_BUILD_KERNELS=1 make verify-all
 
   # ─── Phase 2: Multi-Language Binding Distribution ──────────────────────────
   # These jobs run in parallel after the 'validate' gate passes.

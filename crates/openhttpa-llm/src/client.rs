@@ -621,6 +621,7 @@ mod tests {
             .verifier(std::sync::Arc::new(
                 openhttpa_attestation::MockVerifier::default(),
             ))
+            .strict_attestation(false)
             .build();
 
         let client = ConfidentialLlmClient::new(h_client, "mock-model", "/chat/completions")

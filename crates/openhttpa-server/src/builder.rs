@@ -42,15 +42,26 @@ impl Default for OpenHttpaServerBuilder {
 }
 
 impl OpenHttpaServerBuilder {
+    /// Create a new [`OpenHttpaServerBuilder`] with a cryptographically random
+    /// default challenge HMAC key.
+    ///
+    /// # Panics
+    /// Panics if the OS CSPRNG fails to generate a 32-byte challenge key.
     #[must_use]
     pub fn new() -> Self {
+        let mut challenge_bytes = [0u8; 32];
+        openhttpa_crypto::rand::SecureRandom::fill(
+            &openhttpa_crypto::rand::SystemRandom::new(),
+            &mut challenge_bytes,
+        )
+        .expect("CSPRNG failure while generating default challenge key");
         Self {
             registry: AtbRegistry::new(),
             executor: None,
             tee_provider: None,
             verifier: None,
             atb_ttl: Duration::from_secs(3600),
-            challenge_key: ChallengeKey::new([0u8; 32]),
+            challenge_key: ChallengeKey::new(challenge_bytes),
             identity_key: None,
             hpke_key: None,
             #[cfg(feature = "mesh")]
@@ -298,17 +309,25 @@ impl OpenHttpaServerBuilder {
         let transport = Arc::new(openhttpa_transport::h2_adapter::H2Transport::new(
             endpoint.parse().unwrap(),
         ));
-        // DES-04: Using permissive policy means every attested request is
-        // automatically approved without an explicit allow/deny decision.
-        // Callers MUST provide a real policy via `with_policy_engine()` before
-        // shipping to production.  The warn log below is intentional and must
-        // not be suppressed in production builds.
-        tracing::warn!(
-            "SECURITY: OpenHTTPA server is using RegoPolicyEngine::permissive() — \
-             all attested requests are approved without an explicit policy. \
-             Call with_policy_engine() before production deployment."
-        );
-        let policy_engine = Arc::new(openhttpa_mesh::policy::RegoPolicyEngine::permissive());
+        let policy_engine: Arc<dyn openhttpa_mesh::policy::PolicyEngine> =
+            if let Some(engine) = self.policy_engine.clone() {
+                engine
+            } else {
+                #[cfg(not(debug_assertions))]
+                panic!(
+                    "OpenHttpaServerBuilder::build_fabric() requires an explicit PolicyEngine \
+                     via with_policy_engine() in release builds."
+                );
+                #[cfg(debug_assertions)]
+                {
+                    tracing::warn!(
+                        "SECURITY: OpenHTTPA server is using RegoPolicyEngine::permissive() — \
+                         all attested requests are approved without an explicit policy. \
+                         Call with_policy_engine() before production deployment."
+                    );
+                    Arc::new(openhttpa_mesh::policy::RegoPolicyEngine::permissive())
+                }
+            };
         let agent_registry = Arc::new(openhttpa_mesh::registry::MockRegistry::new());
 
         let agent_node = openhttpa_mesh::AgentNode::new(

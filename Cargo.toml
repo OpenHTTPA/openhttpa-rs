@@ -66,9 +66,7 @@ default-members = [
     "crates/openhttpa-a2a",
     "crates/openhttpa-zk",
     "crates/openhttpa-ingress",
-    # ARCH-02: openhttpa-broker is deprecated (identical to openhttpa-ingress).
-    # Removed from default-members so `cargo build --workspace` uses ingress.
-    # Still in workspace `members` above for backwards-compat CI builds.
+    # ARCH-02: openhttpa-broker was deprecated and removed (superseded by openhttpa-ingress).
     "bindings/c",
     "bindings/nodejs",
     "demo/multiparty-webapp/backend",

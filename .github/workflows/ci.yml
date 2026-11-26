@@ -24,6 +24,8 @@ env:
 jobs:
   lint:
     name: Lint & Format
+    # Security: prevent untrusted fork PRs from executing arbitrary code on self-hosted runners.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: self-hosted
     timeout-minutes: 60
     steps:
@@ -35,6 +37,7 @@ jobs:
 
   test-core:
     name: Test Core Workspace
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: self-hosted
     timeout-minutes: 60
     steps:
@@ -46,6 +49,7 @@ jobs:
 
   test-bindings:
     name: Test Bindings & Examples
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: self-hosted
     timeout-minutes: 60
     steps:
@@ -55,6 +59,7 @@ jobs:
 
   formal-verify:
     name: Formal Security Proofs
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: self-hosted
     timeout-minutes: 60
     steps:

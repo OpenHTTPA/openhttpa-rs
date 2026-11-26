@@ -696,7 +696,9 @@ impl AttestBaseRecord {
 /// The symmetric key material derived after a successful `AtHS`.
 ///
 /// Uses `ZeroizeOnDrop` to erase key bytes from memory when the session ends.
-#[derive(Debug, Zeroize, ZeroizeOnDrop)]
+/// Custom `Debug` implementation redacts all raw key material to prevent
+/// accidental secret leakage into logs or panic traces.
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SessionKeyMaterial {
     /// Master secret from which all other keys are derived.
     pub master_secret: Vec<u8>,
@@ -708,6 +710,18 @@ pub struct SessionKeyMaterial {
     pub client_write_iv: Vec<u8>,
     /// IV for server-to-client AEAD operations.
     pub server_write_iv: Vec<u8>,
+}
+
+impl std::fmt::Debug for SessionKeyMaterial {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionKeyMaterial")
+            .field("master_secret", &"<REDACTED>")
+            .field("client_write_key", &"<REDACTED>")
+            .field("server_write_key", &"<REDACTED>")
+            .field("client_write_iv", &"<REDACTED>")
+            .field("server_write_iv", &"<REDACTED>")
+            .finish()
+    }
 }
 
 #[cfg(test)]
@@ -1398,6 +1412,9 @@ impl VerificationResult {
             return Err(crate::error::AttestError::PolicyViolation(
                 "debug-mode enclave quotes are not accepted in production".to_owned(),
             ));
+        }
+        for sec in &self.secondary {
+            sec.reject_debug_builds(allow_debug)?;
         }
         Ok(())
     }

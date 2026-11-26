@@ -34,21 +34,29 @@ pub struct OpenHttpaCtx {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn openhttpa_ctx_new() -> *mut OpenHttpaCtx {
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .expect("tokio runtime");
-    let registry = AtbRegistry::new();
-    let executor = AtHsExecutor::with_config(vec![], vec![], true, false);
-    let tee = openhttpa_tee::detect_best_provider(&openhttpa_tee::provider::TeeConfig::default())
-        .expect("Failed to detect TEE");
-    let ctx = Box::new(OpenHttpaCtx {
-        rt,
-        registry,
-        executor,
-        tee,
-    });
-    Box::into_raw(ctx)
+    std::panic::catch_unwind(|| {
+        let Ok(rt) = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+        else {
+            return std::ptr::null_mut();
+        };
+        let registry = AtbRegistry::new();
+        let executor = AtHsExecutor::with_config(vec![], vec![], true, false);
+        let Ok(tee) =
+            openhttpa_tee::detect_best_provider(&openhttpa_tee::provider::TeeConfig::default())
+        else {
+            return std::ptr::null_mut();
+        };
+        let ctx = Box::new(OpenHttpaCtx {
+            rt,
+            registry,
+            executor,
+            tee,
+        });
+        Box::into_raw(ctx)
+    })
+    .unwrap_or(std::ptr::null_mut())
 }
 
 /// Free an `OpenHttpaCtx`.
@@ -104,28 +112,34 @@ pub unsafe extern "C" fn openhttpa_attest_handshake(
     ctx: *mut OpenHttpaCtx,
     server_uri: *const c_char,
 ) -> *mut c_char {
-    if server_uri.is_null() {
+    if ctx.is_null() || server_uri.is_null() {
         return std::ptr::null_mut();
     }
-    let uri_str = unsafe { CStr::from_ptr(server_uri) }.to_str().unwrap_or("");
-    let uri: http::Uri = match uri_str.parse() {
-        Ok(u) => u,
-        Err(_) => return std::ptr::null_mut(),
-    };
-    let client = OpenHttpaClient::builder()
-        .server_uri(uri)
-        .require_preflight(true)
-        .build();
-    let ctx_ref = unsafe { &*ctx };
-    match ctx_ref.rt.block_on(client.attest_handshake()) {
-        Ok(session) => {
-            let id = session.state().id.to_string();
-            CString::new(id)
-                .map(CString::into_raw)
-                .unwrap_or(std::ptr::null_mut())
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let uri_str = unsafe { CStr::from_ptr(server_uri) }.to_str().unwrap_or("");
+        let uri: http::Uri = match uri_str.parse() {
+            Ok(u) => u,
+            Err(_) => return std::ptr::null_mut(),
+        };
+        let Ok(client) = OpenHttpaClient::builder()
+            .server_uri(uri)
+            .require_preflight(true)
+            .try_build()
+        else {
+            return std::ptr::null_mut();
+        };
+        let ctx_ref = unsafe { &*ctx };
+        match ctx_ref.rt.block_on(client.attest_handshake()) {
+            Ok(session) => {
+                let id = session.state().id.to_string();
+                CString::new(id)
+                    .map(CString::into_raw)
+                    .unwrap_or(std::ptr::null_mut())
+            }
+            Err(_) => std::ptr::null_mut(),
         }
-        Err(_) => std::ptr::null_mut(),
-    }
+    }))
+    .unwrap_or(std::ptr::null_mut())
 }
 
 /// Send a confidential chat message to an LLM via `OpenHTTPA`.
@@ -140,56 +154,59 @@ pub unsafe extern "C" fn openhttpa_confidential_chat(
     model: *const c_char,
     messages_json: *const c_char,
 ) -> *mut c_char {
-    if server_uri.is_null() || model.is_null() || messages_json.is_null() {
+    if ctx.is_null() || server_uri.is_null() || model.is_null() || messages_json.is_null() {
         return std::ptr::null_mut();
     }
-    let uri_str = unsafe { CStr::from_ptr(server_uri) }.to_str().unwrap_or("");
-    let model_str = unsafe { CStr::from_ptr(model) }
-        .to_str()
-        .unwrap_or("llama3");
-    let msgs_str = unsafe { CStr::from_ptr(messages_json) }
-        .to_str()
-        .unwrap_or("[]");
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let uri_str = unsafe { CStr::from_ptr(server_uri) }.to_str().unwrap_or("");
+        let model_str = unsafe { CStr::from_ptr(model) }
+            .to_str()
+            .unwrap_or("llama3");
+        let msgs_str = unsafe { CStr::from_ptr(messages_json) }
+            .to_str()
+            .unwrap_or("[]");
 
-    let uri: http::Uri = match uri_str.parse() {
-        Ok(u) => u,
-        Err(_) => return std::ptr::null_mut(),
-    };
+        let uri: http::Uri = match uri_str.parse() {
+            Ok(u) => u,
+            Err(_) => return std::ptr::null_mut(),
+        };
 
-    let raw_msgs: Vec<(String, String)> = match serde_json::from_str(msgs_str) {
-        Ok(v) => v,
-        Err(_) => return std::ptr::null_mut(),
-    };
+        let raw_msgs: Vec<(String, String)> = match serde_json::from_str(msgs_str) {
+            Ok(v) => v,
+            Err(_) => return std::ptr::null_mut(),
+        };
 
-    let msgs: Vec<ChatMessage> = raw_msgs
-        .into_iter()
-        .map(|(role, content)| ChatMessage {
-            role: match role.as_str() {
-                "system" => Role::System,
-                "assistant" => Role::Assistant,
-                _ => Role::User,
-            },
-            content,
-        })
-        .collect();
+        let msgs: Vec<ChatMessage> = raw_msgs
+            .into_iter()
+            .map(|(role, content)| ChatMessage {
+                role: match role.as_str() {
+                    "system" => Role::System,
+                    "assistant" => Role::Assistant,
+                    _ => Role::User,
+                },
+                content,
+            })
+            .collect();
 
-    let ctx_ref = unsafe { &*ctx };
-    let result = ctx_ref.rt.block_on(async {
-        openhttpa_llm::client::ConfidentialLlmClientBuilder::default()
-            .server_uri(uri)
-            .model(model_str)
-            .build()
-            .await?
-            .chat(&msgs)
-            .await
-    });
+        let ctx_ref = unsafe { &*ctx };
+        let result = ctx_ref.rt.block_on(async {
+            openhttpa_llm::client::ConfidentialLlmClientBuilder::default()
+                .server_uri(uri)
+                .model(model_str)
+                .build()
+                .await?
+                .chat(&msgs)
+                .await
+        });
 
-    match result {
-        Ok(reply) => CString::new(reply)
-            .map(CString::into_raw)
-            .unwrap_or(std::ptr::null_mut()),
-        Err(_) => std::ptr::null_mut(),
-    }
+        match result {
+            Ok(reply) => CString::new(reply)
+                .map(CString::into_raw)
+                .unwrap_or(std::ptr::null_mut()),
+            Err(_) => std::ptr::null_mut(),
+        }
+    }))
+    .unwrap_or(std::ptr::null_mut())
 }
 
 // ─── Server ───────────────────────────────────────────────────────────────────
@@ -204,91 +221,93 @@ pub unsafe extern "C" fn openhttpa_server_handshake(
     ctx: *mut OpenHttpaCtx,
     request_json: *const c_char,
 ) -> *mut c_char {
-    if request_json.is_null() {
+    if ctx.is_null() || request_json.is_null() {
         return std::ptr::null_mut();
     }
-    let req_str = unsafe { CStr::from_ptr(request_json) }
-        .to_str()
-        .unwrap_or("");
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let req_str = unsafe { CStr::from_ptr(request_json) }
+            .to_str()
+            .unwrap_or("");
 
-    #[derive(serde::Deserialize)]
-    struct HandshakeBody {
-        client_random: String,
-        client_challenge: String,
-        ecdhe_public: String,
-        mlkem_public: String,
-    }
-
-    let body: HandshakeBody = match serde_json::from_str(req_str) {
-        Ok(b) => b,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let client_random = hex::decode(&body.client_random).unwrap_or_default();
-    let client_challenge = hex::decode(&body.client_challenge).unwrap_or_default();
-    if client_random.len() != 32 || client_challenge.len() != 48 {
-        return std::ptr::null_mut();
-    }
-
-    let share = ClientKeyShare {
-        ecdhe_public: hex::decode(&body.ecdhe_public).unwrap_or_default(),
-        mlkem_public: hex::decode(&body.mlkem_public).unwrap_or_default(),
-        signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65),
-    };
-
-    let mut cr = std::array::from_fn::<u8, 32, _>(|i| (i % 255) as u8);
-    cr.copy_from_slice(&client_random);
-    let mut cc = std::array::from_fn::<u8, 48, _>(|i| (i % 255) as u8);
-    cc.copy_from_slice(&client_challenge);
-
-    let hs_req = AtHsRequest {
-        client_suites: &[CipherSuite::X25519MlKem768Aes256GcmSha384],
-        client_versions: &[ProtocolVersion::V2],
-        client_random: &cr,
-        client_challenge: &cc,
-        client_share: &share,
-        client_quotes: &[],
-        atb_ttl_secs: 3600,
-        provenance: None,
-    };
-
-    let ctx_ref = unsafe { &*ctx };
-    let result = ctx_ref.rt.block_on(async {
-        ctx_ref
-            .executor
-            .execute_server(&hs_req, Some(&*ctx_ref.tee), None, None)
-            .await
-    });
-
-    match result {
-        Ok((suite, version, server_share, hs_res)) => {
-            let session = AttestSession::new(
-                hs_res.atb_id.clone(),
-                suite,
-                version,
-                hs_res.session_keys.clone(),
-                hs_res.expires_at,
-                ReplayStrategy::default(),
-                hs_res.client_attestation_result.clone(),
-            );
-            let ctx_ref = unsafe { &*ctx };
-            if ctx_ref.registry.insert(session).is_err() {
-                return std::ptr::null_mut();
-            }
-
-            let resp = serde_json::json!({
-                "base_id": hs_res.atb_id.to_string(),
-                "server_ecdhe_public": hex::encode(server_share.ecdhe_public),
-                "mlkem_ciphertext": hex::encode(server_share.mlkem_ciphertext),
-                "transcript_hash": hex::encode(hs_res.transcript_hash),
-            });
-
-            CString::new(resp.to_string())
-                .map(CString::into_raw)
-                .unwrap_or(std::ptr::null_mut())
+        #[derive(serde::Deserialize)]
+        struct HandshakeBody {
+            client_random: String,
+            client_challenge: String,
+            ecdhe_public: String,
+            mlkem_public: String,
         }
-        Err(_) => std::ptr::null_mut(),
-    }
+
+        let body: HandshakeBody = match serde_json::from_str(req_str) {
+            Ok(b) => b,
+            Err(_) => return std::ptr::null_mut(),
+        };
+
+        let client_random = hex::decode(&body.client_random).unwrap_or_default();
+        let client_challenge = hex::decode(&body.client_challenge).unwrap_or_default();
+        if client_random.len() != 32 || client_challenge.len() != 48 {
+            return std::ptr::null_mut();
+        }
+
+        let share = ClientKeyShare {
+            ecdhe_public: hex::decode(&body.ecdhe_public).unwrap_or_default(),
+            mlkem_public: hex::decode(&body.mlkem_public).unwrap_or_default(),
+            signature_alg: Some(openhttpa_core::handshake::SIG_ALG_ML_DSA_65),
+        };
+
+        let mut cr = std::array::from_fn::<u8, 32, _>(|i| (i % 255) as u8);
+        cr.copy_from_slice(&client_random);
+        let mut cc = std::array::from_fn::<u8, 48, _>(|i| (i % 255) as u8);
+        cc.copy_from_slice(&client_challenge);
+
+        let hs_req = AtHsRequest {
+            client_suites: &[CipherSuite::X25519MlKem768Aes256GcmSha384],
+            client_versions: &[ProtocolVersion::V2],
+            client_random: &cr,
+            client_challenge: &cc,
+            client_share: &share,
+            client_quotes: &[],
+            atb_ttl_secs: 3600,
+            provenance: None,
+        };
+
+        let ctx_ref = unsafe { &*ctx };
+        let result = ctx_ref.rt.block_on(async {
+            ctx_ref
+                .executor
+                .execute_server(&hs_req, Some(&*ctx_ref.tee), None, None)
+                .await
+        });
+
+        match result {
+            Ok((suite, version, server_share, hs_res)) => {
+                let session = AttestSession::new(
+                    hs_res.atb_id.clone(),
+                    suite,
+                    version,
+                    hs_res.session_keys.clone(),
+                    hs_res.expires_at,
+                    ReplayStrategy::default(),
+                    hs_res.client_attestation_result.clone(),
+                );
+                if ctx_ref.registry.insert(session).is_err() {
+                    return std::ptr::null_mut();
+                }
+
+                let resp = serde_json::json!({
+                    "base_id": hs_res.atb_id.to_string(),
+                    "server_ecdhe_public": hex::encode(server_share.ecdhe_public),
+                    "mlkem_ciphertext": hex::encode(server_share.mlkem_ciphertext),
+                    "transcript_hash": hex::encode(hs_res.transcript_hash),
+                });
+
+                CString::new(resp.to_string())
+                    .map(CString::into_raw)
+                    .unwrap_or(std::ptr::null_mut())
+            }
+            Err(_) => std::ptr::null_mut(),
+        }
+    }))
+    .unwrap_or(std::ptr::null_mut())
 }
 
 /// Decrypt a server-side `OpenHTTPA` request payload.
@@ -303,55 +322,61 @@ pub unsafe extern "C" fn openhttpa_server_decrypt(
     nonce_val: u64,
     ciphertext_hex: *const c_char,
 ) -> *mut c_char {
-    let id_str = unsafe { CStr::from_ptr(atb_id_str) }.to_str().unwrap_or("");
-    let id: AtbId = match id_str.parse() {
-        Ok(i) => i,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let ciphertext = match hex::decode(
-        unsafe { CStr::from_ptr(ciphertext_hex) }
-            .to_str()
-            .unwrap_or(""),
-    ) {
-        Ok(b) => b,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let ctx_ref = unsafe { &*ctx };
-    let session = match ctx_ref.registry.get(&id) {
-        Some(s) => s,
-        None => return std::ptr::null_mut(),
-    };
-
-    let result = session.with_keys_for_trr(nonce_val, |keys, _| {
-        let mut nonce_bytes = std::array::from_fn::<u8, 12, _>(|i| (i % 255) as u8);
-        nonce_bytes.copy_from_slice(&keys.client_write_iv);
-        let count_bytes = nonce_val.to_be_bytes();
-        for (i, b) in count_bytes.iter().enumerate() {
-            nonce_bytes[4 + i] ^= b;
-        }
-
-        let aead_nonce = AeadNonce(nonce_bytes);
-        let aead_key =
-            AeadKey::new(AeadAlgorithm::Aes256Gcm, &keys.client_write_key).map_err(|_| ())?;
-
-        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
-        aad.extend_from_slice(id_str.as_bytes());
-
-        let mut data = ciphertext.clone();
-        let pt_slice = aead_key
-            .open_in_place(&aead_nonce, &aad, &mut data)
-            .map_err(|_| ())?;
-        Ok::<Vec<u8>, ()>(pt_slice.to_vec())
-    });
-
-    match result {
-        Ok(Ok(plaintext)) => CString::new(hex::encode(plaintext))
-            .map(CString::into_raw)
-            .unwrap_or(std::ptr::null_mut()),
-        _ => std::ptr::null_mut(),
+    if ctx.is_null() || atb_id_str.is_null() || ciphertext_hex.is_null() {
+        return std::ptr::null_mut();
     }
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let id_str = unsafe { CStr::from_ptr(atb_id_str) }.to_str().unwrap_or("");
+        let id: AtbId = match id_str.parse() {
+            Ok(i) => i,
+            Err(_) => return std::ptr::null_mut(),
+        };
+
+        let ciphertext = match hex::decode(
+            unsafe { CStr::from_ptr(ciphertext_hex) }
+                .to_str()
+                .unwrap_or(""),
+        ) {
+            Ok(b) => b,
+            Err(_) => return std::ptr::null_mut(),
+        };
+
+        let ctx_ref = unsafe { &*ctx };
+        let session = match ctx_ref.registry.get(&id) {
+            Some(s) => s,
+            None => return std::ptr::null_mut(),
+        };
+
+        let result = session.with_keys_for_trr(nonce_val, |keys, _| {
+            let mut nonce_bytes = std::array::from_fn::<u8, 12, _>(|i| (i % 255) as u8);
+            nonce_bytes.copy_from_slice(&keys.client_write_iv);
+            let count_bytes = nonce_val.to_be_bytes();
+            for (i, b) in count_bytes.iter().enumerate() {
+                nonce_bytes[4 + i] ^= b;
+            }
+
+            let aead_nonce = AeadNonce(nonce_bytes);
+            let aead_key =
+                AeadKey::new(AeadAlgorithm::Aes256Gcm, &keys.client_write_key).map_err(|_| ())?;
+
+            let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
+            aad.extend_from_slice(id_str.as_bytes());
+
+            let mut data = ciphertext.clone();
+            let pt_slice = aead_key
+                .open_in_place(&aead_nonce, &aad, &mut data)
+                .map_err(|_| ())?;
+            Ok::<Vec<u8>, ()>(pt_slice.to_vec())
+        });
+
+        match result {
+            Ok(Ok(plaintext)) => CString::new(hex::encode(plaintext))
+                .map(CString::into_raw)
+                .unwrap_or(std::ptr::null_mut()),
+            _ => std::ptr::null_mut(),
+        }
+    }))
+    .unwrap_or(std::ptr::null_mut())
 }
 
 /// Encrypt a server-side `OpenHTTPA` response payload.
@@ -365,61 +390,67 @@ pub unsafe extern "C" fn openhttpa_server_encrypt(
     atb_id_str: *const c_char,
     plaintext_hex: *const c_char,
 ) -> *mut c_char {
-    let id_str = unsafe { CStr::from_ptr(atb_id_str) }.to_str().unwrap_or("");
-    let id: AtbId = match id_str.parse() {
-        Ok(i) => i,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let plaintext = match hex::decode(
-        unsafe { CStr::from_ptr(plaintext_hex) }
-            .to_str()
-            .unwrap_or(""),
-    ) {
-        Ok(b) => b,
-        Err(_) => return std::ptr::null_mut(),
-    };
-
-    let ctx_ref = unsafe { &*ctx };
-    let session = match ctx_ref.registry.get(&id) {
-        Some(s) => s,
-        None => return std::ptr::null_mut(),
-    };
-
-    let result = session.with_keys_for_trs(|keys, counter| {
-        let mut nonce_bytes = std::array::from_fn::<u8, 12, _>(|i| (i % 255) as u8);
-        nonce_bytes.copy_from_slice(&keys.server_write_iv);
-        let count_bytes = counter.to_be_bytes();
-        for (i, b) in count_bytes.iter().enumerate() {
-            nonce_bytes[4 + i] ^= b;
-        }
-
-        let aead_nonce = AeadNonce(nonce_bytes);
-        let aead_key =
-            AeadKey::new(AeadAlgorithm::Aes256Gcm, &keys.server_write_key).map_err(|_| ())?;
-
-        let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
-        aad.extend_from_slice(id_str.as_bytes());
-
-        let mut data = plaintext.clone();
-        aead_key
-            .seal_in_place(&aead_nonce, &aad, &mut data)
-            .map_err(|_| ())?;
-        Ok::<(Vec<u8>, u64), ()>((data, counter))
-    });
-
-    match result {
-        Ok(Ok((ciphertext, counter))) => {
-            let resp = serde_json::json!({
-                "ciphertext": hex::encode(ciphertext),
-                "nonce": counter,
-            });
-            CString::new(resp.to_string())
-                .map(CString::into_raw)
-                .unwrap_or(std::ptr::null_mut())
-        }
-        _ => std::ptr::null_mut(),
+    if ctx.is_null() || atb_id_str.is_null() || plaintext_hex.is_null() {
+        return std::ptr::null_mut();
     }
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let id_str = unsafe { CStr::from_ptr(atb_id_str) }.to_str().unwrap_or("");
+        let id: AtbId = match id_str.parse() {
+            Ok(i) => i,
+            Err(_) => return std::ptr::null_mut(),
+        };
+
+        let plaintext = match hex::decode(
+            unsafe { CStr::from_ptr(plaintext_hex) }
+                .to_str()
+                .unwrap_or(""),
+        ) {
+            Ok(b) => b,
+            Err(_) => return std::ptr::null_mut(),
+        };
+
+        let ctx_ref = unsafe { &*ctx };
+        let session = match ctx_ref.registry.get(&id) {
+            Some(s) => s,
+            None => return std::ptr::null_mut(),
+        };
+
+        let result = session.with_keys_for_trs(|keys, counter| {
+            let mut nonce_bytes = std::array::from_fn::<u8, 12, _>(|i| (i % 255) as u8);
+            nonce_bytes.copy_from_slice(&keys.server_write_iv);
+            let count_bytes = counter.to_be_bytes();
+            for (i, b) in count_bytes.iter().enumerate() {
+                nonce_bytes[4 + i] ^= b;
+            }
+
+            let aead_nonce = AeadNonce(nonce_bytes);
+            let aead_key =
+                AeadKey::new(AeadAlgorithm::Aes256Gcm, &keys.server_write_key).map_err(|_| ())?;
+
+            let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
+            aad.extend_from_slice(id_str.as_bytes());
+
+            let mut data = plaintext.clone();
+            aead_key
+                .seal_in_place(&aead_nonce, &aad, &mut data)
+                .map_err(|_| ())?;
+            Ok::<(Vec<u8>, u64), ()>((data, counter))
+        });
+
+        match result {
+            Ok(Ok((ciphertext, counter))) => {
+                let resp = serde_json::json!({
+                    "ciphertext": hex::encode(ciphertext),
+                    "nonce": counter,
+                });
+                CString::new(resp.to_string())
+                    .map(CString::into_raw)
+                    .unwrap_or(std::ptr::null_mut())
+            }
+            _ => std::ptr::null_mut(),
+        }
+    }))
+    .unwrap_or(std::ptr::null_mut())
 }
 
 /// Free a string returned by any of the `openhttpa_*` functions.

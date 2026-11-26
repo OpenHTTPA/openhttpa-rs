@@ -45,9 +45,38 @@ pub struct OracleResponse {
 /// # Errors
 /// Returns [`OracleError::TeeError`] with a descriptive message if the URL
 /// targets a blocked address.
-fn validate_url_for_ssrf(url: &reqwest::Url) -> Result<(), OracleError> {
-    use std::net::{Ipv4Addr, Ipv6Addr};
+fn is_blocked_ipv4(v4: std::net::Ipv4Addr, allow_explicit_localhost: bool) -> bool {
+    let [a, b, _c, _] = v4.octets();
+    let is_loopback = a == 127 && !(allow_explicit_localhost && v4.octets() == [127, 0, 0, 1]);
+    let is_10 = a == 10;
+    let is_172_16 = a == 172 && (16..=31).contains(&b);
+    let is_192_168 = a == 192 && b == 168;
+    let is_link_local = a == 169 && b == 254;
+    let is_unspecified = v4 == std::net::Ipv4Addr::UNSPECIFIED;
+    let is_cgnat = a == 100 && (64..=127).contains(&b);
 
+    is_loopback || is_10 || is_172_16 || is_192_168 || is_link_local || is_unspecified || is_cgnat
+}
+
+fn is_blocked_ip(ip: std::net::IpAddr, allow_explicit_localhost: bool) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => is_blocked_ipv4(v4, allow_explicit_localhost),
+        std::net::IpAddr::V6(v6) => {
+            if let Some(mapped_v4) = v6.to_ipv4_mapped() {
+                return is_blocked_ipv4(mapped_v4, allow_explicit_localhost);
+            }
+            let is_loopback = v6 == std::net::Ipv6Addr::LOCALHOST;
+            let is_unspecified = v6 == std::net::Ipv6Addr::UNSPECIFIED;
+            let segments = v6.segments();
+            let is_link_local = (segments[0] & 0xffc0) == 0xfe80;
+            let is_unique_local = (segments[0] & 0xfe00) == 0xfc00;
+            is_loopback || is_unspecified || is_link_local || is_unique_local
+        }
+    }
+}
+
+fn validate_url_for_ssrf(url: &reqwest::Url) -> Result<(), OracleError> {
+    let allow_explicit_localhost = cfg!(debug_assertions);
     let host = url
         .host()
         .ok_or_else(|| OracleError::TeeError("URL has no host".to_owned()))?;
@@ -62,51 +91,13 @@ fn validate_url_for_ssrf(url: &reqwest::Url) -> Result<(), OracleError> {
                     .to_owned(),
             ));
         }
-        // Non-IP hostname (e.g. "example.com") — DNS resolution happens inside
-        // the HTTP client.  We cannot block all possible DNS results here, but
-        // we block all *explicit* private/reserved IP literals.
         return Ok(());
     }
 
     let blocked = match host {
-        url::Host::Ipv4(v4) => {
-            let [a, b, _c, _] = v4.octets();
-            // 127.0.0.0/8 — loopback; 127.0.0.1 is the sole permitted exception
-            // (handled by the caller's `is_explicit_localhost` check).
-            let is_loopback = a == 127 && v4.octets() != [127, 0, 0, 1];
-            // 10.0.0.0/8
-            let is_10 = a == 10;
-            // 172.16.0.0/12
-            let is_172_16 = a == 172 && (16..=31).contains(&b);
-            // 192.168.0.0/16
-            let is_192_168 = a == 192 && b == 168;
-            // 169.254.0.0/16 — link-local / metadata service
-            let is_link_local = a == 169 && b == 254;
-            // 0.0.0.0 — unspecified
-            let is_unspecified = v4 == Ipv4Addr::UNSPECIFIED;
-            // 100.64.0.0/10 — Shared Address Space (RFC 6598 / carrier-grade NAT)
-            let is_cgnat = a == 100 && (64..=127).contains(&b);
-
-            is_loopback
-                || is_10
-                || is_172_16
-                || is_192_168
-                || is_link_local
-                || is_unspecified
-                || is_cgnat
-        }
-        url::Host::Ipv6(v6) => {
-            let is_loopback = v6 == Ipv6Addr::LOCALHOST;
-            let is_unspecified = v6 == Ipv6Addr::UNSPECIFIED;
-            // fe80::/10 — IPv6 link-local
-            let segments = v6.segments();
-            let is_link_local = (segments[0] & 0xffc0) == 0xfe80;
-            // fc00::/7 — IPv6 unique-local (analogous to RFC-1918)
-            let is_unique_local = (segments[0] & 0xfe00) == 0xfc00;
-
-            is_loopback || is_unspecified || is_link_local || is_unique_local
-        }
-        _ => false, // Handled above via Domain match
+        url::Host::Ipv4(v4) => is_blocked_ipv4(v4, allow_explicit_localhost),
+        url::Host::Ipv6(v6) => is_blocked_ip(std::net::IpAddr::V6(v6), allow_explicit_localhost),
+        url::Host::Domain(_) => false,
     };
 
     if blocked {
@@ -132,10 +123,11 @@ impl OracleNode {
         // - Disable insecure TLS versions (enforce TLS 1.2+).
         let http_client = Client::builder()
             .timeout(std::time::Duration::from_secs(10))
+            .redirect(reqwest::redirect::Policy::none())
             .user_agent("OPENHTTPA-Oracle/1.0 (Confidential TEE Node)")
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
-            // Note: .https_only(true) prevents all HTTP. To allow local HTTP,
-            // we handle scheme validation in fetch_and_prove instead of the builder.
+            // Note: .https_only(true) prevents all HTTP. To allow local HTTP in
+            // debug/test builds, we handle scheme validation in fetch_and_prove.
             .build()
             .expect("failed to build hardened http client");
 
@@ -153,6 +145,7 @@ impl OracleNode {
         transcript_hash: [u8; 48],
         generate_zk_proof: bool,
     ) -> Result<OracleResponse, OracleError> {
+        const MAX_ORACLE_RESPONSE_BYTES: usize = 10 * 1024 * 1024;
         // 1. Validate Scheme and block SSRF attack vectors.
         let parsed_url = reqwest::Url::parse(url)
             .map_err(|_| OracleError::TeeError("Invalid URL format".to_owned()))?;
@@ -168,7 +161,8 @@ impl OracleNode {
         //     (explicit loopback) for local integration tests.
         //   • All private/reserved IP ranges are blocked regardless of scheme.
         //   • Only 127.0.0.1 (not any other loopback) is whitelisted for HTTP.
-        let is_explicit_localhost = parsed_url.host_str() == Some("127.0.0.1");
+        let is_explicit_localhost =
+            cfg!(debug_assertions) && parsed_url.host_str() == Some("127.0.0.1");
 
         // Block all private / reserved destination addresses.
         validate_url_for_ssrf(&parsed_url)?;
@@ -179,8 +173,41 @@ impl OracleNode {
             ));
         }
 
-        // 2. Fetch data from Web2
-        let response = self.http_client.get(url).send().await?.bytes().await?;
+        // Resolve DNS hostnames and verify every resolved IP is non-private to
+        // mitigate DNS rebinding / internal-service SSRF.
+        if let Some(url::Host::Domain(domain)) = parsed_url.host() {
+            let port = parsed_url.port_or_known_default().unwrap_or(443);
+            let addrs = tokio::net::lookup_host((domain, port))
+                .await
+                .map_err(|e| OracleError::TeeError(format!("DNS resolution failed: {e}")))?;
+            for addr in addrs {
+                if is_blocked_ip(addr.ip(), is_explicit_localhost) {
+                    return Err(OracleError::TeeError(
+                        "SSRF blocked: resolved destination IP is in a private or reserved range"
+                            .to_owned(),
+                    ));
+                }
+            }
+        }
+
+        // 2. Fetch data from Web2 with a strict response size cap (10 MiB) to prevent OOM DoS.
+        let mut resp = self.http_client.get(url).send().await?;
+        if let Some(len) = resp.content_length()
+            && len > MAX_ORACLE_RESPONSE_BYTES as u64
+        {
+            return Err(OracleError::TeeError(format!(
+                "Oracle response exceeds maximum allowed size ({len} > {MAX_ORACLE_RESPONSE_BYTES} bytes)"
+            )));
+        }
+        let mut response = Vec::new();
+        while let Some(chunk) = resp.chunk().await? {
+            if response.len().saturating_add(chunk.len()) > MAX_ORACLE_RESPONSE_BYTES {
+                return Err(OracleError::TeeError(format!(
+                    "Oracle response exceeds maximum allowed size ({MAX_ORACLE_RESPONSE_BYTES} bytes)"
+                )));
+            }
+            response.extend_from_slice(&chunk);
+        }
 
         // 3. Format report_data by computing SHA-512 over (domain prefix + transcript_hash + response)
         // This ensures the 64-byte REPORT_DATA register securely binds the oracle payload
@@ -223,9 +250,10 @@ impl OracleNode {
                         .map_err(|e| OracleError::ZkError(e.to_string()))?;
                     zk_receipt_bytes = Some(bytes);
                 }
+                #[cfg(debug_assertions)]
                 Err(e) if e.to_string().contains("Mock Prover") => {
                     tracing::warn!("ZK proof generation skipped due to mock prover: {}", e);
-                    // In mock mode, we can return a dummy receipt byte array if needed for tests
+                    // In debug/test mock mode only, return a sentinel receipt.
                     zk_receipt_bytes = Some(vec![0xDE, 0xAD, 0xBE, 0xEF]);
                 }
                 Err(e) => return Err(OracleError::ZkError(e.to_string())),

@@ -20,6 +20,15 @@ impl ZkVerifier {
                 .verify(OPENHTTPA_GUEST_ID)
                 .map_err(|e| ZkError::Verification(e.to_string()))?;
         }
+        #[cfg(all(not(feature = "zk"), not(debug_assertions)))]
+        {
+            let _ = (receipt, expected_transcript);
+            return Err(ZkError::Verification(
+                "ZK cryptographic verification requires the 'zk' feature in release builds; \
+                 refusing to accept unverified receipt"
+                    .to_owned(),
+            ));
+        }
 
         // 2. Extract and verify the journaled statement.
         let output = crate::prover::ZkProver::extract_output(receipt)?;

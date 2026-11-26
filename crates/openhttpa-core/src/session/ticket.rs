@@ -20,7 +20,7 @@ use openhttpa_crypto::aead::{AeadAlgorithm, AeadError, AeadKey, AeadNonce, NONCE
 use openhttpa_proto::types::SessionTicket;
 use tracing::{info, instrument, warn};
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 /// The server-side key used to seal and unseal resumption tickets.
 ///
@@ -91,9 +91,37 @@ impl TicketKey {
         }
     }
 
+    /// Increment and return the next nonce counter, failing closed on overflow
+    /// so a `TicketKey` can never wrap past `u64::MAX` back to `0`.
+    ///
+    /// # Errors
+    /// Returns [`AeadError`] if the counter is exhausted.
+    pub fn try_next_nonce(&self) -> Result<u64, AeadError> {
+        loop {
+            let current = self.counter.load(Ordering::SeqCst);
+            if current == u64::MAX {
+                return Err(AeadError::IoError(
+                    "ticket nonce counter exhausted; rotate TicketKey".to_owned(),
+                ));
+            }
+            if self
+                .counter
+                .compare_exchange(current, current + 1, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                return Ok(current);
+            }
+        }
+    }
+
     /// Increment and return the next nonce counter.
+    ///
+    /// # Panics
+    /// Panics if the 64-bit nonce counter is exhausted (use [`Self::try_next_nonce`]
+    /// for fallible handling).
     pub fn next_nonce(&self) -> u64 {
-        self.counter.fetch_add(1, Ordering::SeqCst)
+        self.try_next_nonce()
+            .expect("TicketKey nonce counter exhausted; rotate key before issuing new tickets")
     }
 }
 
@@ -148,7 +176,10 @@ impl TicketEngine {
         options.mode(0o600);
 
         let mut file = options.open(&tmp_path)?;
-        let json = serde_json::to_vec(self).expect("serialization failure");
+        let json = Zeroizing::new(
+            serde_json::to_vec(self)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?,
+        );
         file.write_all(&json)?;
         file.sync_all()?;
         drop(file);
@@ -164,7 +195,7 @@ impl TicketEngine {
     /// Returns an IO error if loading or deserialization fails.
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
         let mut file = OpenOptions::new().read(true).open(path)?;
-        let mut json = Vec::new();
+        let mut json = Zeroizing::new(Vec::new());
         file.read_to_end(&mut json)?;
         let engine: Self = serde_json::from_slice(&json)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
@@ -188,11 +219,13 @@ impl TicketEngine {
         state: &DurableSessionState,
         lifetime: Duration,
     ) -> Result<SessionTicket, AeadError> {
-        let mut data = postcard::to_allocvec(state)
-            .map_err(|e| AeadError::IoError(format!("ticket serialisation failed: {e}")))?;
+        let mut data = Zeroizing::new(
+            postcard::to_allocvec(state)
+                .map_err(|e| AeadError::IoError(format!("ticket serialisation failed: {e}")))?,
+        );
 
         let mut nonce_bytes = [0u8; NONCE_LEN];
-        let counter = self.current_key.next_nonce();
+        let counter = self.current_key.try_next_nonce()?;
         nonce_bytes[4..].copy_from_slice(&counter.to_be_bytes());
         let nonce = AeadNonce(nonce_bytes);
 
@@ -226,7 +259,7 @@ impl TicketEngine {
         let nonce = AeadNonce::from_slice(nonce_raw)?;
 
         // Attempt unseal with current key
-        let mut data = ciphertext.to_vec();
+        let mut data = Zeroizing::new(ciphertext.to_vec());
         let key = AeadKey::new(AeadAlgorithm::Aes256Gcm, &self.current_key.key)?;
         let state: DurableSessionState = match key.open_in_place(&nonce, &[], &mut data) {
             Ok(pt) => postcard::from_bytes(pt)
@@ -234,7 +267,7 @@ impl TicketEngine {
             Err(_) => {
                 // Fallback to previous key if available
                 if let Some(prev) = &self.previous_key {
-                    let mut data = ciphertext.to_vec();
+                    let mut data = Zeroizing::new(ciphertext.to_vec());
                     let key = AeadKey::new(AeadAlgorithm::Aes256Gcm, &prev.key)?;
                     let pt = key.open_in_place(&nonce, &[], &mut data)?;
                     postcard::from_bytes(pt).map_err(|e| {

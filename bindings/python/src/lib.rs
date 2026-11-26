@@ -129,7 +129,8 @@ impl PyOpenHttpaClient {
         let client = OpenHttpaClient::builder()
             .server_uri(uri)
             .require_preflight(true)
-            .build();
+            .try_build()
+            .map_err(|e| PyRuntimeError::new_err(format!("failed to build client: {e}")))?;
         Ok(Self { inner: client, rt })
     }
 

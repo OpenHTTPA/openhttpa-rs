@@ -71,16 +71,21 @@ impl RateLimitState {
     }
 
     /// Spawns a background task that periodically prunes inactive IP entries.
+    /// Uses a `Weak` reference so the task terminates automatically when the
+    /// `RateLimitState` is dropped.
     fn start_cleanup_task(&self) {
         if tokio::runtime::Handle::try_current().is_err() {
             return;
         }
-        let clients = Arc::clone(&self.clients);
+        let clients_weak = Arc::downgrade(&self.clients);
         let window = self.window;
         tokio::spawn(async move {
             let mut ticker = tokio::time::interval(window.max(Duration::from_secs(60)));
             loop {
                 ticker.tick().await;
+                let Some(clients) = clients_weak.upgrade() else {
+                    break;
+                };
                 let now = Instant::now();
                 let cutoff = now.checked_sub(window).unwrap_or(now);
 
@@ -99,6 +104,7 @@ impl RateLimitState {
     /// Side effect: prunes expired timestamps and appends the current
     /// timestamp when the request is accepted.
     fn check_and_record(&self, ip: IpAddr) -> bool {
+        const MAX_TRACKED_IPS: usize = 100_000;
         // RATE-IPv6-01: Normalise IPv6 addresses to their /64 prefix.
         // A single /64 allocation (standard ISP assignment) gives an attacker
         // 2⁶⁴ unique /128 source addresses, trivially exhausting per-/128
@@ -107,6 +113,11 @@ impl RateLimitState {
         let ip = normalize_ip(ip);
         let now = Instant::now();
         let cutoff = now.checked_sub(self.window).unwrap_or(now);
+
+        if !self.clients.contains_key(&ip) && self.clients.len() >= MAX_TRACKED_IPS {
+            // Fail closed when the IP tracking table is saturated to prevent OOM DoS.
+            return false;
+        }
 
         let mut entry = self.clients.entry(ip).or_default();
         // Remove timestamps outside the rolling window.

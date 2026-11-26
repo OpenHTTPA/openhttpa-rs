@@ -257,6 +257,7 @@ pub async fn attested_ws_upgrade<H: AttestWsHandler>(
     headers: HeaderMap,
 ) -> Response {
     use openhttpa_headers::HDR_ATTEST_BASE_ID;
+    const MAX_WS_FRAME_BYTES: usize = 16 * 1024 * 1024;
 
     // 1. Extract and validate the Attest-Base-ID header.
     let atb_id: AtbId = match headers
@@ -279,51 +280,10 @@ pub async fn attested_ws_upgrade<H: AttestWsHandler>(
         return (StatusCode::UNAUTHORIZED, "AtB session not found or expired").into_response();
     };
 
-    // 3. Derive the per-WebSocket AEAD keys from session keys.
-    //    We clone the key material here so the handler closure is 'static.
-    let (outbound_key, inbound_key, inbound_iv, algorithm) = {
-        let sess_state = session.state();
-        let algorithm = cipher_suite_to_aead(sess_state.cipher_suite);
-
-        // We access the raw key bytes via peek_keys.
-        let keys_result = session.peek_keys(|keys| {
-            (
-                keys.server_write_key.clone(),
-                keys.client_write_key.clone(),
-                keys.server_write_iv.clone(),
-                keys.client_write_iv.clone(),
-            )
-        });
-
-        match keys_result {
-            Ok((swk, cwk, swiv, cwiv)) => {
-                let mut swiv_arr = [0u8; 12];
-                let mut cwiv_arr = [0u8; 12];
-                swiv_arr.copy_from_slice(&swiv[..12]);
-                cwiv_arr.copy_from_slice(&cwiv[..12]);
-
-                let Ok(out_key) = BoundAeadKey::new(algorithm, &swk, swiv_arr) else {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "failed to construct outbound WS key",
-                    )
-                        .into_response();
-                };
-                let Ok(in_key) = BoundAeadKey::new(algorithm, &cwk, cwiv_arr) else {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "failed to construct inbound WS key",
-                    )
-                        .into_response();
-                };
-
-                (out_key, in_key, cwiv_arr, algorithm)
-            }
-            Err(e) => {
-                warn!(%atb_id, error = %e, "failed to access session keys for WS upgrade");
-                return (StatusCode::UNAUTHORIZED, "session not in attested state").into_response();
-            }
-        }
+    // 3. Derive unique per-WebSocket AEAD subkeys via HKDF-SHA384.
+    let subkeys = match derive_ws_subkeys(&session, &atb_id) {
+        Ok(v) => v,
+        Err(err) => return err.into_response(),
     };
 
     let handler = Arc::clone(&state.handler);
@@ -331,18 +291,112 @@ pub async fn attested_ws_upgrade<H: AttestWsHandler>(
 
     debug!(%atb_id_clone, "upgrading to attested WebSocket");
 
-    // 4. Perform the HTTP → WebSocket upgrade.
-    ws_upgrade.on_upgrade(move |socket| async move {
-        let ws_session = AttestWsSession::new(
-            socket,
-            outbound_key,
-            inbound_key,
-            inbound_iv,
-            algorithm,
-            &atb_id_clone,
+    // 4. Perform the HTTP → WebSocket upgrade with bounded frame/message sizes (16 MiB)
+    //    and return `Attest-WS-Salt` so the peer derives the matching per-WS subkeys.
+    let ws_salt_hex = subkeys.salt_hex;
+    let mut resp = ws_upgrade
+        .max_message_size(MAX_WS_FRAME_BYTES)
+        .max_frame_size(MAX_WS_FRAME_BYTES)
+        .on_upgrade(move |socket| async move {
+            let ws_session = AttestWsSession::new(
+                socket,
+                subkeys.outbound_key,
+                subkeys.inbound_key,
+                subkeys.inbound_iv,
+                subkeys.algorithm,
+                &atb_id_clone,
+            );
+            handler.handle(ws_session).await;
+        });
+    if let Ok(hdr_val) = axum::http::HeaderValue::from_str(&ws_salt_hex) {
+        resp.headers_mut().insert(
+            axum::http::header::HeaderName::from_static("attest-ws-salt"),
+            hdr_val,
         );
-        handler.handle(ws_session).await;
-    })
+    }
+    resp
+}
+
+struct WsSubkeys {
+    outbound_key: BoundAeadKey,
+    inbound_key: BoundAeadKey,
+    inbound_iv: [u8; 12],
+    algorithm: AeadAlgorithm,
+    salt_hex: String,
+}
+
+/// Derive unique per-WebSocket AEAD subkeys via HKDF-SHA384 using a fresh
+/// 16-byte CSPRNG salt so WebSocket frames never reuse `(key, iv, counter)`
+/// nonces with HTTP `TrR` requests or other WS upgrades on the same `AtbId`.
+fn derive_ws_subkeys(
+    session: &openhttpa_core::session::AttestSession,
+    atb_id: &AtbId,
+) -> Result<WsSubkeys, (StatusCode, &'static str)> {
+    let mut ws_salt = [0u8; 16];
+    if openhttpa_crypto::rand::SecureRandom::fill(
+        &openhttpa_crypto::rand::SystemRandom::new(),
+        &mut ws_salt,
+    )
+    .is_err()
+    {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "CSPRNG failure while deriving WebSocket subkeys",
+        ));
+    }
+    let ws_salt_hex = hex::encode(ws_salt);
+    let algorithm = cipher_suite_to_aead(session.state().cipher_suite);
+
+    let keys_result = session.peek_keys(|keys| -> Result<_, openhttpa_crypto::hkdf::HkdfError> {
+        let expander =
+            openhttpa_crypto::hkdf::HkdfExpander::extract_sha384(&ws_salt, &keys.master_secret)?;
+        let swk = expander.expand(b"openhttpa_v2_ws_server_key", 32)?;
+        let cwk = expander.expand(b"openhttpa_v2_ws_client_key", 32)?;
+        let swiv = expander.expand(b"openhttpa_v2_ws_server_iv", 12)?;
+        let cwiv = expander.expand(b"openhttpa_v2_ws_client_iv", 12)?;
+        Ok((swk, cwk, swiv, cwiv))
+    });
+
+    match keys_result {
+        Ok(Ok((swk, cwk, swiv, cwiv))) => {
+            let mut swiv_arr = [0u8; 12];
+            let mut cwiv_arr = [0u8; 12];
+            swiv_arr.copy_from_slice(&swiv.as_bytes()[..12]);
+            cwiv_arr.copy_from_slice(&cwiv.as_bytes()[..12]);
+
+            let Ok(out_key) = BoundAeadKey::new(algorithm, swk.as_bytes(), swiv_arr) else {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "failed to construct outbound WS key",
+                ));
+            };
+            let Ok(in_key) = BoundAeadKey::new(algorithm, cwk.as_bytes(), cwiv_arr) else {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "failed to construct inbound WS key",
+                ));
+            };
+
+            Ok(WsSubkeys {
+                outbound_key: out_key,
+                inbound_key: in_key,
+                inbound_iv: cwiv_arr,
+                algorithm,
+                salt_hex: ws_salt_hex,
+            })
+        }
+        Ok(Err(e)) => {
+            warn!(%atb_id, error = %e, "HKDF subkey derivation failed for WS upgrade");
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to derive WebSocket subkeys",
+            ))
+        }
+        Err(e) => {
+            warn!(%atb_id, error = %e, "failed to access session keys for WS upgrade");
+            Err((StatusCode::UNAUTHORIZED, "session not in attested state"))
+        }
+    }
 }
 
 // ─── Session ──────────────────────────────────────────────────────────────────

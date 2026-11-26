@@ -96,16 +96,17 @@ impl CollateralFetcher {
             ));
         }
 
-        if let Some(host) = url.host_str() {
-            let is_allowed = self
-                .allowed_domains
-                .iter()
-                .any(|d| host == d.trim_start_matches('.') || host.ends_with(d));
-            if !is_allowed {
-                return Err(FetchError::UnauthorizedUri(format!(
-                    "domain {host} is not in allowlist"
-                )));
-            }
+        let host = url
+            .host_str()
+            .ok_or_else(|| FetchError::UnauthorizedUri("URI has no host".to_owned()))?;
+        let is_allowed = self
+            .allowed_domains
+            .iter()
+            .any(|d| host == d.trim_start_matches('.') || host.ends_with(d));
+        if !is_allowed {
+            return Err(FetchError::UnauthorizedUri(format!(
+                "domain {host} is not in allowlist"
+            )));
         }
 
         // 2. Perform the fetch with size limits
@@ -166,9 +167,19 @@ impl CollateralCache {
         }
     }
 
-    /// Store an artifact in the cache.
+    /// Store an artifact in the cache (bounded to 1024 entries to prevent OOM `DoS`).
     pub fn insert(&self, uri: String, data: Vec<u8>) {
-        let expiry = std::time::SystemTime::now() + self.ttl;
+        const MAX_CACHE_ENTRIES: usize = 1024;
+        let now = std::time::SystemTime::now();
+        if self.cache.len() >= MAX_CACHE_ENTRIES {
+            self.cache.retain(|_, (expiry, _)| *expiry > now);
+            if self.cache.len() >= MAX_CACHE_ENTRIES
+                && let Some(first_key) = self.cache.iter().next().map(|e| e.key().clone())
+            {
+                self.cache.remove(&first_key);
+            }
+        }
+        let expiry = now + self.ttl;
         self.cache.insert(uri, (expiry, data));
     }
 }

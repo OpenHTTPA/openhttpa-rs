@@ -8,6 +8,8 @@
 //! It uses ML-KEM-768 to establish a shared secret, and AES-256-GCM to encrypt
 //! the payload.
 
+use zeroize::Zeroizing;
+
 use crate::aead::{AeadAlgorithm, AeadKey};
 use crate::pqc::{MlKemPair, PqcError};
 
@@ -51,22 +53,23 @@ impl HpkeClient {
         let pair = MlKemPair::generate()?;
 
         // Encapsulate to the TEE's public key
-        let (shared_secret, mlkem_ct) = pair.encapsulate(tee_mlkem_public_key)?;
+        let (shared_secret_raw, mlkem_ct) = pair.encapsulate(tee_mlkem_public_key)?;
+        let shared_secret = Zeroizing::new(shared_secret_raw);
 
-        let mut key_bytes = [0u8; 32];
-        let mut nonce_bytes = [0u8; 12];
+        let mut key_bytes = Zeroizing::new([0u8; 32]);
+        let mut nonce_bytes = Zeroizing::new([0u8; 12]);
         let hkdf = hkdf::Hkdf::<sha2::Sha256>::new(None, &shared_secret);
-        hkdf.expand(b"openhttpa_hpke_key", &mut key_bytes)
+        hkdf.expand(b"openhttpa_hpke_key", &mut *key_bytes)
             .map_err(|_| HpkeError::Encryption("hkdf failed".into()))?;
-        hkdf.expand(b"openhttpa_hpke_nonce", &mut nonce_bytes)
+        hkdf.expand(b"openhttpa_hpke_nonce", &mut *nonce_bytes)
             .map_err(|_| HpkeError::Encryption("hkdf failed".into()))?;
 
-        let aead_key = AeadKey::new(AeadAlgorithm::Aes256Gcm, &key_bytes)
+        let aead_key = AeadKey::new(AeadAlgorithm::Aes256Gcm, &*key_bytes)
             .map_err(|e| HpkeError::Encryption(e.to_string()))?;
 
-        let mut data = payload.to_vec();
+        let mut data = Zeroizing::new(payload.to_vec());
         aead_key
-            .seal_in_place(&crate::aead::AeadNonce(nonce_bytes), b"", &mut data)
+            .seal_in_place(&crate::aead::AeadNonce(*nonce_bytes), b"", &mut data)
             .map_err(|e| HpkeError::Encryption(e.to_string()))?;
 
         let tag_len = 16;
@@ -97,28 +100,28 @@ impl HpkeServer {
         tag: &[u8],
     ) -> Result<Vec<u8>, HpkeError> {
         // Decapsulate using our private key
-        let shared_secret = tee_private_pair.decapsulate(mlkem_ct)?;
+        let shared_secret = Zeroizing::new(tee_private_pair.decapsulate(mlkem_ct)?);
 
-        let mut key_bytes = [0u8; 32];
-        let mut nonce_bytes = [0u8; 12];
+        let mut key_bytes = Zeroizing::new([0u8; 32]);
+        let mut nonce_bytes = Zeroizing::new([0u8; 12]);
         let hkdf = hkdf::Hkdf::<sha2::Sha256>::new(None, &shared_secret);
-        hkdf.expand(b"openhttpa_hpke_key", &mut key_bytes)
+        hkdf.expand(b"openhttpa_hpke_key", &mut *key_bytes)
             .map_err(|_| HpkeError::Decryption)?;
-        hkdf.expand(b"openhttpa_hpke_nonce", &mut nonce_bytes)
+        hkdf.expand(b"openhttpa_hpke_nonce", &mut *nonce_bytes)
             .map_err(|_| HpkeError::Decryption)?;
 
-        let aead_key = AeadKey::new(AeadAlgorithm::Aes256Gcm, &key_bytes)
+        let aead_key = AeadKey::new(AeadAlgorithm::Aes256Gcm, &*key_bytes)
             .map_err(|_| HpkeError::Decryption)?;
 
         if tag.len() != 16 {
             return Err(HpkeError::Decryption);
         }
 
-        let mut data = ciphertext.to_vec();
+        let mut data = Zeroizing::new(ciphertext.to_vec());
         data.extend_from_slice(tag);
 
         let pt = aead_key
-            .open_in_place(&crate::aead::AeadNonce(nonce_bytes), b"", &mut data)
+            .open_in_place(&crate::aead::AeadNonce(*nonce_bytes), b"", &mut data)
             .map_err(|_| HpkeError::Decryption)?;
         Ok(pt.to_vec())
     }

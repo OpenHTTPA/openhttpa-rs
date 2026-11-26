@@ -57,20 +57,21 @@ where
 
         let payload = format!("level={} fields={}", event.metadata().level(), fields);
 
-        // Encrypt the payload with HPKE
+        // Encrypt the payload with HPKE (never panic inside a tracing Layer).
         let mut csprng = StdRng::from_os_rng();
-        let (encap_key, mut sender_ctx) = setup_sender::<HpkeAead, HpkeKdf, HpkeKem, _>(
+        let Ok((encap_key, mut sender_ctx)) = setup_sender::<HpkeAead, HpkeKdf, HpkeKem, _>(
             &OpModeS::Base,
             &self.compliance_public_key,
             b"openhttpa-telemetry",
             &mut csprng,
-        )
-        .expect("HPKE setup failed");
+        ) else {
+            return;
+        };
 
         let mut pt = payload.into_bytes();
-        let tag = sender_ctx
-            .seal_in_place_detached(&mut pt, b"")
-            .expect("HPKE seal failed");
+        let Ok(tag) = sender_ctx.seal_in_place_detached(&mut pt, b"") else {
+            return;
+        };
         pt.extend_from_slice(tag.to_bytes().as_ref());
 
         let out = EncryptedTelemetryPayload {
@@ -80,9 +81,9 @@ where
 
         // In a real implementation, we would write `out` to a socket, OpenTelemetry exporter,
         // or a local file rather than printing to stdout.
-        let json_out =
-            serde_json::to_string(&out).expect("Serialization of simple struct should never fail");
-        println!("CONFIDENTIAL_TELEMETRY: {}", json_out);
+        if let Ok(json_out) = serde_json::to_string(&out) {
+            println!("CONFIDENTIAL_TELEMETRY: {}", json_out);
+        }
     }
 }
 

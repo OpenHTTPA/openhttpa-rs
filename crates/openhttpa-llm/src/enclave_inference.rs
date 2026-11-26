@@ -26,7 +26,10 @@ impl EnclaveInferenceEngine {
     ///
     /// Returns a `candle_core::Error` if tensor operations fail.
     pub fn run_inference(&self, input_prompt: &str) -> Result<String, candle_core::Error> {
-        tracing::info!("Running local inference inside TEE on prompt: {input_prompt}");
+        tracing::info!(
+            prompt_len = input_prompt.len(),
+            "Running local inference inside TEE"
+        );
         // Note: Full inference logic (e.g. Llama models) requires model weights parsing,
         // tokenizer, and inference loop. This serves as the integration stub leveraging candle_core.
 

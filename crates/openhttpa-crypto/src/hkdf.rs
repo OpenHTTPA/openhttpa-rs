@@ -200,6 +200,9 @@ impl SessionKeys {
         // when no external salt is available.  The version label and transcript hash
         // in each Expand info string supply all necessary domain separation.
         const SALT: [u8; 48] = [0u8; 48];
+        let transcript_hash_arr: [u8; 48] = transcript_hash
+            .try_into()
+            .map_err(|_| HkdfError::ExpandFailed)?;
         let expander = HkdfExpander::extract_sha384(&SALT, combined_secret)?;
 
         // Format:  b"openhttpa_v2"  (12 B, protocol-version prefix)
@@ -241,9 +244,6 @@ impl SessionKeys {
         let server_mac_key = expander
             .expand(&make_info(b"server mac key"), 32)?
             .into_inner();
-
-        let mut transcript_hash_arr = [0u8; 48];
-        transcript_hash_arr.copy_from_slice(transcript_hash);
 
         Ok(Self {
             master_secret,

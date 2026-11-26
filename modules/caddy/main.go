@@ -79,7 +79,9 @@ func (h *OpenHttpa) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddy
 	if atbID := r.Header.Get("Attest-Base-ID"); atbID != "" {
 		nonceStr := r.Header.Get("Attest-Nonce")
 		var nonce uint64
-		fmt.Sscanf(nonceStr, "%d", &nonce)
+		if n, err := fmt.Sscanf(nonceStr, "%d", &nonce); err != nil || n != 1 {
+			return caddyhttp.Error(http.StatusBadRequest, fmt.Errorf("invalid Attest-Nonce header"))
+		}
 
 		// [M-01 Hardening] Limit request size
 		limitedBody := io.LimitReader(r.Body, MaxResponseBodySize)
@@ -95,14 +97,19 @@ func (h *OpenHttpa) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddy
 			return caddyhttp.Error(http.StatusBadRequest, err)
 		}
 
-		plaintext, err := openhttpa.ServerDecrypt(atbID, nonce, trr.Ciphertext)
+		plaintextHex, err := openhttpa.ServerDecrypt(atbID, nonce, trr.Ciphertext)
 		if err != nil {
 			return caddyhttp.Error(http.StatusForbidden, err)
 		}
+		plaintextBytes, err := hex.DecodeString(plaintextHex)
+		if err != nil {
+			return caddyhttp.Error(http.StatusInternalServerError, fmt.Errorf("failed to decode decrypted plaintext hex: %w", err))
+		}
+		plaintext := string(plaintextBytes)
 
 		// Replace request body with decrypted plaintext
 		r.Body = io.NopCloser(strings.NewReader(plaintext))
-		r.ContentLength = int64(len(plaintext))
+		r.ContentLength = int64(len(plaintextBytes))
 
 		// [H-04 Hardening] Intercept response for TrS without full buffering if possible.
 		// For now, we still need to buffer to encrypt the full payload as OpenHTTPA v0.1.0 
@@ -111,6 +118,7 @@ func (h *OpenHttpa) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddy
 		rw := &responseInterceptor{
 			ResponseWriter: w, 
 			body:           new(strings.Builder),
+			status:         http.StatusOK,
 			maxSize:        MaxResponseBodySize,
 		}
 		err = next.ServeHTTP(rw, r)
@@ -119,8 +127,8 @@ func (h *OpenHttpa) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddy
 		}
 
 		// Encrypt response
-		plaintextHex := hex.EncodeToString([]byte(rw.body.String()))
-		ciphertext, err := openhttpa.ServerEncrypt(atbID, plaintextHex)
+		respPlaintextHex := hex.EncodeToString([]byte(rw.body.String()))
+		ciphertext, err := openhttpa.ServerEncrypt(atbID, respPlaintextHex)
 		if err != nil {
 			return caddyhttp.Error(http.StatusInternalServerError, err)
 		}

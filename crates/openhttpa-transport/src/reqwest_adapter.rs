@@ -21,12 +21,16 @@ impl Default for ReqwestTransport {
 }
 
 impl ReqwestTransport {
-    /// Create a new `ReqwestTransport` with a default client.
+    /// Create a new `ReqwestTransport` with a hardened default client
+    /// (10s connect timeout, 60s request timeout).
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            client: reqwest::Client::new(),
-        }
+        let client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(60))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+        Self { client }
     }
 
     /// Create a new `ReqwestTransport` with a custom client.

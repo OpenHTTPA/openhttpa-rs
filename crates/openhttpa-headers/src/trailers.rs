@@ -108,12 +108,17 @@ pub fn decode_attest_ticket(map: &HeaderMap) -> Result<DecodedTicket, TrailerErr
             mac,
             salt: Some(salt),
         })
-    } else {
+    } else if mode == 0 {
         let mac = bytes[9..].to_vec();
         Ok(DecodedTicket {
             nonce,
             mac,
             salt: None,
+        })
+    } else {
+        Err(TrailerError::Invalid {
+            name: STR_ATTEST_TICKET.to_owned(),
+            reason: format!("invalid ticket mode byte: {mode}"),
         })
     }
 }

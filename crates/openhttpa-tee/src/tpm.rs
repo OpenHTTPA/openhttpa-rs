@@ -6,10 +6,13 @@
 use bytes::Bytes;
 use openhttpa_proto::{AttestQuote, QuoteType};
 
-use crate::evidence::{AttestationEvidence, TpmEvidence};
+use crate::evidence::AttestationEvidence;
 use crate::provider::{QuoteRequest, TeeAdapter, TeeProviderError};
 
 /// TPM 2.0 attestation provider.
+///
+/// Hardware TPM 2.0 PCR quoting via `tss-esapi` is not yet wired; this adapter
+/// fails closed rather than emitting synthetic mock quotes.
 pub struct TpmTeeAdapter;
 
 impl TeeAdapter for TpmTeeAdapter {
@@ -19,33 +22,19 @@ impl TeeAdapter for TpmTeeAdapter {
 
     fn generate_evidence(
         &self,
-        request: &QuoteRequest,
+        _request: &QuoteRequest,
     ) -> Result<AttestationEvidence, TeeProviderError> {
-        // In a real implementation, this would use tss-esapi to:
-        // 1. Get a PCR quote signed by an AIK.
-        // 2. Pass request.report_data as the nonce.
-
-        let mut mock_quote = Vec::new();
-        mock_quote.extend_from_slice(b"TPM2.0-PCR-QUOTE-MOCK");
-        mock_quote.extend_from_slice(&request.report_data);
-
-        Ok(AttestationEvidence::Tpm(TpmEvidence {
-            quote: Bytes::from(mock_quote),
-            pcr_values: std::collections::HashMap::new(),
-            aik_cert_uri: Some("https://attestation.example.com/tpm/cert/mock".to_owned()),
-        }))
+        Err(TeeProviderError::NotAvailable(
+            "TPM 2.0 hardware quoting via tss-esapi is not yet implemented; \
+             refusing to emit synthetic mock quotes"
+                .to_owned(),
+        ))
     }
 
     fn is_available(&self) -> bool {
-        #[cfg(target_os = "linux")]
-        {
-            std::path::Path::new("/dev/tpm0").exists()
-                || std::path::Path::new("/dev/tpmrm0").exists()
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            false
-        }
+        // Fail closed until real TPM 2.0 hardware quoting is implemented so
+        // `detect_best_provider` never auto-selects an unimplemented adapter.
+        false
     }
 }
 

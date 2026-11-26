@@ -437,15 +437,18 @@ where
         let reader = StreamFrameReader::new(body.into_data_stream());
 
         let decrypted_stream = futures::stream::unfold(
-            (reader, session_inner, aad, [0u8; 48]),
-            |(mut reader, session, aad, prev_hash)| async move {
+            (reader, session_inner, aad, [0u8; 48], false),
+            |(mut reader, session, aad, prev_hash, failed)| async move {
+                if failed {
+                    return None;
+                }
                 let frame = match reader.next_frame().await {
                     Ok(Some(f)) => f,
                     Ok(None) => return None,
                     Err(e) => {
                         return Some((
                             Err(LlmError::Transport(e)),
-                            (reader, session, aad, prev_hash),
+                            (reader, session, aad, prev_hash, true),
                         ));
                     }
                 };
@@ -485,13 +488,14 @@ where
                 });
 
                 match res {
-                    Ok(Ok((p, next_h))) => {
-                        Some((Ok(bytes::Bytes::from(p)), (reader, session, aad, next_h)))
-                    }
-                    Ok(Err(e)) => Some((Err(e), (reader, session, aad, prev_hash))),
+                    Ok(Ok((p, next_h))) => Some((
+                        Ok(bytes::Bytes::from(p)),
+                        (reader, session, aad, next_h, false),
+                    )),
+                    Ok(Err(e)) => Some((Err(e), (reader, session, aad, prev_hash, true))),
                     Err(e) => Some((
                         Err(LlmError::Transport(e.to_string())),
-                        (reader, session, aad, prev_hash),
+                        (reader, session, aad, prev_hash, true),
                     )),
                 }
             },

@@ -136,7 +136,21 @@ pub fn verify_signed_eat(
         VerificationError::Malformed("missing payload in COSE Sign1 envelope".to_owned())
     })?;
 
-    deserialize_claims(&payload_bytes)
+    let claims = deserialize_claims(&payload_bytes)?;
+
+    if let Some(exp) = claims.exp {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| VerificationError::PolicyViolation("system clock error".to_owned()))?
+            .as_secs();
+        if now >= exp {
+            return Err(VerificationError::PolicyViolation(format!(
+                "EAT token expired (exp={exp}, now={now})"
+            )));
+        }
+    }
+
+    Ok(claims)
 }
 
 #[cfg(test)]

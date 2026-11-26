@@ -88,7 +88,8 @@ pub async fn attest_handshake(server_uri: String) -> Result<String> {
     let client = OpenHttpaClient::builder()
         .server_uri(uri)
         .require_preflight(true)
-        .build();
+        .try_build()
+        .map_err(|e| Error::from_reason(format!("failed to build client: {e}")))?;
 
     let session = client
         .attest_handshake()

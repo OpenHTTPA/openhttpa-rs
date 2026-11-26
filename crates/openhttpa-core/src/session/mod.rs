@@ -366,8 +366,10 @@ impl AttestSession {
             return Err(SessionError::NotAttested);
         }
 
-        // Phase 1: Check if nonce is acceptable (does NOT mutate for SlidingWindow;
-        // DOES atomically advance last_seen for StrictMonotonic via CAS).
+        // Phase 1: Check if nonce is acceptable WITHOUT mutating replay state.
+        // The session mutex `g` is already held for the entire function, so
+        // deferring the state commit to Phase 2 prevents unauthenticated packets
+        // (e.g. forged nonce = u64::MAX) from corrupting `strict_last_seen`.
         match g.replay_strategy {
             ReplayStrategy::SlidingWindow(_) => {
                 g.replay_guard.check(nonce).map_err(|e| {
@@ -376,25 +378,14 @@ impl AttestSession {
                 })?;
             }
             ReplayStrategy::StrictMonotonic => {
-                // Strict monotonic: nonce must be strictly greater than last_seen.
-                // Implemented as a CAS loop so concurrent calls serialize correctly.
-                loop {
-                    let last = g.strict_last_seen.load(Ordering::SeqCst);
-                    if nonce <= last {
-                        tracing::error!(
-                            nonce = nonce,
-                            last_seen = last,
-                            "Nonce check failed (StrictMonotonic replay)"
-                        );
-                        return Err(SessionError::Replay);
-                    }
-                    if g.strict_last_seen
-                        .compare_exchange(last, nonce, Ordering::SeqCst, Ordering::SeqCst)
-                        .is_ok()
-                    {
-                        break; // CAS committed: nonce is now the new last_seen.
-                    }
-                    // Another thread advanced last_seen; re-check.
+                let last = g.strict_last_seen.load(Ordering::SeqCst);
+                if nonce <= last {
+                    tracing::error!(
+                        nonce = nonce,
+                        last_seen = last,
+                        "Nonce check failed (StrictMonotonic replay)"
+                    );
+                    return Err(SessionError::Replay);
                 }
             }
         }
@@ -410,8 +401,7 @@ impl AttestSession {
                     g.replay_guard.accept(nonce);
                 }
                 ReplayStrategy::StrictMonotonic => {
-                    // The CAS already advanced last_seen in Phase 1; nothing more to do.
-                    // (The strict check below in Phase 1 is also the commit for monotonic.)
+                    g.strict_last_seen.store(nonce, Ordering::SeqCst);
                 }
             }
             g.client_counter = g
@@ -419,15 +409,6 @@ impl AttestSession {
                 .checked_add(1)
                 .ok_or(SessionError::Overflow)?;
         } else {
-            // Closure failed — roll back strict-monotonic last_seen to `nonce - 1`
-            // so the nonce can be retried. For SlidingWindow, accept() was not
-            // called, so nothing needs to be rolled back.
-            if matches!(g.replay_strategy, ReplayStrategy::StrictMonotonic) {
-                // Restore last_seen to what it was before Phase 1. Since Phase 1
-                // set it to `nonce` via CAS, we restore to `nonce - 1` (or 0).
-                g.strict_last_seen
-                    .store(nonce.saturating_sub(1), Ordering::SeqCst);
-            }
             tracing::warn!(nonce = nonce, "Closure returned error; nonce NOT committed");
         }
         drop(g);
@@ -455,8 +436,9 @@ impl AttestSession {
 
     /// # Errors
     ///
-    /// Returns [`Err`](`SessionError::Expired`) if the session has expired or the
-    /// counter overflows.
+    /// Returns [`Err`](`SessionError::Expired`) if the session has expired,
+    /// [`SessionError::NotAttested`] if the phase does not allow trusted
+    /// responses, or [`SessionError::Overflow`] if the counter overflows.
     ///
     /// # Panics
     ///
@@ -468,6 +450,9 @@ impl AttestSession {
         let mut g = self.inner.lock().expect("lock poisoned");
         if Instant::now() >= g.expires_at {
             return Err(SessionError::Expired);
+        }
+        if !g.phase.allows_trusted_request() {
+            return Err(SessionError::NotAttested);
         }
 
         let counter = g.server_counter;

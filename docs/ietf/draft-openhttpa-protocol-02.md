@@ -831,10 +831,10 @@ Handshake_PRK = HKDF-Extract(Hash=SHA-384, salt=[0x00;48], IKM=combined_secret)
 
 ```text
 OKM = HKDF-Expand(Hash=SHA-384, PRK=Handshake_PRK,
-                 info=b"openhttpa v2 " || label || transcript_hash, L=<length>)
+                 info=b"openhttpa_v2" || label || 0x00 || transcript_hash, L=<length>)
 ```
 
-The fixed 48-byte length of the `transcript_hash` (SHA-384 output) ensures unambiguous domain separation between the `label` and the `transcript_hash` without the need for a delimiter.
+The `0x00` null separator between `label` and the fixed 48-byte `transcript_hash` (SHA-384 output) guarantees unambiguous domain separation even if labels share prefixes.
 
 ## Key Schedule Visualization
 
@@ -943,8 +943,9 @@ The AHL transcript MUST use length-prefixed binary fields:
 ```text
 AHL_Transcript = 7::method || len(method_val) || : || method_val
                  || 5::path || len(path_val) || : || path_val
+                 || 6::query || len(query_val) || : || query_val
                  || 10::authority || len(authority_val) || : || authority_val
-                 || [ len(HEADER_NAME_N) || HEADER_NAME_N
+                 || [ len(HEADER_NAME_N) || : || HEADER_NAME_N
                     || len(HEADER_VALUE_N) || : || HEADER_VALUE_N ... ]
 ```
 

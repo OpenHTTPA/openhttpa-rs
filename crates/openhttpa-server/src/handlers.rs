@@ -136,6 +136,13 @@ impl AtHsHandlerState {
         use sha2::Sha256;
         type HmacSha256 = Hmac<Sha256>;
 
+        // SEC-01: Require exactly 48 bytes before splitting so callers cannot
+        // panic on short slices and the HMAC-covered input is identical to the
+        // transcript-bound value.
+        if c.len() != 48 {
+            return Err("Attest-Challenge must be exactly 48 bytes");
+        }
+
         // Challenge format: [timestamp: u64 (8)] [random: [u8; 8]] [hmac: [u8; 32]]
         let (ts_bytes, rest) = c.split_at(8);
         let (rand_bytes, sig) = rest.split_at(8);
@@ -163,12 +170,6 @@ impl AtHsHandlerState {
             return Err("Attest-Challenge expired. Please refresh preflight.");
         }
 
-        // SEC-01: Require exactly 48 bytes so the HMAC-covered input is
-        // identical to the transcript-bound value. Truncation would allow an
-        // attacker to append extra bytes that are authenticated but not bound.
-        if c.len() != 48 {
-            return Err("Attest-Challenge must be exactly 48 bytes");
-        }
         let mut arr = [0u8; 48];
         arr.copy_from_slice(c);
         Ok(arr)
@@ -335,11 +336,17 @@ pub async fn aths_handler(
             }
         }
 
+        let tcb_status = result
+            .client_attestation_result
+            .as_ref()
+            .map_or("Unknown", |r| r.tcb_status.as_str());
+        let pqc_bound = suite.is_pqc();
+
         let input = serde_json::json!({
             "claims": claims_json,
             "provenance": prov_json,
-            "tcb_status": "UpToDate", // Assumed from attestation result logic
-            "pqc_bound": true,        // Assumed by PQC exclusivity
+            "tcb_status": tcb_status,
+            "pqc_bound": pqc_bound,
             "cipher_suite": suite.to_string(),
         });
 

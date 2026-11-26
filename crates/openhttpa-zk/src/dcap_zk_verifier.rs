@@ -25,6 +25,7 @@ impl DcapZkVerifier {
         quote: &AttestQuote,
         report_data: &[u8; 64],
     ) -> Result<VerificationResult, VerificationError> {
+        const MAX_ZK_RECEIPT_BYTES: usize = 4 * 1024 * 1024;
         // 1. Verify the Quote Type
         if quote.quote_type != QuoteType::ZkCompressed {
             if self.allow_fallback {
@@ -39,7 +40,14 @@ impl DcapZkVerifier {
         }
 
         // 2. Verify ZK Receipt
-        // The raw bytes of the quote contain the serialized receipt.
+        // Enforce a strict upper bound on untrusted serialized receipt bytes
+        // before invoking bincode to prevent OOM DoS via forged length prefixes.
+        if quote.raw.len() > MAX_ZK_RECEIPT_BYTES {
+            return Err(VerificationError::Malformed(format!(
+                "ZK receipt exceeds maximum allowed size ({} > {MAX_ZK_RECEIPT_BYTES} bytes)",
+                quote.raw.len()
+            )));
+        }
         let receipt: crate::prover::Receipt = bincode::deserialize(&quote.raw).map_err(|e| {
             VerificationError::Malformed(format!("Failed to deserialize ZK receipt: {e}"))
         })?;
