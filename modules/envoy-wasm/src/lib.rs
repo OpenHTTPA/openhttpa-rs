@@ -38,7 +38,7 @@ impl HttpContext for OpenHttpaFilter {
 }
 
 fn process_openhttpa_headers(versions: &str) -> bool {
-    versions.contains("1.0")
+    versions.contains("openhttpa") || versions.contains("httpa/1") || versions.contains("1.0")
 }
 
 #[cfg(test)]

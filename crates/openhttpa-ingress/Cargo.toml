@@ -9,6 +9,7 @@ license = "Apache-2.0 OR MIT"
 [dependencies]
 openhttpa-server = { workspace = true }
 openhttpa-core = { workspace = true }
+openhttpa-crypto = { workspace = true }
 openhttpa-tee = { workspace = true }
 openhttpa-proto = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

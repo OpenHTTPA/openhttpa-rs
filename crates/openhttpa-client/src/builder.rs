@@ -229,13 +229,17 @@ impl OpenHttpaClientBuilder {
             Arc::new(openhttpa_transport::reqwest_adapter::ReqwestTransport::new())
         });
 
-        // Wrap in ObliviousClient if configured.
+        // Wrap in ObliviousClient if configured, routing encapsulated traffic
+        // through `conf.gateway_uri` so the target TEE server cannot observe client IP.
         let transport: Arc<dyn AttestTransport> = if let Some(conf) = self.oblivious_config {
-            Arc::new(openhttpa_transport::oblivious::ObliviousClient::new(
-                transport,
-                conf.server_public_key,
-                conf.key_id,
-            ))
+            Arc::new(
+                openhttpa_transport::oblivious::ObliviousClient::new(
+                    transport,
+                    conf.server_public_key,
+                    conf.key_id,
+                )
+                .with_gateway(conf.gateway_uri),
+            )
         } else {
             transport
         };

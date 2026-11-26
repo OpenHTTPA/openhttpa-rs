@@ -80,7 +80,7 @@ impl OracleConfig {
     pub fn load() -> Result<Self, config::ConfigError> {
         config::Config::builder()
             .set_default("bind_addr", "127.0.0.1:3002")?
-            .set_default("allow_mock_tee", true)?
+            .set_default("allow_mock_tee", false)?
             .set_default("log_level", "info")?
             .set_default("atb_ttl_secs", 3600)?
             .add_source(config::Environment::with_prefix("OPENHTTPA_ORACLE"))
@@ -119,11 +119,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         true,
     ));
 
+    #[cfg(debug_assertions)]
+    let verifier: Option<Arc<dyn openhttpa_attestation::QuoteVerifier>> =
+        Some(Arc::new(MockVerifier::default()));
+    #[cfg(not(debug_assertions))]
+    let verifier: Option<Arc<dyn openhttpa_attestation::QuoteVerifier>> = None;
+
     let aths_state = Arc::new(AtHsHandlerState {
         executor: aths_executor,
         registry: registry.clone(),
         tee_provider: tee_provider.clone(),
-        verifier: Some(Arc::new(MockVerifier::default())),
+        verifier,
         atb_ttl: Duration::from_secs(config.atb_ttl_secs),
         challenge_key: random_challenge_key().into(),
         identity_key: None,

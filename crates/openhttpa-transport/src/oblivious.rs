@@ -60,16 +60,16 @@ pub enum ObliviousError {
     Transport(#[from] SendError),
 }
 
+type ZeroizedKey = zeroize::Zeroizing<[u8; KEY_LEN]>;
+
 /// Helper: derive `(request_key, response_key)` from a ML-KEM shared secret.
-fn derive_session_keys(
-    shared_secret: &[u8],
-) -> Result<([u8; KEY_LEN], [u8; KEY_LEN]), ObliviousError> {
+fn derive_session_keys(shared_secret: &[u8]) -> Result<(ZeroizedKey, ZeroizedKey), ObliviousError> {
     let hkdf = Hkdf::<Sha256>::new(Some(b"openhttpa-oblivious"), shared_secret);
-    let mut req_key = [0u8; KEY_LEN];
-    let mut resp_key = [0u8; KEY_LEN];
-    hkdf.expand(b"req", &mut req_key)
+    let mut req_key = zeroize::Zeroizing::new([0u8; KEY_LEN]);
+    let mut resp_key = zeroize::Zeroizing::new([0u8; KEY_LEN]);
+    hkdf.expand(b"req", &mut *req_key)
         .map_err(|_| ObliviousError::Crypto("HKDF expand(req) failed".to_owned()))?;
-    hkdf.expand(b"resp", &mut resp_key)
+    hkdf.expand(b"resp", &mut *resp_key)
         .map_err(|_| ObliviousError::Crypto("HKDF expand(resp) failed".to_owned()))?;
     Ok((req_key, resp_key))
 }
@@ -116,6 +116,9 @@ pub struct ObliviousClient {
     server_public_key: Vec<u8>,
     /// Key identifier sent in each request (RFC 9458 §5.1).
     key_id: u8,
+    /// Optional oblivious relay/gateway URI (RFC 9458). When set, encapsulated
+    /// requests are routed to `gateway_uri` instead of directly to the target URI.
+    gateway_uri: Option<http::Uri>,
 }
 
 impl ObliviousClient {
@@ -130,7 +133,16 @@ impl ObliviousClient {
             inner,
             server_public_key,
             key_id,
+            gateway_uri: None,
         }
+    }
+
+    /// Configure the oblivious relay/gateway URI so requests are routed through
+    /// the relay rather than directly to the target TEE server.
+    #[must_use]
+    pub fn with_gateway(mut self, gateway_uri: http::Uri) -> Self {
+        self.gateway_uri = Some(gateway_uri);
+        self
     }
 }
 
@@ -146,9 +158,10 @@ impl AttestTransport for ObliviousClient {
             //    against the server's public encapsulation key.
             let kem_pair = MlKemPair::generate()
                 .map_err(|e| SendError::Connection(format!("ML-KEM keygen failed: {e:?}")))?;
-            let (shared_secret, kem_ciphertext) = kem_pair
+            let (shared_secret_raw, kem_ciphertext) = kem_pair
                 .encapsulate(&self.server_public_key)
                 .map_err(|e| SendError::Connection(format!("ML-KEM encap failed: {e:?}")))?;
+            let shared_secret = zeroize::Zeroizing::new(shared_secret_raw);
 
             // 2. Derive session keys from the ML-KEM shared secret.
             let (req_key, resp_key) = derive_session_keys(&shared_secret)
@@ -185,12 +198,14 @@ impl AttestTransport for ObliviousClient {
                     .expect("Static string is a valid media type"),
             );
 
-            // 5. Send the encapsulated request via the inner transport.
+            // 5. Send the encapsulated request via the inner transport, routing
+            //    through `gateway_uri` when configured (RFC 9458).
+            let target_uri = self.gateway_uri.clone().unwrap_or(uri);
             let resp = self
                 .inner
                 .send(TransportRequest {
                     method,
-                    uri,
+                    uri: target_uri,
                     headers,
                     body: crate::connection::full_body(enc_body),
                     trailers,
@@ -275,7 +290,7 @@ impl ObliviousServer {
         // Decrypt request body.
         let plaintext = aes_decrypt(&req_key, nonce_and_aes_ct)?;
 
-        Ok((plaintext, resp_key))
+        Ok((plaintext, *resp_key))
     }
 
     /// Encapsulate an O-HTTPA response.

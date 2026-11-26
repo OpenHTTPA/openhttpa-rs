@@ -54,14 +54,20 @@ impl PolicyEngine for SimplePolicy {
                 }
             }
 
-            // 3. Check hardware version (TCB)
-            if let Some(ref min_v) = self.min_hwversion
-                && let Some(ref v) = result.claims.hwversion
-                && !is_version_at_least(v, min_v)
-            {
-                return Err(VerificationError::PolicyViolation(format!(
-                    "hardware version {v} is below minimum {min_v}"
-                )));
+            // 3. Check hardware version (TCB) — fail closed if min_hwversion is required
+            //    but the quote did not supply a hwversion claim.
+            if let Some(ref min_v) = self.min_hwversion {
+                if let Some(ref v) = result.claims.hwversion {
+                    if !is_version_at_least(v, min_v) {
+                        return Err(VerificationError::PolicyViolation(format!(
+                            "hardware version {v} is below minimum {min_v}"
+                        )));
+                    }
+                } else {
+                    return Err(VerificationError::PolicyViolation(
+                        "hardware version claim missing".to_owned(),
+                    ));
+                }
             }
 
             // 4. Check Security Version
@@ -85,9 +91,22 @@ impl PolicyEngine for SimplePolicy {
 }
 
 /// Helper to compare version strings (e.g. "1.10.1") numerically.
+/// Returns `false` if either version string is empty or contains non-numeric components.
 fn is_version_at_least(v: &str, min_v: &str) -> bool {
-    let v_parts: Vec<u32> = v.split('.').filter_map(|s| s.parse().ok()).collect();
-    let min_parts: Vec<u32> = min_v.split('.').filter_map(|s| s.parse().ok()).collect();
+    let Ok(v_parts) = v
+        .split('.')
+        .map(str::parse::<u32>)
+        .collect::<Result<Vec<_>, _>>()
+    else {
+        return false;
+    };
+    let Ok(min_parts) = min_v
+        .split('.')
+        .map(str::parse::<u32>)
+        .collect::<Result<Vec<_>, _>>()
+    else {
+        return false;
+    };
 
     for (a, b) in v_parts.iter().zip(min_parts.iter()) {
         if a > b {

@@ -30,18 +30,24 @@ impl SpiffeTeeProvider {
         }
     }
 
-    /// Fetches the default X509-SVID from the SPIRE agent.
+    /// Fetches the default X509-SVID from the SPIRE agent with a 5-second timeout.
     pub async fn fetch_svid(&self) -> Result<X509Svid, String> {
-        let client = WorkloadApiClient::connect_to(format!("unix://{}", self._spire_socket_path))
-            .await
-            .map_err(|e| format!("Failed to create WorkloadApiClient: {}", e))?;
+        const SPIFFE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+        tokio::time::timeout(SPIFFE_TIMEOUT, async {
+            let client =
+                WorkloadApiClient::connect_to(format!("unix://{}", self._spire_socket_path))
+                    .await
+                    .map_err(|e| format!("Failed to create WorkloadApiClient: {e}"))?;
 
-        let svid = client
-            .fetch_x509_svid()
-            .await
-            .map_err(|e| format!("Failed to fetch X509 SVID: {}", e))?;
+            let svid = client
+                .fetch_x509_svid()
+                .await
+                .map_err(|e| format!("Failed to fetch X509 SVID: {e}"))?;
 
-        Ok(svid)
+            Ok(svid)
+        })
+        .await
+        .map_err(|_| "Timed out fetching X509 SVID from SPIRE agent".to_owned())?
     }
 }
 
@@ -54,10 +60,14 @@ impl TeeProvider for SpiffeTeeProvider {
         // Generate the hardware quote using the underlying TEE provider (e.g., TDX, SGX)
         let mut quote = self.inner.generate_quote(request)?;
 
-        // Fetch the SVID synchronously within this trait method
-        let svid_res = tokio::task::block_in_place(|| {
-            Handle::current().block_on(async { self.fetch_svid().await })
-        });
+        // Fetch the SVID synchronously without panicking on current_thread runtimes or outside Tokio.
+        let svid_res = match Handle::try_current() {
+            Ok(handle) if handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
+                tokio::task::block_in_place(|| handle.block_on(self.fetch_svid()))
+            }
+            Ok(_) => Err("SPIFFE sync fetch skipped on current-thread runtime".to_owned()),
+            Err(_) => Err("SPIFFE sync fetch requires an active Tokio runtime".to_owned()),
+        };
 
         match svid_res {
             Ok(svid) => {

@@ -182,7 +182,9 @@ impl std::str::FromStr for CipherSuite {
             }
             openhttpa_config::CIPHER_SUITE_P256_AES256GCM_SHA256 => {
                 // INFO-01: Wire-level deny for deprecated cipher suite after configurable cutoff.
-                if std::env::var("OPENHTTPA_ALLOW_DEPRECATED_CIPHERS").unwrap_or_default() == "1" {
+                if std::env::var(openhttpa_config::ENV_ALLOW_DEPRECATED_CIPHERS).unwrap_or_default()
+                    == "1"
+                {
                     Ok(Self::P256Aes256GcmSha256)
                 } else {
                     Err(())

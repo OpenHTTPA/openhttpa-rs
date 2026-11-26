@@ -457,7 +457,9 @@ impl HybridSharedSecret {
             .map_err(|_| KeyExchangeError::Agreement)?;
 
         ikm.zeroize();
-        Ok(Self(out.to_vec()))
+        let combined = out.to_vec();
+        out.zeroize();
+        Ok(Self(combined))
     }
 
     /// Borrow the combined secret bytes.

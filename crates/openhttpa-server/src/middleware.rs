@@ -173,6 +173,8 @@ pub struct LocalReplayGuard {
     prev_bloom: Mutex<Option<Bloom<Vec<u8>>>>,
     /// Number of items the filter was sized for. Used to detect exhaustion.
     capacity: usize,
+    /// Configured false-positive rate preserved across [`Self::rotate`] calls.
+    fp_rate: f64,
     /// Approximate count of items inserted into the current filter.
     count: std::sync::atomic::AtomicUsize,
 }
@@ -194,6 +196,7 @@ impl LocalReplayGuard {
             ),
             prev_bloom: Mutex::new(None),
             capacity: items,
+            fp_rate,
             count: std::sync::atomic::AtomicUsize::new(0),
         }
     }
@@ -254,7 +257,7 @@ impl LocalReplayGuard {
     /// Panics if either internal `Mutex` is poisoned.
     pub fn rotate(&self) {
         let new_filter =
-            Bloom::new_for_fp_rate(self.capacity, 1e-3).expect("Bloom filter params valid");
+            Bloom::new_for_fp_rate(self.capacity, self.fp_rate).expect("Bloom filter params valid");
         let mut bloom = self.bloom.lock().expect("bloom mutex poisoned");
         let old = std::mem::replace(&mut *bloom, new_filter);
         drop(bloom);

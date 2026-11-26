@@ -15,13 +15,18 @@ namespace OpenHttpa
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void openhttpa_ctx_free(IntPtr ctx);
 
-        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        private static extern IntPtr openhttpa_confidential_chat(IntPtr ctx, string serverUri, string model, string messagesJson);
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr openhttpa_confidential_chat(
+            IntPtr ctx,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string serverUri,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string model,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string messagesJson);
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void openhttpa_free_string(IntPtr ptr);
 
         private IntPtr _ctx;
+        private bool _disposed;
 
         public OpenHttpaClient()
         {
@@ -34,29 +39,49 @@ namespace OpenHttpa
 
         public string Chat(string endpoint, string model, string prompt)
         {
+            if (_disposed || _ctx == IntPtr.Zero)
+            {
+                throw new ObjectDisposedException(nameof(OpenHttpaClient));
+            }
+
             var messages = new List<string[]> { new[] { "user", prompt } };
             string messagesJson = JsonSerializer.Serialize(messages);
 
             IntPtr resultPtr = openhttpa_confidential_chat(_ctx, endpoint, model, messagesJson);
-            
             if (resultPtr == IntPtr.Zero)
             {
                 throw new Exception("Confidential chat request failed");
             }
 
-            string result = Marshal.PtrToStringAnsi(resultPtr) ?? string.Empty;
-            openhttpa_free_string(resultPtr);
+            try
+            {
+                return Marshal.PtrToStringUTF8(resultPtr) ?? string.Empty;
+            }
+            finally
+            {
+                openhttpa_free_string(resultPtr);
+            }
+        }
 
-            return result;
+        ~OpenHttpaClient()
+        {
+            Dispose(false);
         }
 
         public void Dispose()
         {
-            if (_ctx != IntPtr.Zero)
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed && _ctx != IntPtr.Zero)
             {
                 openhttpa_ctx_free(_ctx);
                 _ctx = IntPtr.Zero;
             }
+            _disposed = true;
         }
     }
 }

@@ -70,6 +70,9 @@ async function establishSession(origin) {
       headers: { 'Content-Type': 'application/json' },
       body: clientJson,
     });
+    if (!resp.ok) {
+      throw new Error(`Handshake failed with HTTP ${resp.status}`);
+    }
 
     const serverJson = await resp.text();
     const sessionProofStr = openhttpa_derive_session(serverJson);
@@ -116,7 +119,7 @@ async function updateDnrRules() {
       ],
     },
     condition: {
-      urlFilter: session.origin + '/*',
+      urlFilter: '|' + session.origin + '/*',
       resourceTypes: ['main_frame', 'sub_frame', 'xmlhttprequest'],
     },
   }));

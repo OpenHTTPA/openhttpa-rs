@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use bytes::Bytes;
-use http_body_util::{BodyExt, Full};
+use http_body_util::{BodyExt, Full, Limited};
 use hyper::{Method, Request, Response, StatusCode};
 use openhttpa_core::handshake::{AtHsExecutor, AtHsRequest, ClientKeyShare};
 use openhttpa_core::session::{AttestSession, ReplayStrategy};
+use openhttpa_crypto::aead::{AeadAlgorithm, AeadKey, AeadNonce};
 use openhttpa_proto::{CipherSuite, ProtocolVersion};
+
+/// Maximum allowed HTTP request body size (2 MiB) to prevent unauthenticated OOM DoS.
+const MAX_INGRESS_BODY_BYTES: usize = 2 * 1024 * 1024;
 use openhttpa_server::AtbRegistry;
 use openhttpa_tee::TeeProvider;
 use serde::Deserialize;
@@ -80,16 +84,32 @@ async fn handle_handshake(
     executor: Arc<AtHsExecutor>,
     registry: Arc<AtbRegistry>,
 ) -> Result<Response<Full<Bytes>>, hyper::Error> {
-    let whole_body = req.collect().await?.to_bytes();
+    let whole_body = match Limited::new(req.into_body(), MAX_INGRESS_BODY_BYTES)
+        .collect()
+        .await
+    {
+        Ok(collected) => collected.to_bytes(),
+        Err(_) => return Ok(bad_request("Request body too large or unreadable")),
+    };
     let body: HandshakeRequestBody = match serde_json::from_slice(&whole_body) {
         Ok(b) => b,
         Err(_) => return Ok(bad_request("Invalid JSON")),
     };
 
-    let client_random = decode_hex_32(&body.client_random).unwrap_or([0u8; 32]);
-    let client_challenge = decode_hex_48(&body.client_challenge).unwrap_or([0u8; 48]);
-    let ecdhe_public = hex::decode(&body.ecdhe_public).unwrap_or_default();
-    let mlkem_public = hex::decode(&body.mlkem_public).unwrap_or_default();
+    let Some(client_random) = decode_hex_32(&body.client_random) else {
+        return Ok(bad_request("Invalid client_random (expected 32-byte hex)"));
+    };
+    let Some(client_challenge) = decode_hex_48(&body.client_challenge) else {
+        return Ok(bad_request(
+            "Invalid client_challenge (expected 48-byte hex)",
+        ));
+    };
+    let Ok(ecdhe_public) = hex::decode(&body.ecdhe_public) else {
+        return Ok(bad_request("Invalid ecdhe_public hex"));
+    };
+    let Ok(mlkem_public) = hex::decode(&body.mlkem_public) else {
+        return Ok(bad_request("Invalid mlkem_public hex"));
+    };
 
     let share = ClientKeyShare {
         ecdhe_public,
@@ -131,7 +151,10 @@ async fn handle_handshake(
 
             let response_json = serde_json::json!({
                 "atb_id": hs_res.atb_id.to_string(),
-                "expires_at": hs_res.expires_at.duration_since(std::time::Instant::now()).as_secs(),
+                "expires_at": hs_res
+                    .expires_at
+                    .saturating_duration_since(std::time::Instant::now())
+                    .as_secs(),
             })
             .to_string();
             let mut res = Response::new(Full::new(Bytes::from(response_json)));
@@ -170,7 +193,13 @@ async fn handle_trusted_event(
         Err(_) => return Ok(bad_request("Invalid Nonce")),
     };
 
-    let whole_body = req.collect().await?.to_bytes();
+    let whole_body = match Limited::new(req.into_body(), MAX_INGRESS_BODY_BYTES)
+        .collect()
+        .await
+    {
+        Ok(collected) => collected.to_bytes(),
+        Err(_) => return Ok(bad_request("Request body too large or unreadable")),
+    };
     let trr: TrustedRequest = match serde_json::from_slice(&whole_body) {
         Ok(t) => t,
         Err(_) => return Ok(bad_request("Invalid JSON")),
@@ -192,11 +221,23 @@ async fn handle_trusted_event(
         Err(_) => return Ok(bad_request("Invalid Ciphertext Hex")),
     };
 
-    // 2. Decrypt
-    // For this skeleton, we assume the ciphertext is valid plaintext since full AEAD is complex
-    // to reproduce here without using `openhttpa-server` extractors.
-    let plaintext = session.with_keys_for_trr(nonce, |_, _| {
-        Ok::<Vec<u8>, hyper::Error>(ciphertext.clone())
+    let mut aad = openhttpa_proto::AAD_PREFIX.to_vec();
+    aad.extend_from_slice(atb_id.as_bytes());
+
+    // 2. Decrypt request payload with AES-256-GCM using the session's client write key/IV.
+    let plaintext = session.with_keys_for_trr(nonce, |keys, _| {
+        let mut nonce_bytes = [0u8; 12];
+        nonce_bytes.copy_from_slice(&keys.client_write_iv[..12]);
+        for (i, b) in nonce.to_be_bytes().iter().enumerate() {
+            nonce_bytes[4 + i] ^= b;
+        }
+        let aead_key =
+            AeadKey::new(AeadAlgorithm::Aes256Gcm, &keys.client_write_key).map_err(|_| ())?;
+        let mut buf = ciphertext.clone();
+        let pt = aead_key
+            .open_in_place(&AeadNonce(nonce_bytes), &aad, &mut buf)
+            .map_err(|_| ())?;
+        Ok::<Vec<u8>, ()>(pt.to_vec())
     });
 
     let plaintext_bytes = match plaintext {
@@ -213,10 +254,27 @@ async fn handle_trusted_event(
         return Ok(internal_server_error("Event Bus Unavailable"));
     }
 
-    // 4. Encrypt Response
+    // 4. Encrypt Response with AES-256-GCM using the session's server write key/IV.
     let response_text = br#"{"status":"dispatched"}"#;
-    let resp_nonce = session.with_keys_for_trs(|_, counter| counter).unwrap_or(0);
-    let resp_ciphertext = response_text.to_vec(); // mock encryption
+    let encrypted_resp = session.with_keys_for_trs(|keys, counter| {
+        let mut nonce_bytes = [0u8; 12];
+        nonce_bytes.copy_from_slice(&keys.server_write_iv[..12]);
+        for (i, b) in counter.to_be_bytes().iter().enumerate() {
+            nonce_bytes[4 + i] ^= b;
+        }
+        let aead_key =
+            AeadKey::new(AeadAlgorithm::Aes256Gcm, &keys.server_write_key).map_err(|_| ())?;
+        let mut buf = response_text.to_vec();
+        aead_key
+            .seal_in_place(&AeadNonce(nonce_bytes), &aad, &mut buf)
+            .map_err(|_| ())?;
+        Ok::<(Vec<u8>, u64), ()>((buf, counter))
+    });
+
+    let (resp_ciphertext, resp_nonce) = match encrypted_resp {
+        Ok(Ok(v)) => v,
+        _ => return Ok(internal_server_error("Response Encryption Failed")),
+    };
 
     let resp_json = format!(
         r#"{{"ciphertext":"{}","nonce":"{}"}}"#,

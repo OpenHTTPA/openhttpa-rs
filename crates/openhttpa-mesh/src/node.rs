@@ -266,12 +266,18 @@ impl AgentNode {
         let prov_header = openhttpa_headers::encode_attest_provenance(&prov_bytes);
         extra_headers.insert(&*openhttpa_headers::HDR_ATTEST_PROVENANCE, prov_header);
 
+        let peer_uri = session
+            .peer_metadata
+            .endpoint
+            .parse()
+            .map_err(|e| MeshError::Handshake(format!("Invalid peer endpoint URI: {e}")))?;
         let client = OpenHttpaClient::builder()
-            .server_uri(session.peer_metadata.endpoint.parse().expect("Valid URI"))
+            .server_uri(peer_uri)
             .tee_provider(self.tee_provider.clone())
             .verifier(self.verifier.clone())
             .transport(self.transport.clone())
-            .build()
+            .try_build()
+            .map_err(|e| MeshError::Handshake(format!("Failed to build peer client: {e}")))?
             .strict_attestation(true);
 
         let response_bytes = client

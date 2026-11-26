@@ -72,10 +72,14 @@ impl OpenHttpaService for AttestHandshakeService {
         let client_versions: Vec<ProtocolVersion> =
             req.versions.iter().filter_map(|s| s.parse().ok()).collect();
 
-        let mut client_random = [0u8; 32];
-        if req.random.len() >= 32 {
-            client_random.copy_from_slice(&req.random[..32]);
+        if req.random.len() != 32 {
+            return Err(Status::invalid_argument(format!(
+                "random must be exactly 32 bytes, got {}",
+                req.random.len()
+            )));
         }
+        let mut client_random = [0u8; 32];
+        client_random.copy_from_slice(&req.random[..32]);
 
         // GRPC-AUTH-01: Enforce exactly 48-byte challenge, matching the HTTP handler
         // (verify_challenge).  A short or empty challenge would inject a predictable
@@ -115,7 +119,7 @@ impl OpenHttpaService for AttestHandshakeService {
 
         Ok(Response::new(AtHsResponse {
             cipher_suite: suite.to_string(),
-            random: vec![0u8; 32],
+            random: result.server_random.to_vec(),
             key_share: server_share_bytes,
             base_id: result.atb_id.to_string(),
             version: ver.to_string(),
